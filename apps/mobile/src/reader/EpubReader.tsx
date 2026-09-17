@@ -51,6 +51,13 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
   }, []);
 
   const sendLoadBook = useCallback(() => {
+    console.log('[EpubReader] sendLoadBook called. Available payloads:', {
+      hasArrayBuffer: !!props.bookDataArrayBuffer,
+      arrayBufferSize: props.bookDataArrayBuffer?.byteLength,
+      hasBase64: !!props.bookDataBase64,
+      hasUrl: !!props.bookDataUrl,
+      initialCfi: props.initialCfi,
+    });
     postMessageToViewer({
       type: 'LOAD_BOOK',
       dataArrayBuffer: props.bookDataArrayBuffer,
@@ -152,8 +159,31 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
 
     const handleWebWindowMessage = (event: MessageEvent) => {
-      if (webIframeRef.current && event.source === webIframeRef.current.contentWindow) {
-        handleMessage(event.data);
+      try {
+        let data = event.data;
+        if (typeof data === 'string') {
+          try {
+            data = JSON.parse(data);
+          } catch {
+            return;
+          }
+        }
+        if (data && data.type) {
+          const knownTypes = [
+            'READY',
+            'LOCATION_CHANGED',
+            'LOCATIONS_GENERATED',
+            'TOC_LOADED',
+            'TOGGLE_UI',
+            'SELECTION_MADE',
+            'ERROR',
+          ];
+          if (knownTypes.includes(data.type)) {
+            handleMessage(data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to parse web window message:', err);
       }
     };
 
@@ -169,6 +199,11 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
         {React.createElement('iframe', {
           ref: webIframeRef,
           srcDoc: EPUB_VIEWER_HTML,
+          onLoad: () => {
+            console.log('[EpubReader] iframe onLoad fired');
+            isViewerReadyRef.current = true;
+            sendLoadBook();
+          },
           style: {
             width: '100%',
             height: '100%',

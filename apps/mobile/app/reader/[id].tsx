@@ -84,10 +84,12 @@ export default function ReaderScreen() {
         if (bookRow.local_path) {
           if (Platform.OS === 'web') {
             const buffer = await getWebBook(bookRow.id);
-            if (buffer) {
+            if (buffer && buffer.byteLength > 0) {
               setBookArrayBuffer(buffer);
-            } else {
+            } else if (bookRow.local_path && !bookRow.local_path.startsWith('indexeddb://')) {
               setBookDataUrl(bookRow.local_path);
+            } else {
+              setErrorMessage('Không tìm thấy tệp sách trong bộ nhớ cục bộ. Bạn vui lòng xoá và thêm lại sách nhé.');
             }
           } else {
             const base64 = await FileSystem.readAsStringAsync(bookRow.local_path, {

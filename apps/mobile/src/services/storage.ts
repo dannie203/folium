@@ -26,7 +26,10 @@ export async function saveWebBook(id: string, fileData: ArrayBuffer): Promise<vo
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
     const req = store.put({ id, data: fileData, updatedAt: Date.now() });
-    req.onsuccess = () => resolve();
+    req.onsuccess = () => {
+      console.log(`[Storage] Successfully saved book ${id} into IndexedDB (${fileData.byteLength} bytes)`);
+      resolve();
+    };
     req.onerror = () => reject(req.error);
   });
 }
@@ -41,10 +44,25 @@ export async function getWebBook(id: string): Promise<ArrayBuffer | null> {
       const req = store.get(id);
       req.onsuccess = () => {
         const item = req.result;
-        if (item && item.data) {
-          resolve(item.data);
-        } else {
+        if (!item || !item.data) {
+          console.warn(`[Storage] Book ${id} not found in IndexedDB`);
           resolve(null);
+          return;
+        }
+
+        const raw = item.data;
+        if (raw instanceof ArrayBuffer) {
+          console.log(`[Storage] Loaded book ${id} as ArrayBuffer (${raw.byteLength} bytes)`);
+          resolve(raw);
+        } else if (raw instanceof Blob) {
+          raw.arrayBuffer().then((ab) => {
+            console.log(`[Storage] Converted book ${id} from Blob to ArrayBuffer (${ab.byteLength} bytes)`);
+            resolve(ab);
+          }, reject);
+        } else if (raw.buffer && raw.buffer instanceof ArrayBuffer) {
+          resolve(raw.buffer);
+        } else {
+          resolve(raw);
         }
       };
       req.onerror = () => reject(req.error);
@@ -93,8 +111,10 @@ export async function saveBookFile(
 ): Promise<string> {
   if (Platform.OS === 'web') {
     try {
+      console.log(`[Storage] Fetching book from sourceUri: ${sourceUri}`);
       const resp = await fetch(sourceUri);
       const buffer = await resp.arrayBuffer();
+      console.log(`[Storage] Storing book ${bookId} into IndexedDB (${buffer.byteLength} bytes)`);
       await saveWebBook(bookId, buffer);
       return `indexeddb://${bookId}`;
     } catch (err) {

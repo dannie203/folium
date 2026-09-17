@@ -80,8 +80,7 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
 
     // 1. INSERT INTO books
     if (normalized.startsWith('INSERT INTO BOOKS')) {
-      const [id, title, author, cover_url, file_type, file_size, local_path, created_at, updated_at] = params;
-      const record: Book = {
+      const [
         id,
         title,
         author,
@@ -89,8 +88,23 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
         file_type,
         file_size,
         local_path,
+        drive_file_id,
+        locations_cache,
         created_at,
         updated_at,
+      ] = params;
+      const record: Book = {
+        id,
+        title,
+        author,
+        cover_url: cover_url ?? null,
+        file_type,
+        file_size,
+        local_path: local_path ?? null,
+        drive_file_id: drive_file_id ?? null,
+        locations_cache: locations_cache ?? null,
+        created_at: created_at ?? Date.now(),
+        updated_at: updated_at ?? Date.now(),
       };
 
       await new Promise<void>((resolve, reject) => {
