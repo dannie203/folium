@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,53 +6,213 @@ import {
   FlatList,
   TouchableOpacity,
   SafeAreaView,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  RefreshControl,
 } from 'react-native';
-import type { Book } from '@folium/shared';
-import { getDatabase } from '../src/db';
+import {
+  getBooksWithProgress,
+  importBookFromPicker,
+  deleteBook,
+  type BookWithProgress,
+} from '../src/services/bookService';
+import { BookCard } from '../src/components/BookCard';
+
+type FilterType = 'all' | 'epub' | 'pdf';
 
 export default function BookshelfScreen() {
-  const [books, setBooks] = useState<Book[]>([]);
+  const [books, setBooks] = useState<BookWithProgress[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isImporting, setIsImporting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const loadBooks = async () => {
+  const loadBooks = useCallback(async () => {
     try {
-      const db = await getDatabase();
-      const rows = await db.getAllAsync<Book>(
-        'SELECT * FROM books ORDER BY updated_at DESC'
-      );
-      setBooks(rows);
+      const data = await getBooksWithProgress();
+      setBooks(data);
     } catch (e) {
-      console.error('Error fetching books:', e);
+      console.error('Failed to load books:', e);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadBooks();
-  }, []);
+  }, [loadBooks]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadBooks();
+  };
+
+  const handleImport = async () => {
+    try {
+      setIsImporting(true);
+      const newBook = await importBookFromPicker();
+      if (newBook) {
+        setBooks((prev) => [newBook, ...prev]);
+      }
+    } catch (err: any) {
+      const msg = err.message || 'Không thể nhập file sách này.';
+      if (Platform.OS === 'web') {
+        alert(msg);
+      } else {
+        Alert.alert('Lỗi nhập sách', msg);
+      }
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleDelete = async (book: BookWithProgress) => {
+    try {
+      await deleteBook(book.id);
+      setBooks((prev) => prev.filter((b) => b.id !== book.id));
+    } catch (err) {
+      console.error('Failed to delete book:', err);
+    }
+  };
+
+  const handleOpenBook = (book: BookWithProgress) => {
+    const msg = `Mở sách: "${book.title}" (${book.file_type.toUpperCase()}).\nTrình đọc EPUB/PDF sẽ được tích hợp ở Phase 3 & 4.`;
+    if (Platform.OS === 'web') {
+      alert(msg);
+    } else {
+      Alert.alert('Sẵn sàng mở sách', msg);
+    }
+  };
+
+  const filteredBooks = useMemo(() => {
+    return books.filter((b) => {
+      const matchesSearch =
+        searchQuery.trim() === '' ||
+        b.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        b.author.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesFilter =
+        activeFilter === 'all' || b.file_type === activeFilter;
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [books, searchQuery, activeFilter]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#6366F1" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      {books.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>📖</Text>
-          <Text style={styles.emptyTitle}>Tủ sách của bạn còn trống</Text>
-          <Text style={styles.emptySubtitle}>
-            Thêm sách EPUB hoặc PDF từ thiết bị hoặc đồng bộ qua Google Drive.
+      {/* Search & Actions Bar */}
+      <View style={styles.headerBar}>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm theo tên sách, tác giả..."
+            placeholderTextColor="#71717A"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            clearButtonMode="while-editing"
+          />
+        </View>
+
+        <TouchableOpacity
+          style={styles.importButton}
+          activeOpacity={0.8}
+          onPress={handleImport}
+          disabled={isImporting}
+        >
+          {isImporting ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.importButtonText}>+ Thêm sách</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* Filter Tabs */}
+      <View style={styles.filterRow}>
+        {(['all', 'epub', 'pdf'] as FilterType[]).map((filter) => {
+          const isActive = activeFilter === filter;
+          const label =
+            filter === 'all'
+              ? `Tất cả (${books.length})`
+              : filter === 'epub'
+              ? `EPUB (${books.filter((b) => b.file_type === 'epub').length})`
+              : `PDF (${books.filter((b) => b.file_type === 'pdf').length})`;
+
+          return (
+            <TouchableOpacity
+              key={filter}
+              style={[styles.filterChip, isActive && styles.filterChipActive]}
+              onPress={() => setActiveFilter(filter)}
+            >
+              <Text
+                style={[styles.filterText, isActive && styles.filterTextActive]}
+              >
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Bookshelf Grid */}
+      {filteredBooks.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyIcon}>📚</Text>
+          <Text style={styles.emptyTitle}>
+            {books.length === 0
+              ? 'Tủ sách của bạn còn trống'
+              : 'Không tìm thấy sách phù hợp'}
           </Text>
-          <TouchableOpacity style={styles.button} activeOpacity={0.8}>
-            <Text style={styles.buttonText}>+ Thêm sách từ máy</Text>
-          </TouchableOpacity>
+          <Text style={styles.emptySubtitle}>
+            {books.length === 0
+              ? 'Nhấn nút "+ Thêm sách" để chọn file EPUB hoặc PDF từ máy của bạn.'
+              : 'Thử tìm kiếm với từ khoá khác hoặc xoá bộ lọc.'}
+          </Text>
+
+          {books.length === 0 && (
+            <TouchableOpacity
+              style={styles.ctaButton}
+              activeOpacity={0.8}
+              onPress={handleImport}
+              disabled={isImporting}
+            >
+              <Text style={styles.ctaButtonText}>Chọn file sách từ máy</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <FlatList
-          data={books}
+          data={filteredBooks}
           keyExtractor={(item) => item.id}
+          numColumns={2}
           renderItem={({ item }) => (
-            <View style={styles.bookCard}>
-              <Text style={styles.bookTitle}>{item.title}</Text>
-              <Text style={styles.bookAuthor}>{item.author}</Text>
-            </View>
+            <BookCard
+              book={item}
+              onPress={handleOpenBook}
+              onDelete={handleDelete}
+            />
           )}
-          contentContainerStyle={styles.listContainer}
+          contentContainerStyle={styles.gridContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#6366F1"
+            />
+          }
         />
       )}
     </SafeAreaView>
@@ -64,59 +224,112 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#09090B',
   },
-  emptyContainer: {
+  centerContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
-  emptyIcon: {
-    fontSize: 56,
-    marginBottom: 16,
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    gap: 10,
   },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FAFAFA',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#A1A1AA',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  button: {
-    backgroundColor: '#4F46E5',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  listContainer: {
-    padding: 16,
-  },
-  bookCard: {
+  searchBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#18181B',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 42,
     borderWidth: 1,
     borderColor: '#27272A',
   },
-  bookTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FAFAFA',
-    marginBottom: 4,
+  searchIcon: {
+    marginRight: 8,
+    fontSize: 14,
   },
-  bookAuthor: {
+  searchInput: {
+    flex: 1,
+    color: '#FAFAFA',
+    fontSize: 14,
+    height: '100%',
+  },
+  importButton: {
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 14,
+    height: 42,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  importButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#18181B',
+    borderWidth: 1,
+    borderColor: '#27272A',
+  },
+  filterChipActive: {
+    backgroundColor: '#4F46E5',
+    borderColor: '#4F46E5',
+  },
+  filterText: {
+    fontSize: 12,
+    color: '#A1A1AA',
+    fontWeight: '500',
+  },
+  filterTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  gridContent: {
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 24,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FAFAFA',
+    marginBottom: 6,
+  },
+  emptySubtitle: {
     fontSize: 13,
     color: '#A1A1AA',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  ctaButton: {
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  ctaButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });
