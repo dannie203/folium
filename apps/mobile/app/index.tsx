@@ -12,6 +12,7 @@ import {
   Platform,
   RefreshControl,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import {
   getBooksWithProgress,
   importBookFromPicker,
@@ -23,6 +24,7 @@ import { BookCard } from '../src/components/BookCard';
 type FilterType = 'all' | 'epub' | 'pdf';
 
 export default function BookshelfScreen() {
+  const router = useRouter();
   const [books, setBooks] = useState<BookWithProgress[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
@@ -80,12 +82,7 @@ export default function BookshelfScreen() {
   };
 
   const handleOpenBook = (book: BookWithProgress) => {
-    const msg = `Mở sách: "${book.title}" (${book.file_type.toUpperCase()}).\nTrình đọc EPUB/PDF sẽ được tích hợp ở Phase 3 & 4.`;
-    if (Platform.OS === 'web') {
-      alert(msg);
-    } else {
-      Alert.alert('Sẵn sàng mở sách', msg);
-    }
+    router.push(`/reader/${book.id}` as any);
   };
 
   const filteredBooks = useMemo(() => {
