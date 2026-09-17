@@ -158,7 +158,7 @@ export async function deleteBook(bookId: string): Promise<void> {
   );
 
   if (book && book.local_path) {
-    await deleteBookFile(book.local_path);
+    await deleteBookFile(book.local_path, bookId);
   }
 
   // Delete records in SQLite

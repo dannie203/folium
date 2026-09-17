@@ -3,6 +3,74 @@ import * as FileSystem from 'expo-file-system';
 
 const BOOKS_DIR = `${FileSystem.documentDirectory || ''}books/`;
 
+const DB_NAME = 'folium_library';
+const STORE_NAME = 'books';
+
+function getWebDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function saveWebBook(id: string, fileData: ArrayBuffer): Promise<void> {
+  const db = await getWebDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.put({ id, data: fileData, updatedAt: Date.now() });
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function getWebBook(id: string): Promise<ArrayBuffer | null> {
+  if (Platform.OS !== 'web' || typeof indexedDB === 'undefined') return null;
+  try {
+    const db = await getWebDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(id);
+      req.onsuccess = () => {
+        const item = req.result;
+        if (item && item.data) {
+          resolve(item.data);
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    console.warn('Failed to read from IndexedDB:', err);
+    return null;
+  }
+}
+
+export async function deleteWebBook(id: string): Promise<void> {
+  if (Platform.OS !== 'web' || typeof indexedDB === 'undefined') return;
+  try {
+    const db = await getWebDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    console.warn('Failed to delete web book from IndexedDB:', err);
+  }
+}
+
 /**
  * Ensure the local books directory exists on native platforms.
  */
@@ -24,8 +92,15 @@ export async function saveBookFile(
   extension: 'epub' | 'pdf'
 ): Promise<string> {
   if (Platform.OS === 'web') {
-    // On web, sourceUri is often a blob: or data: URL from the file picker
-    return sourceUri;
+    try {
+      const resp = await fetch(sourceUri);
+      const buffer = await resp.arrayBuffer();
+      await saveWebBook(bookId, buffer);
+      return `indexeddb://${bookId}`;
+    } catch (err) {
+      console.warn('Failed to cache book in IndexedDB, fallback to sourceUri:', err);
+      return sourceUri;
+    }
   }
 
   await ensureBooksDirectoryExists();
@@ -40,10 +115,17 @@ export async function saveBookFile(
 }
 
 /**
- * Delete a local book file from disk.
+ * Delete a local book file from disk or IndexedDB.
  */
-export async function deleteBookFile(fileUri?: string | null): Promise<void> {
-  if (!fileUri || Platform.OS === 'web') return;
+export async function deleteBookFile(fileUri?: string | null, bookId?: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    if (bookId) {
+      await deleteWebBook(bookId);
+    }
+    return;
+  }
+
+  if (!fileUri) return;
 
   try {
     const fileInfo = await FileSystem.getInfoAsync(fileUri);

@@ -16,6 +16,7 @@ import type { Book, ReaderSettings, ReaderTheme } from '@folium/shared';
 import { getDatabase } from '../../src/db';
 import { EpubReader, type EpubReaderRef } from '../../src/reader/EpubReader';
 import { generateUUID } from '../../src/services/bookService';
+import { getWebBook } from '../../src/services/storage';
 
 export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,6 +25,8 @@ export default function ReaderScreen() {
 
   const [book, setBook] = useState<Book | null>(null);
   const [bookBase64, setBookBase64] = useState<string | undefined>(undefined);
+  const [bookDataUrl, setBookDataUrl] = useState<string | undefined>(undefined);
+  const [bookArrayBuffer, setBookArrayBuffer] = useState<ArrayBuffer | undefined>(undefined);
   const [initialCfi, setInitialCfi] = useState<string | null>(null);
   const [locationsCache, setLocationsCache] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,18 +80,15 @@ export default function ReaderScreen() {
           setCurrentProgress(progressRow.percentage);
         }
 
-        // Read book file into base64
+        // Read book file into base64 or pass buffer/url directly on web
         if (bookRow.local_path) {
           if (Platform.OS === 'web') {
-            // On web, if it is a remote or blob URL, fetch as array buffer
-            const resp = await fetch(bookRow.local_path);
-            const buffer = await resp.arrayBuffer();
-            let binary = '';
-            const bytes = new Uint8Array(buffer);
-            for (let i = 0; i < bytes.byteLength; i++) {
-              binary += String.fromCharCode(bytes[i]);
+            const buffer = await getWebBook(bookRow.id);
+            if (buffer) {
+              setBookArrayBuffer(buffer);
+            } else {
+              setBookDataUrl(bookRow.local_path);
             }
-            setBookBase64(btoa(binary));
           } else {
             const base64 = await FileSystem.readAsStringAsync(bookRow.local_path, {
               encoding: 'base64',
@@ -244,6 +244,8 @@ export default function ReaderScreen() {
         <EpubReader
           ref={readerRef}
           bookDataBase64={bookBase64}
+          bookDataArrayBuffer={bookArrayBuffer}
+          bookDataUrl={bookDataUrl}
           initialCfi={initialCfi}
           locationsCache={locationsCache}
           settings={settings}
