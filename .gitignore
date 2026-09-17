@@ -1,0 +1,12 @@
+node_modules/
+.pnpm-store/
+dist/
+build/
+.expo/
+.turbo/
+*.log
+.wrangler/
+.env
+.env.local
+.DS_Store
+*.tsbuildinfo

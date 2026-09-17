@@ -1,0 +1,15 @@
+{
+  "name": "folium",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:mobile": "pnpm --filter @folium/mobile start",
+    "dev:web": "pnpm --filter @folium/mobile start --web",
+    "dev:worker": "pnpm --filter @folium/worker dev",
+    "build:worker": "pnpm --filter @folium/worker build",
+    "d1:migrate:local": "pnpm --filter @folium/worker d1:migrate:local"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
