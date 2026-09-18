@@ -39,6 +39,12 @@ export default function RootLayout() {
             headerLargeTitle: false,
           }}
         />
+        <Stack.Screen
+          name="reader/[id]"
+          options={{
+            headerShown: false,
+          }}
+        />
       </Stack>
     </>
   );

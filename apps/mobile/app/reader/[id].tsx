@@ -14,14 +14,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as FileSystem from 'expo-file-system';
 import type { Book, ReaderSettings, ReaderTheme } from '@folium/shared';
 import { getDatabase } from '../../src/db';
-import { EpubReader, type EpubReaderRef } from '../../src/reader/EpubReader';
+import { EpubReader } from '../../src/reader/EpubReader';
+import { PdfReader } from '../../src/reader/PdfReader';
 import { generateUUID } from '../../src/services/bookService';
 import { getWebBook } from '../../src/services/storage';
 
 export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const readerRef = useRef<EpubReaderRef>(null);
+  const readerRef = useRef<any>(null);
 
   const [book, setBook] = useState<Book | null>(null);
   const [bookBase64, setBookBase64] = useState<string | undefined>(undefined);
@@ -36,6 +37,7 @@ export default function ReaderScreen() {
   const [showUI, setShowUI] = useState(true);
   const [currentCfi, setCurrentCfi] = useState<string>('');
   const [currentProgress, setCurrentProgress] = useState<number>(0);
+  const [pageInfo, setPageInfo] = useState<{ page?: number; totalPages?: number }>({});
   const [toc, setToc] = useState<Array<{ label: string; href: string }>>([]);
   const [showTocModal, setShowTocModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -139,9 +141,12 @@ export default function ReaderScreen() {
     [id]
   );
 
-  const handleLocationChange = (loc: { cfi: string; percentage: number }) => {
+  const handleLocationChange = (loc: { cfi: string; percentage: number; page?: number; totalPages?: number }) => {
     setCurrentCfi(loc.cfi);
     setCurrentProgress(loc.percentage);
+    if (loc.page !== undefined && loc.totalPages !== undefined) {
+      setPageInfo({ page: loc.page, totalPages: loc.totalPages });
+    }
 
     if (saveProgressTimerRef.current) {
       clearTimeout(saveProgressTimerRef.current);
@@ -241,22 +246,37 @@ export default function ReaderScreen() {
         </View>
       )}
 
-      {/* EPUB Viewer WebView */}
+      {/* Reader Viewer (EPUB or PDF) */}
       <View style={styles.readerWrapper}>
-        <EpubReader
-          ref={readerRef}
-          bookDataBase64={bookBase64}
-          bookDataArrayBuffer={bookArrayBuffer}
-          bookDataUrl={bookDataUrl}
-          initialCfi={initialCfi}
-          locationsCache={locationsCache}
-          settings={settings}
-          onLocationChange={handleLocationChange}
-          onLocationsGenerated={handleLocationsGenerated}
-          onTocLoaded={setToc}
-          onToggleUI={() => setShowUI((prev) => !prev)}
-          onError={(err) => setErrorMessage(err)}
-        />
+        {book.file_type === 'pdf' ? (
+          <PdfReader
+            ref={readerRef}
+            bookDataBase64={bookBase64}
+            bookDataArrayBuffer={bookArrayBuffer}
+            bookDataUrl={bookDataUrl}
+            initialCfi={initialCfi}
+            settings={settings}
+            onLocationChange={handleLocationChange}
+            onTocLoaded={setToc}
+            onToggleUI={() => setShowUI((prev) => !prev)}
+            onError={(err) => setErrorMessage(err)}
+          />
+        ) : (
+          <EpubReader
+            ref={readerRef}
+            bookDataBase64={bookBase64}
+            bookDataArrayBuffer={bookArrayBuffer}
+            bookDataUrl={bookDataUrl}
+            initialCfi={initialCfi}
+            locationsCache={locationsCache}
+            settings={settings}
+            onLocationChange={handleLocationChange}
+            onLocationsGenerated={handleLocationsGenerated}
+            onTocLoaded={setToc}
+            onToggleUI={() => setShowUI((prev) => !prev)}
+            onError={(err) => setErrorMessage(err)}
+          />
+        )}
       </View>
 
       {/* Bottom Footer Overlay */}
@@ -272,7 +292,9 @@ export default function ReaderScreen() {
 
           <View style={styles.progressInfo}>
             <Text style={[styles.progressPercentage, { color: barText }]}>
-              {currentProgress.toFixed(1)}%
+              {pageInfo.page && pageInfo.totalPages
+                ? `Trang ${pageInfo.page}/${pageInfo.totalPages} (${currentProgress.toFixed(1)}%)`
+                : `${currentProgress.toFixed(1)}%`}
             </Text>
           </View>
 

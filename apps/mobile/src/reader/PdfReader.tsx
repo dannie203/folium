@@ -1,0 +1,243 @@
+import React, { useRef, useImperativeHandle, forwardRef, useEffect, useCallback } from 'react';
+import { StyleSheet, View, Platform } from 'react-native';
+import type { ReaderSettings } from '@folium/shared';
+import { PDF_VIEWER_HTML } from './pdfViewerHtml';
+
+let NativeWebView: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    NativeWebView = require('react-native-webview').WebView;
+  } catch (e) {
+    console.warn('react-native-webview not loaded:', e);
+  }
+}
+
+export interface PdfReaderRef {
+  nextPage: () => void;
+  prevPage: () => void;
+  goTo: (page: string | number) => void;
+  applySettings: (settings: Partial<ReaderSettings>) => void;
+}
+
+export interface PdfReaderProps {
+  bookDataBase64?: string;
+  bookDataArrayBuffer?: ArrayBuffer;
+  bookDataUrl?: string;
+  initialCfi?: string | null;
+  settings: ReaderSettings;
+  onLocationChange?: (location: { cfi: string; percentage: number; page?: number; totalPages?: number }) => void;
+  onTocLoaded?: (toc: Array<{ label: string; href: string }>) => void;
+  onToggleUI?: () => void;
+  onError?: (errorMessage: string) => void;
+}
+
+export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) => {
+  const nativeWebViewRef = useRef<any>(null);
+  const webIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const isViewerReadyRef = useRef(false);
+  const lastLoadedKeyRef = useRef<any>(null);
+
+  const postMessageToViewer = useCallback((message: any) => {
+    if (Platform.OS === 'web') {
+      const iframe = webIframeRef.current;
+      if (iframe?.contentWindow) {
+        iframe.contentWindow.postMessage(message, '*');
+      }
+    } else {
+      nativeWebViewRef.current?.postMessage(JSON.stringify(message));
+    }
+  }, []);
+
+  const sendLoadBook = useCallback(() => {
+    if (!props.bookDataArrayBuffer && !props.bookDataBase64 && !props.bookDataUrl) {
+      return;
+    }
+    const currentKey =
+      props.bookDataUrl ||
+      props.bookDataBase64?.slice(0, 32) ||
+      (props.bookDataArrayBuffer ? props.bookDataArrayBuffer.byteLength : null);
+    if (lastLoadedKeyRef.current === currentKey) {
+      return;
+    }
+    lastLoadedKeyRef.current = currentKey;
+
+    console.log('[PdfReader] sendLoadBook called. Available payloads:', {
+      hasArrayBuffer: !!props.bookDataArrayBuffer,
+      arrayBufferSize: props.bookDataArrayBuffer?.byteLength,
+      hasBase64: !!props.bookDataBase64,
+      hasUrl: !!props.bookDataUrl,
+      initialPage: props.initialCfi,
+    });
+
+    postMessageToViewer({
+      type: 'LOAD_BOOK',
+      dataArrayBuffer: props.bookDataArrayBuffer,
+      dataBase64: props.bookDataBase64,
+      dataUrl: props.bookDataUrl,
+      initialCfi: props.initialCfi || undefined,
+    });
+    postMessageToViewer({ type: 'APPLY_SETTINGS', settings: props.settings });
+  }, [
+    props.bookDataArrayBuffer,
+    props.bookDataBase64,
+    props.bookDataUrl,
+    props.initialCfi,
+    props.settings,
+    postMessageToViewer,
+  ]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      nextPage: () => postMessageToViewer({ type: 'NEXT_PAGE' }),
+      prevPage: () => postMessageToViewer({ type: 'PREV_PAGE' }),
+      goTo: (page: string | number) => postMessageToViewer({ type: 'GO_TO', cfi: String(page) }),
+      applySettings: (settings: Partial<ReaderSettings>) =>
+        postMessageToViewer({ type: 'APPLY_SETTINGS', settings }),
+    }),
+    [postMessageToViewer]
+  );
+
+  // Settings change observer
+  useEffect(() => {
+    if (isViewerReadyRef.current) {
+      postMessageToViewer({ type: 'APPLY_SETTINGS', settings: props.settings });
+    }
+  }, [props.settings, postMessageToViewer]);
+
+  // If viewer was ready and book data arrives afterwards
+  useEffect(() => {
+    if (
+      isViewerReadyRef.current &&
+      (props.bookDataArrayBuffer || props.bookDataBase64 || props.bookDataUrl)
+    ) {
+      sendLoadBook();
+    }
+  }, [props.bookDataArrayBuffer, props.bookDataBase64, props.bookDataUrl, sendLoadBook]);
+
+  const handleMessage = useCallback(
+    (eventOrData: any) => {
+      try {
+        const dataStr = eventOrData?.nativeEvent
+          ? eventOrData.nativeEvent.data
+          : eventOrData?.data !== undefined
+          ? eventOrData.data
+          : eventOrData;
+        const data = typeof dataStr === 'string' ? JSON.parse(dataStr) : dataStr;
+        if (!data || !data.type) return;
+
+        switch (data.type) {
+          case 'READY':
+            isViewerReadyRef.current = true;
+            sendLoadBook();
+            break;
+
+          case 'LOCATION_CHANGED':
+            props.onLocationChange?.(data);
+            break;
+
+          case 'TOC_LOADED':
+            props.onTocLoaded?.(data.toc);
+            break;
+
+          case 'TOGGLE_UI':
+            props.onToggleUI?.();
+            break;
+
+          case 'ERROR':
+            props.onError?.(data.message);
+            break;
+        }
+      } catch (e) {
+        console.error('Failed to parse message from pdf viewer:', e);
+      }
+    },
+    [sendLoadBook, props]
+  );
+
+  // Web window message listener
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const handleWebWindowMessage = (event: MessageEvent) => {
+      try {
+        let data = event.data;
+        if (typeof data === 'string') {
+          try {
+            data = JSON.parse(data);
+          } catch {
+            return;
+          }
+        }
+        if (data && data.type) {
+          const knownTypes = ['READY', 'LOCATION_CHANGED', 'TOC_LOADED', 'TOGGLE_UI', 'ERROR'];
+          if (knownTypes.includes(data.type)) {
+            handleMessage(data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to parse web window message from PDF viewer:', err);
+      }
+    };
+
+    window.addEventListener('message', handleWebWindowMessage);
+    return () => {
+      window.removeEventListener('message', handleWebWindowMessage);
+    };
+  }, [handleMessage]);
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.container}>
+        {React.createElement('iframe', {
+          ref: webIframeRef,
+          srcDoc: PDF_VIEWER_HTML,
+          onLoad: () => {
+            console.log('[PdfReader] iframe onLoad fired');
+            isViewerReadyRef.current = true;
+            sendLoadBook();
+          },
+          style: {
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            outline: 'none',
+            backgroundColor: '#121214',
+          },
+          title: 'PDF Viewer',
+        })}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {NativeWebView &&
+        React.createElement(NativeWebView, {
+          ref: nativeWebViewRef,
+          originWhitelist: ['*'],
+          source: { html: PDF_VIEWER_HTML, baseUrl: 'https://localhost' },
+          style: styles.webview,
+          javaScriptEnabled: true,
+          domStorageEnabled: true,
+          allowFileAccess: true,
+          allowUniversalAccessFromFileURLs: true,
+          mixedContentMode: 'always',
+          scrollEnabled: false,
+          bounces: false,
+          onMessage: handleMessage,
+        })}
+    </View>
+  );
+});
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#121214',
+  },
+  webview: {
+    flex: 1,
+    backgroundColor: '#121214',
+  },
+});
