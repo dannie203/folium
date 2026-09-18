@@ -7,7 +7,7 @@
     {
       "binding": "DB",
       "database_name": "folium-d1",
-      "database_id": "local-folium-d1",
+      "database_id": "920a2345-455a-4e2d-84de-b9d8eebece3e",
       "migrations_dir": "migrations"
     }
   ],
