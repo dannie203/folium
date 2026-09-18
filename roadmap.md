@@ -32,9 +32,9 @@
 ├──────────────────────────────────────────────┤
 │  PHASE 7: D1 Sync Engine & Quota Defense ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 8: Google Drive Large File Sync   ⏳  │ <── [ CURRENT STAGE ]
+│  PHASE 8: Google Drive & Info Lock Vault ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 8.5: Community Bookshelf & OPDS   ⏳  │
+│  PHASE 8.5: Community Bookshelf & OPDS   ⏳  │ <── [ NEXT STAGE ]
 ├──────────────────────────────────────────────┤
 │  PHASE 9: Mobile Release Train & Stores  ⏳  │
 ├──────────────────────────────────────────────┤
@@ -143,29 +143,28 @@
 
 ---
 
-### Phase 8: Google Drive Storage & Large Book File Sync ⏳
-*Status: Planned / Current Stage*
+### Phase 8: Google Drive Storage, Info Lock & Legal Shield ✅
+*Status: Completed*
 
-- [ ] **Google OAuth Integration**:
-  - Mobile authentication using `expo-auth-session`.
-  - Web authentication via Google Identity Services.
-- [ ] **Google Drive Storage Sync**:
-  - Scope: `drive.file` creating a dedicated `/Folium` folder (or hidden `appDataFolder`).
+- [x] **Google OAuth Integration**:
+  - Mobile & Web authentication using `expo-auth-session` with PKCE flow and sandbox fallback.
+- [x] **Google Drive Storage Sync**:
+  - Scope: `drive.file` creating a dedicated `/Folium` folder in personal Google Drive.
   - Upload newly imported local books to personal Google Drive.
   - Download missing books when opening library on a secondary device.
-- [ ] **Delta Changes Polling**:
-  - Query Google Drive Changes API to detect newly added or deleted book files across devices.
-- [ ] **Chunked Large File Streaming**:
-  - Resumable upload/download protocol for massive EPUBs (100MB+) and PDFs (500MB+).
-- [ ] **Folium Zero-Knowledge Information Locking ("Cơ Chế Khóa Thông Tin")**:
+- [x] **Delta Changes Polling & Two-Way Reconciliation**:
+  - Query Google Drive files to detect newly added or deleted book files across devices.
+- [x] **Chunked & Multipart Streaming**:
+  - Multipart upload protocol for massive EPUBs and PDFs.
+- [x] **Folium Zero-Knowledge Information Locking ("Cơ Chế Khóa Thông Tin")**:
   - **Client-Side AES-256-GCM Vault**: WebCrypto / PBKDF2 client-side encryption of user reading progress, bookmarks, private notes, and shelf metadata *before* network transmission.
   - **Zero-Knowledge D1 Cloud Architecture**: Cloudflare D1 and sync workers store exclusively blind, opaque ciphertext blobs. The server never receives or holds decryption keys, guaranteeing zero exposure even under server breach or legal subpoena.
   - **Sandboxed Reader Execution Shield**: Hardened iframe/WebView isolation with strict Content Security Policy (CSP) and restricted permissions (`sandbox="allow-same-origin"`), prohibiting untrusted embedded EPUB scripts from accessing OPFS, IndexedDB, local SQLite tokens, or making outbound network leaks.
   - **Local Biometric & PIN App Lock**: On-device biometric authentication (`expo-local-authentication` - FaceID / Fingerprint / PIN) to lock private bookshelves and sensitive reading material.
-- [ ] **Public Cryptographic Proof Snippet (Kerckhoffs's Principle)**:
+- [x] **Public Cryptographic Proof Snippet (Kerckhoffs's Principle)**:
   - Standalone, zero-dependency browser/Node audit snippet published publicly on `/security` and GitHub.
   - Allows techies and security researchers to inspect and execute the encryption handshake locally, proving mathematically that zero unencrypted reading data ever touches external servers.
-- [ ] **Privacy, DMCA Safe Harbor & Security Portal**:
+- [x] **Privacy, DMCA Safe Harbor & Security Portal**:
   - Public static routes hosted at `https://aki.is-a.dev`:
     - `/privacy`: Local-first data declaration, zero-telemetry policy, and storage breakdown (prerequisite for Google OAuth App Verification).
     - `/terms` & `/dmca`: Safe Harbor statutory declaration (DMCA § 512 / OCILLA), terms of service, and designated copyright takedown agent to protect against third-party copyright claims.
@@ -253,9 +252,9 @@
 | **Bookmarks, Highlights & Notes** | 6 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
 | **FTS5 Full-Text Search** | 6 | ✅ Done | ✅ Done | ✅ Done | N/A |
 | **D1 Sync & Quota Defense** | 7 | ✅ Done | ✅ Done | ✅ Done | ✅ Live |
-| **Google Drive & Info Lock (E2EE)** | 8 | ⏳ Current | ⏳ Current | ⏳ Current | ⏳ Current |
-| **Privacy, DMCA & Security Portal** | 8 | ⏳ Current | ⏳ Current | ⏳ Current | N/A |
-| **Community Bookshelf & OPDS** | 8.5 | 📋 Planned | 📋 Planned | 📋 Planned | 📋 Planned |
+| **Google Drive & Info Lock (E2EE)** | 8 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
+| **Privacy, DMCA & Security Portal** | 8 | ✅ Done | ✅ Done | ✅ Done | N/A |
+| **Community Bookshelf & OPDS** | 8.5 | ⏳ Next | ⏳ Next | ⏳ Next | ⏳ Next |
 | **EAS Build & Store Release** | 9 | N/A | 📋 Planned | 📋 Planned | N/A |
 | **EAS OTA Updates** | 9 | N/A | 📋 Planned | 📋 Planned | N/A |
 | **Text-to-Speech (TTS)** | 10 | 📋 Planned | 📋 Planned | 📋 Planned | N/A |

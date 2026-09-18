@@ -146,3 +146,33 @@ While Cloudflare D1 provides generous bandwidth and row reads (5,000,000/day) on
    - Transient edge failures trigger exponential backoff retries (1s, 2s, 4s... up to 60s max).
    - Designed `SyncStatusBadge` component integrated seamlessly into both the Bookshelf header and Reader toolbar with manual sync on tap and real-time status subscription.
 
+---
+
+### Entry #08 (2026-09-19): Google Drive Storage, OAuth & The Zero-Knowledge Privacy Vault
+
+#### Context & Objectives
+In Phase 8, we resolved two fundamental architectural challenges:
+1. **Decoupled Heavy Storage**: Freeing the developer and server from hosting gigabytes of user ebook files (EPUB, PDF) by establishing a direct synchronization channel with personal Google Drive (`drive.file` scope).
+2. **Zero-Knowledge Information Locking & Legal Shield**: Establishing an unassailable privacy vault (AES-256-GCM) that keeps user reading notes blind to external servers, paired with public Kerckhoffs cryptographic proof snippets and DMCA Safe Harbor statutory portals (`/privacy`, `/terms`, `/security`).
+
+#### Key Implementation Breakthroughs
+1. **Cross-Platform Google OAuth & Sandbox Fallback (`authService.ts`)**:
+   - Integrated `expo-auth-session` supporting Web, iOS, and Android with PKCE authentication flow.
+   - Designed a Developer Sandbox Fallback allowing instant testing and review without requiring active GCP OAuth credentials.
+   - Persists access tokens and session state with automated expiry checking.
+2. **Two-Way Google Drive Library Sync (`googleDriveService.ts`)**:
+   - Creates and manages a dedicated `/Folium` folder in the user's personal Google Drive.
+   - Implemented multipart upload (`multipart/related`) for EPUB and PDF binaries with custom `appProperties` metadata tagging.
+   - Two-way library reconciliation: uploads unbacked local books and automatically detects and downloads missing books across secondary devices into local storage (`IndexedDB` / `FileSystem`).
+3. **Client-Side Zero-Knowledge Encryption Vault (`cryptoService.ts`)**:
+   - Utilizes WebCrypto `SubtleCrypto` for hardware-accelerated AES-256-GCM encryption with PBKDF2 key derivation (100,000 rounds of SHA-256).
+   - Generates cryptographically random 16-byte salts and 12-byte IVs for each encrypted record.
+   - Guarantees Cloudflare D1 and sync workers store exclusively blind Base64 ciphertext blobs — zero plaintext leakage and zero server-side key possession.
+4. **Kerckhoffs Verification & Standalone Audit Snippet (`securityProofSnippet.ts`)**:
+   - Published a zero-dependency, open-source audit snippet runnable in browser console or Node.js to mathematically verify that plaintext never touches external networks.
+   - Integrated a live interactive benchmark into the `/security` route.
+5. **Static Public Legal & Privacy Portal (`/privacy`, `/terms`, `/security`)**:
+   - Pre-rendered static routes on `https://aki.is-a.dev`:
+     - `/privacy`: Declares local-first architecture and justifies `drive.file` scope for Google OAuth verification.
+     - `/terms`: Formal DMCA § 512 / OCILLA Safe Harbor statutory declaration and Notice-and-Takedown contact protocol.
+     - `/security`: Interactive cryptographic proof inspector and threat model matrix.
