@@ -83,6 +83,13 @@ pnpm --filter @folium/worker d1:migrate:prod
 
 ---
 
+## 📚 Documentation & Logs
+
+- [Product & Engineering Roadmap](ROADMAP.md): Strategic milestones, feature progression matrix, and upcoming phases.
+- [Engineering Devlogs](DEVLOG.md): In-depth chronicle of architectural decisions, zero-CDN engine inlining, Cloudflare D1 quota defense, and deployment workflows.
+
+---
+
 ## 🔒 Copyright
 
 Copyright © 2026. All rights reserved.  
