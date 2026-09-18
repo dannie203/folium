@@ -6,3 +6,4 @@ allowBuilds:
   sharp: true
   workerd: true
   '@cloudflare/workerd-linux-64': true
+  canvas: false
