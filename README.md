@@ -1,82 +1,89 @@
 # Folium 🍃
 
-A modern, offline-first cross-platform reader for **EPUB** and **PDF** ebooks, built with **React Native / Expo SDK 52**, **Cloudflare Workers**, and **Cloudflare D1**.
+> **Confidential & Proprietary**  
+> Internal engineering and architectural documentation for Folium — an offline-first cross-platform ebook ecosystem.
 
 ---
 
-## ✨ Features
+## 🏛️ System Architecture
 
-- 📖 **Dual Reader Engines**:
-  - **EPUB Engine**: Standalone offline `epub.js` with reflowable text, pagination, CFI location tracking, and table of contents.
-  - **PDF Engine**: Zero-CDN offline Mozilla `pdf.js` with canvas rendering and page navigation.
-- ⌨️ **Desktop & Keyboard-First Experience**:
-  - Full keyboard navigation: `←` / `→` or `Space` (page flip), `PageUp` / `PageDown`, `j` / `k` (vim shortcuts).
-  - Quick font scaling: `+` / `-` (adjust text size from 70% up to 200%).
-  - Interface shortcuts: `T` (toggle top/bottom toolbars), `Esc` (close dialogs & menus).
-  - Centered book-like reading column with `maxWidth: 840px` and refined typography.
-- 🎨 **Reader Customization**:
-  - Themes: Dark (`#121214`), Sepia (`#F4ECD8`), Light (`#FFFFFF`).
-  - Adjustable font scale and line spacing.
-- ⚡ **Local-First Architecture**:
-  - Fast offline reading via local SQLite on iOS/Android and IndexedDB-backed SQLite on Web.
-  - Zero cloud dependency for reading; reading progress is cached locally.
-- ☁️ **Cloudflare Edge Sync Backend**:
-  - Hono-powered API running on Cloudflare Workers.
-  - Metadata and progress synchronization powered by Cloudflare D1 with write-quota optimization.
-
----
-
-## 🏗️ Project Structure
+Folium is architected around a **Local-First, Zero-CDN, Edge-Synchronized** paradigm designed for high performance, complete offline autonomy, and optimal cloud quota consumption.
 
 ```text
-folium/
-├── apps/
-│   └── mobile/           # Expo React Native App (iOS, Android, Web)
-│       ├── app/          # Expo Router file-based routes
-│       └── src/          # Reader engines, SQLite DB, services
-└── packages/
-    ├── shared/           # Shared TypeScript types & schemas
-    └── worker/           # Cloudflare Worker API + D1 migrations
+┌──────────────────────────────────────────────────────────┐
+│                   Folium Monorepo                        │
+├──────────────────────────┬───────────────────────────────┤
+│ apps/mobile              │ Cross-platform Client         │
+│                          │ • iOS & Android (Native Expo) │
+│                          │ • Web (IndexedDB + SQLite)    │
+│                          │ • Offline EPUB/PDF Engines    │
+├──────────────────────────┼───────────────────────────────┤
+│ packages/shared          │ Contracts & Schemas           │
+│                          │ • Types, Enums, D1 Models     │
+├──────────────────────────┼───────────────────────────────┤
+│ packages/worker          │ Edge Sync Backend             │
+│                          │ • Cloudflare Workers + Hono   │
+│                          │ • Cloudflare D1 (Rate-safe)   │
+└──────────────────────────┴───────────────────────────────┘
 ```
 
 ---
 
-## 🚀 Getting Started
+## ⚡ Core Engineering Highlights
 
-### Prerequisites
+### 1. Reader Engines (Zero External Dependencies)
+- **EPUB Engine (`apps/mobile/src/reader/EpubReader.tsx`)**:
+  - Offline inlined `epub.js` with reflowable layout, CFI location tracking, custom theme engine (Dark, Sepia, Light), and bidirectional iframe bridge.
+- **PDF Engine (`apps/mobile/src/reader/PdfReader.tsx`)**:
+  - Inlined Mozilla `pdf.js` with client-side blob worker rendering.
+  - High-DPI canvas rendering with automatic viewport scaling.
+- **Desktop & Keyboard Navigation**:
+  - `←` / `→` or `Space` / `PageUp` / `PageDown`: Instant page turning.
+  - `+` / `-`: Dynamic font scaling (70% - 200%).
+  - `T`: Toggle chrome / immersion mode.
+  - `Esc`: Close modals and navigation drawers.
+  - Centered reading column (`maxWidth: 840px`) with justified book typography.
 
-- [Node.js](https://nodejs.org/) (v20+)
-- [pnpm](https://pnpm.io/) (`corepack enable pnpm`)
+### 2. Local-First Data Layer
+- **iOS / Android**: Native `expo-sqlite` with FTS (Full Text Search).
+- **Web**: Custom IndexedDB-backed SQLite persistent adapter with binary storage for books.
+- **Sync Model**: Write-quota protected. Sync requests are debounced and triggered on reader exit/app backgrounding to preserve Cloudflare D1's 100k rows/day write tier.
 
-### Installation
+---
 
+## 🛠️ Internal Operations & Workflows
+
+### Development
 ```bash
-git clone https://github.com/dannie203/folium.git
-cd folium
-pnpm install
-```
-
-### Running Locally
-
-```bash
-# Run Web Reader
+# Start Web client with Metro bundler
 pnpm dev:web
 
-# Run Mobile (Expo Go / Dev Client)
+# Start Mobile dev client
 pnpm dev:mobile
 
-# Run Cloudflare Worker API locally
+# Run Cloudflare Worker edge backend locally
 pnpm dev:worker
-```
 
-### Typecheck
-
-```bash
+# Run full monorepo typecheck
 pnpm typecheck
 ```
 
+### Production Build & Deploy
+```bash
+# Export static web client for hosting (Cloudflare Pages / Vercel)
+pnpm --filter @folium/mobile exec expo export --platform web
+
+# Build Android Production APK / AAB (via EAS)
+eas build --platform android --profile production
+
+# Deploy Edge Worker & apply D1 schema to production
+pnpm --filter @folium/worker deploy
+pnpm --filter @folium/worker d1:migrate:prod
+```
+
 ---
 
-## 📄 License
+## 🔒 Copyright
 
-MIT
+Copyright © 2026. All rights reserved.  
+Unauthorized copying, distribution, or deployment of this codebase is strictly prohibited.
