@@ -184,6 +184,11 @@
 - [ ] **Decentralized P2P Drive Sharing (0 Server Cost)**:
   - User-driven sharing via Google Drive public view links (`drive.google.com/file/d/...`), downloading directly between Google Drive and reader without costly centralized file hosting.
   - Private Book Clubs / Family Library: invite friends via shared Drive folders.
+- [ ] **Folder-as-a-Shelf & Smart Inbox Subfolder Sync**:
+  - **Drop-Box Root Inbox**: Root `/Folium` directory acts as a smart intake folder; users can drop EPUBs/PDFs from any PC/browser, and Folium automatically ingests them upon sync.
+  - **Subfolder Mirroring (Shelves/Tags)**: Subfolders inside `/Folium` (e.g. `/Folium/Văn Học/`, `/Folium/Kỹ Thuật/`) automatically map to Shelves / Collection Tabs in the app UI.
+  - **Recursive Public Folder Traversal**: Deep recursive scanning (`scanPublicFolderRecursive`) traversing multi-level nested folders in shared community Google Drive links.
+  - **On-Demand Lazy Caching**: Ingests metadata and covers without mass-downloading gigabytes; streams and caches full book binaries only upon first reader open.
 - [ ] **Social Highlights & Chapter Discussions**:
   - Anonymous aggregated popular highlights ("X people highlighted this passage").
   - Community chapter reflections and discussion threads.
