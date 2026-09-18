@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "d1:migrate:local": "wrangler d1 migrations apply folium-d1 --local -y",
-    "d1:migrate:prod": "wrangler d1 migrations apply folium-d1 --remote -y"
+    "d1:migrate:local": "wrangler d1 migrations apply folium-d1 --local",
+    "d1:migrate:prod": "wrangler d1 migrations apply folium-d1 --remote"
   },
   "dependencies": {
     "@folium/shared": "workspace:*",
