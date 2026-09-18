@@ -20,6 +20,8 @@ import {
   type BookWithProgress,
 } from '../src/services/bookService';
 import { BookCard } from '../src/components/BookCard';
+import { SyncStatusBadge } from '../src/components/SyncStatusBadge';
+import { performFullSync, initSyncLifecycle } from '../src/services/syncService';
 
 type FilterType = 'all' | 'epub' | 'pdf';
 
@@ -45,12 +47,22 @@ export default function BookshelfScreen() {
   }, []);
 
   useEffect(() => {
+    initSyncLifecycle();
     loadBooks();
+    // Background pull sync on bookshelf mount
+    performFullSync().then(() => {
+      loadBooks();
+    });
   }, [loadBooks]);
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    loadBooks();
+    try {
+      await performFullSync();
+    } catch (e) {
+      console.warn('Sync failed on pull-to-refresh:', e);
+    }
+    await loadBooks();
   };
 
   const handleImport = async () => {
@@ -122,6 +134,8 @@ export default function BookshelfScreen() {
             clearButtonMode="while-editing"
           />
         </View>
+
+        <SyncStatusBadge theme="dark" />
 
         <TouchableOpacity
           style={styles.importButton}

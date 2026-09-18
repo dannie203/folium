@@ -13,6 +13,7 @@
 - [Entry #04 (2026-09-18): Production Deployment, Domain Setup & pnpm v11 in CI](#entry-04-2026-09-18-production-deployment-domain-setup--pnpm-v11-in-ci)
 - [Entry #05 (2026-09-19): Release Desynchronization & The Multi-Platform Contract](#entry-05-2026-09-19-release-desynchronization--the-multi-platform-contract)
 - [Entry #06 (2026-09-19): Synthesizing The 11-Phase Master Architecture](#entry-06-2026-09-19-synthesizing-the-11-phase-master-architecture)
+- [Entry #07 (2026-09-19): Cloudflare D1 Quota Defense & The Edge Sync Engine](#entry-07-2026-09-19-cloudflare-d1-quota-defense--the-edge-sync-engine)
 
 ---
 
@@ -118,3 +119,30 @@ What originated as a 7-phase prototype (Monorepo, Library, EPUB, PDF, Notes, Goo
 
 #### The Resulting Master Architecture
 We unified all architectural decisions into a synchronized **11-Phase Master Roadmap** (`roadmap.md`), establishing clear milestone boundaries from current core reader capabilities (Phase 1–5 complete, Phase 6 in progress) to long-term privacy-first cloud synchronization.
+
+---
+
+### Entry #07 (2026-09-19): Cloudflare D1 Quota Defense & The Edge Sync Engine
+
+#### Context & Objectives
+While Cloudflare D1 provides generous bandwidth and row reads (5,000,000/day) on its free tier, its strict 100,000 writes/day ceiling poses an existential risk for an ebook reader if sync calls are triggered naively on every page turn or annotation. In Phase 7, we built the client-side sync engine (`apps/mobile/src/services/syncService.ts`) and hardened the edge worker (`packages/worker/src/index.ts`) around our **4-Pillar Quota Defense**.
+
+#### Key Implementation Breakthroughs
+1. **Outbox Compaction (Micro-Mutation Coalescing)**:
+   - Page turns and scroll ticks write instantaneously to local SQLite/IndexedDB with 0 network latency.
+   - When draining `sync_outbox`, the engine groups mutations by `entity_type` and `entity_id`. If a user turned 50 pages across 2 books during a reading session, those 50 rows collapse into exactly 2 `reading_progress` records before transmission, reducing write volume by >95%.
+2. **Adaptive Sync Debouncing**:
+   - Defer remote edge sync requests to a 30-second idle threshold during reading.
+   - Automatically trigger immediate flushes on high-intent lifecycle transitions:
+     - Navigating back from reader to bookshelf.
+     - Native React Native `AppState` transitioning to `background` or `inactive`.
+     - Browser window `beforeunload` and `visibilitychange` (`hidden`).
+3. **ETag & State Hash Gating for Pulls**:
+   - The worker assigns a monotonic integer `current_seq` per user.
+   - The client includes `If-None-Match: W/"${last_synced_seq}"` and `?since=${last_synced_seq}`.
+   - If no new mutations exist since `last_synced_seq`, the worker immediately exits with HTTP 304 / empty payload with ETag headers, bypassing all 5 D1 `SELECT` queries entirely.
+4. **Resilient Local-First Offline Mode & Visual Sync State**:
+   - Flaky connections or offline reading gracefully transition status to `offline` without blocking reader interactivity.
+   - Transient edge failures trigger exponential backoff retries (1s, 2s, 4s... up to 60s max).
+   - Designed `SyncStatusBadge` component integrated seamlessly into both the Bookshelf header and Reader toolbar with manual sync on tap and real-time status subscription.
+

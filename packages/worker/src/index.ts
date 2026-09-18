@@ -8,6 +8,7 @@ import type {
   Bookmark,
   Highlight,
   Note,
+  Book,
 } from '@folium/shared';
 
 type Bindings = {
@@ -62,6 +63,41 @@ app.post('/api/sync/push', async (c) => {
 
   const statements: D1PreparedStatement[] = [];
   let acceptedCount = 0;
+
+  // Batch upsert books metadata
+  if (body.books && body.books.length > 0) {
+    for (const b of body.books) {
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO books (id, user_id, title, author, cover_url, file_type, file_size, drive_file_id, is_deleted, sync_seq)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET
+               title = excluded.title,
+               author = excluded.author,
+               cover_url = excluded.cover_url,
+               file_type = excluded.file_type,
+               file_size = excluded.file_size,
+               drive_file_id = excluded.drive_file_id,
+               is_deleted = excluded.is_deleted,
+               sync_seq = excluded.sync_seq`
+          )
+          .bind(
+            b.id,
+            userId,
+            b.title,
+            b.author,
+            b.cover_url ?? null,
+            b.file_type,
+            b.file_size,
+            b.drive_file_id ?? null,
+            b.is_deleted ? 1 : 0,
+            newSeq
+          )
+      );
+      acceptedCount++;
+    }
+  }
 
   // Batch insert/update reading progress (LWW by client_updated_at)
   if (body.progress && body.progress.length > 0) {
@@ -201,6 +237,7 @@ app.get('/api/sync/pull', async (c) => {
   const db = c.env.DB;
   const userId = c.req.header('x-user-id') || 'dev-user-001';
   const since = parseInt(c.req.query('since') || '0', 10);
+  const ifNoneMatch = c.req.header('if-none-match');
 
   const seqRow = await db
     .prepare('SELECT current_seq FROM user_sync_sequence WHERE user_id = ?')
@@ -208,9 +245,31 @@ app.get('/api/sync/pull', async (c) => {
     .first<{ current_seq: number }>();
 
   const currentServerSeq = seqRow?.current_seq ?? 0;
+  const etag = `W/"${currentServerSeq}"`;
+
+  // 100k Writes/Day & Reads Quota Defense:
+  // If client ETag matches or client cursor is already at or beyond currentServerSeq,
+  // skip all 5 D1 queries!
+  if (ifNoneMatch === etag || (since > 0 && since >= currentServerSeq)) {
+    c.header('ETag', etag);
+    c.header('Cache-Control', 'private, no-cache');
+    const emptyResponse: SyncPullResponse = {
+      server_sync_seq: currentServerSeq,
+      books: [],
+      progress: [],
+      bookmarks: [],
+      highlights: [],
+      notes: [],
+    };
+    return c.json(emptyResponse, 200);
+  }
 
   // Parallel queries for changed items
-  const [progressRes, bookmarksRes, highlightsRes, notesRes] = await Promise.all([
+  const [booksRes, progressRes, bookmarksRes, highlightsRes, notesRes] = await Promise.all([
+    db
+      .prepare('SELECT * FROM books WHERE user_id = ? AND sync_seq > ?')
+      .bind(userId, since)
+      .all<Book>(),
     db
       .prepare('SELECT * FROM reading_progress WHERE user_id = ? AND sync_seq > ?')
       .bind(userId, since)
@@ -231,6 +290,10 @@ app.get('/api/sync/pull', async (c) => {
 
   const response: SyncPullResponse = {
     server_sync_seq: currentServerSeq,
+    books: (booksRes.results || []).map((r: any) => ({
+      ...r,
+      is_deleted: Boolean(r.is_deleted),
+    })),
     progress: (progressRes.results || []).map((r: any) => ({
       ...r,
       is_deleted: Boolean(r.is_deleted),
@@ -249,6 +312,8 @@ app.get('/api/sync/pull', async (c) => {
     })),
   };
 
+  c.header('ETag', etag);
+  c.header('Cache-Control', 'private, no-cache');
   return c.json(response);
 });
 

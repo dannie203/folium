@@ -2,6 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import type { Book, BookFormat } from '@folium/shared';
 import { getDatabase } from '../db';
 import { saveBookFile, deleteBookFile } from './storage';
+import { queueMutation, triggerDebouncedSync } from './syncService';
 
 export interface BookWithProgress extends Book {
   progress_percentage: number;
@@ -110,6 +111,10 @@ export async function importBookFromPicker(): Promise<BookWithProgress | null> {
     ]
   );
 
+  // Queue for cloud sync
+  await queueMutation('book', newBook.id, newBook);
+  triggerDebouncedSync(30000);
+
   return {
     ...newBook,
     progress_percentage: 0,
@@ -169,9 +174,6 @@ export async function deleteBook(bookId: string): Promise<void> {
   await db.runAsync('DELETE FROM books WHERE id = ?', [bookId]);
 
   // Track deletion in sync_outbox for future D1 synchronization
-  await db.runAsync(
-    `INSERT INTO sync_outbox (id, entity_type, entity_id, payload, created_at)
-     VALUES (?, 'book', ?, ?, ?)`,
-    [generateUUID(), bookId, JSON.stringify({ id: bookId, is_deleted: true }), Date.now()]
-  );
+  await queueMutation('book', bookId, { id: bookId, is_deleted: true });
+  triggerDebouncedSync(30000);
 }

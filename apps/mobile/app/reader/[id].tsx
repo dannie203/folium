@@ -32,6 +32,12 @@ import {
   searchAnnotations,
   SearchResultItem,
 } from '../../src/services/annotationService';
+import {
+  queueMutation,
+  triggerDebouncedSync,
+  flushSyncImmediately,
+} from '../../src/services/syncService';
+import { SyncStatusBadge } from '../../src/components/SyncStatusBadge';
 
 export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -144,6 +150,10 @@ export default function ReaderScreen() {
     }
 
     initBook();
+    return () => {
+      // Reader unmount / exit: flush any pending progress immediately
+      flushSyncImmediately();
+    };
   }, [id]);
 
   const showToast = useCallback((msg: string) => {
@@ -273,6 +283,21 @@ export default function ReaderScreen() {
 
         // Update book's updated_at
         await db.runAsync('UPDATE books SET updated_at = ? WHERE id = ?', [now, id]);
+
+        // Queue reading progress mutation (coalesced by syncService to 1 write per book)
+        await queueMutation('progress', id, {
+          id: progressId,
+          user_id: 'local_user',
+          book_id: id,
+          cfi,
+          percentage,
+          client_updated_at: now,
+          is_deleted: false,
+          sync_seq: 0,
+        });
+
+        // 30-second idle threshold for background D1 sync
+        triggerDebouncedSync(30000);
       } catch (e) {
         console.error('Failed to save progress to SQLite:', e);
       }
@@ -417,7 +442,10 @@ export default function ReaderScreen() {
         <View style={[styles.topBar, { backgroundColor: barBg, borderBottomColor: barBorder }]}>
           <TouchableOpacity
             style={styles.iconButton}
-            onPress={() => router.back()}
+            onPress={() => {
+              flushSyncImmediately();
+              router.back();
+            }}
             activeOpacity={0.7}
           >
             <Text style={[styles.iconButtonText, { color: barText }]}>←</Text>
@@ -430,6 +458,8 @@ export default function ReaderScreen() {
           </View>
 
           <View style={styles.actionsRight}>
+            <SyncStatusBadge compact theme={settings.theme} />
+
             <TouchableOpacity
               style={styles.iconButton}
               onPress={toggleBookmark}
