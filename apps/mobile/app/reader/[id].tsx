@@ -8,16 +8,30 @@ import {
   ActivityIndicator,
   Modal,
   FlatList,
+  TextInput,
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as FileSystem from 'expo-file-system';
-import type { Book, ReaderSettings, ReaderTheme } from '@folium/shared';
+import type { Book, Bookmark, Highlight, Note, ReaderSettings, ReaderTheme } from '@folium/shared';
 import { getDatabase } from '../../src/db';
 import { EpubReader } from '../../src/reader/EpubReader';
 import { PdfReader } from '../../src/reader/PdfReader';
 import { generateUUID } from '../../src/services/bookService';
 import { getWebBook } from '../../src/services/storage';
+import {
+  addBookmark,
+  getBookmarks,
+  deleteBookmark,
+  addHighlight,
+  getHighlights,
+  deleteHighlight,
+  addNote,
+  getNotes,
+  deleteNote,
+  searchAnnotations,
+  SearchResultItem,
+} from '../../src/services/annotationService';
 
 export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -39,8 +53,20 @@ export default function ReaderScreen() {
   const [currentProgress, setCurrentProgress] = useState<number>(0);
   const [pageInfo, setPageInfo] = useState<{ page?: number; totalPages?: number }>({});
   const [toc, setToc] = useState<Array<{ label: string; href: string }>>([]);
-  const [showTocModal, setShowTocModal] = useState(false);
+  const [showDrawerModal, setShowDrawerModal] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<'toc' | 'bookmarks' | 'highlights' | 'search'>('toc');
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  // Annotations state
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [selectionData, setSelectionData] = useState<{ cfiRange: string; text: string } | null>(null);
+  const [highlightColor, setHighlightColor] = useState<'yellow' | 'green' | 'blue' | 'pink'>('yellow');
+  const [noteInput, setNoteInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Reader settings
   const [settings, setSettings] = useState<ReaderSettings>({
@@ -100,6 +126,15 @@ export default function ReaderScreen() {
             setBookBase64(base64);
           }
         }
+        // Load annotations (bookmarks, highlights, notes)
+        const [bms, hls, nts] = await Promise.all([
+          getBookmarks(id),
+          getHighlights(id),
+          getNotes(id),
+        ]);
+        setBookmarks(bms);
+        setHighlights(hls);
+        setNotes(nts);
       } catch (err: any) {
         console.error('Failed to load book file:', err);
         setErrorMessage(err.message || 'Lỗi nạp file sách');
@@ -110,6 +145,110 @@ export default function ReaderScreen() {
 
     initBook();
   }, [id]);
+
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 2500);
+  }, []);
+
+  const isCurrentBookmarked = bookmarks.some(
+    (b) => b.cfi === currentCfi || (pageInfo.page && b.cfi === String(pageInfo.page))
+  );
+
+  const toggleBookmark = async () => {
+    if (!book) return;
+    try {
+      const existing = bookmarks.find(
+        (b) => b.cfi === currentCfi || (pageInfo.page && b.cfi === String(pageInfo.page))
+      );
+      if (existing) {
+        await deleteBookmark(existing.id);
+        setBookmarks((prev) => prev.filter((b) => b.id !== existing.id));
+        showToast('Đã xóa dấu trang');
+      } else {
+        const targetCfi = currentCfi || String(pageInfo.page || 1);
+        const pageLabel = pageInfo.page ? `Trang ${pageInfo.page}` : `${currentProgress.toFixed(1)}%`;
+        const newBm = await addBookmark(book.id, targetCfi, `${book.title} (${pageLabel})`);
+        setBookmarks((prev) => [newBm, ...prev]);
+        showToast('Đã thêm dấu trang 🔖');
+      }
+    } catch (e) {
+      console.error('Failed to toggle bookmark:', e);
+    }
+  };
+
+  const handleSaveHighlight = async () => {
+    if (!book || !selectionData) return;
+    try {
+      const newHl = await addHighlight(
+        book.id,
+        selectionData.cfiRange,
+        selectionData.text,
+        highlightColor,
+        noteInput.trim() || undefined
+      );
+
+      if (noteInput.trim()) {
+        const newNote = await addNote(book.id, noteInput.trim(), newHl.id);
+        setNotes((prev) => [newNote, ...prev]);
+      }
+
+      readerRef.current?.addHighlight(newHl.id, selectionData.cfiRange, highlightColor);
+      setHighlights((prev) => [newHl, ...prev]);
+      setSelectionData(null);
+      setNoteInput('');
+      showToast('Đã lưu tô sáng ✨');
+    } catch (e) {
+      console.error('Failed to save highlight:', e);
+    }
+  };
+
+  const handleDeleteBookmark = async (bookmarkId: string) => {
+    try {
+      await deleteBookmark(bookmarkId);
+      setBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
+      showToast('Đã xóa dấu trang');
+    } catch (e) {
+      console.error('Failed to delete bookmark:', e);
+    }
+  };
+
+  const handleDeleteHighlight = async (highlightId: string, cfiRange: string) => {
+    try {
+      await deleteHighlight(highlightId);
+      readerRef.current?.removeHighlight(cfiRange);
+      setHighlights((prev) => prev.filter((h) => h.id !== highlightId));
+      setNotes((prev) => prev.filter((n) => n.highlight_id !== highlightId));
+      showToast('Đã xóa tô sáng');
+    } catch (e) {
+      console.error('Failed to delete highlight:', e);
+    }
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    try {
+      await deleteNote(noteId);
+      setNotes((prev) => prev.filter((n) => n.id !== noteId));
+      showToast('Đã xóa ghi chú');
+    } catch (e) {
+      console.error('Failed to delete note:', e);
+    }
+  };
+
+  const handleSearch = async (text: string) => {
+    setSearchQuery(text);
+    if (!text.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    if (!book) return;
+    try {
+      const res = await searchAnnotations(text, book.id);
+      setSearchResults(res);
+    } catch (e) {
+      console.error('Failed to search annotations:', e);
+    }
+  };
 
   // Debounced progress saver
   const saveProgressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -181,14 +320,16 @@ export default function ReaderScreen() {
   }, []);
 
   const handleEscape = useCallback(() => {
-    if (showSettingsModal) {
+    if (selectionData) {
+      setSelectionData(null);
+    } else if (showSettingsModal) {
       setShowSettingsModal(false);
-    } else if (showTocModal) {
-      setShowTocModal(false);
+    } else if (showDrawerModal) {
+      setShowDrawerModal(false);
     } else {
       setShowUI((prev) => !prev);
     }
-  }, [showSettingsModal, showTocModal]);
+  }, [selectionData, showSettingsModal, showDrawerModal]);
 
   // Global keyboard shortcuts for web (desktop navigation)
   useEffect(() => {
@@ -291,16 +432,32 @@ export default function ReaderScreen() {
           <View style={styles.actionsRight}>
             <TouchableOpacity
               style={styles.iconButton}
-              onPress={() => setShowTocModal(true)}
+              onPress={toggleBookmark}
               activeOpacity={0.7}
+              accessibilityLabel="Đánh dấu trang"
             >
-              <Text style={[styles.iconButtonText, { color: barText }]}>📑</Text>
+              <Text style={[styles.iconButtonText, { color: isCurrentBookmarked ? '#F59E0B' : barText }]}>
+                {isCurrentBookmarked ? '🔖' : '🏷️'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => {
+                setDrawerTab('toc');
+                setShowDrawerModal(true);
+              }}
+              activeOpacity={0.7}
+              accessibilityLabel="Mục lục và Dấu trang"
+            >
+              <Text style={[styles.iconButtonText, { color: barText }]}>📚</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.iconButton}
               onPress={() => setShowSettingsModal(true)}
               activeOpacity={0.7}
+              accessibilityLabel="Cài đặt giao diện"
             >
               <Text style={[styles.iconButtonText, { color: barText }]}>Aa</Text>
             </TouchableOpacity>
@@ -334,6 +491,7 @@ export default function ReaderScreen() {
               bookDataUrl={bookDataUrl}
               initialCfi={initialCfi}
               locationsCache={locationsCache}
+              highlights={highlights}
               settings={settings}
               onLocationChange={handleLocationChange}
               onLocationsGenerated={handleLocationsGenerated}
@@ -341,6 +499,7 @@ export default function ReaderScreen() {
               onToggleUI={() => setShowUI((prev) => !prev)}
               onChangeFontSize={changeFontSize}
               onEscape={handleEscape}
+              onSelection={(sel) => setSelectionData(sel)}
               onError={(err) => setErrorMessage(err)}
             />
           )}
@@ -376,39 +535,312 @@ export default function ReaderScreen() {
         </View>
       )}
 
-      {/* Table of Contents Modal */}
-      <Modal visible={showTocModal} animationType="slide" transparent={true}>
+      {/* Toast Notification */}
+      {toastMessage && (
+        <View style={styles.toastContainer} pointerEvents="none">
+          <Text style={styles.toastText}>{toastMessage}</Text>
+        </View>
+      )}
+
+      {/* Floating Text Selection Card (Highlight / Note Creator) */}
+      {selectionData && (
+        <View style={[styles.selectionPopup, { backgroundColor: barBg, borderColor: barBorder }]}>
+          <View style={styles.selectionHeader}>
+            <Text style={[styles.selectionHeaderTitle, { color: barText }]}>Tô sáng & Ghi chú</Text>
+            <TouchableOpacity onPress={() => { setSelectionData(null); setNoteInput(''); }}>
+              <Text style={[styles.selectionCloseBtn, { color: barText }]}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={[styles.selectionQuote, { color: barText }]} numberOfLines={2}>
+            "{selectionData.text}"
+          </Text>
+
+          {/* 4 Palette Colors */}
+          <View style={styles.colorPaletteRow}>
+            {([
+              { key: 'yellow', hex: '#FACC15' },
+              { key: 'green', hex: '#4ADE80' },
+              { key: 'blue', hex: '#60A5FA' },
+              { key: 'pink', hex: '#F472B6' },
+            ] as const).map((c) => (
+              <TouchableOpacity
+                key={c.key}
+                style={[
+                  styles.colorCircle,
+                  { backgroundColor: c.hex },
+                  highlightColor === c.key && styles.colorCircleActive,
+                ]}
+                onPress={() => setHighlightColor(c.key)}
+              />
+            ))}
+          </View>
+
+          {/* Note text input */}
+          <TextInput
+            style={[
+              styles.selectionNoteInput,
+              {
+                color: barText,
+                borderColor: barBorder,
+                backgroundColor: isDark ? '#27272A' : '#F4F4F5',
+              },
+            ]}
+            placeholder="Viết ghi chú ngắn (tùy chọn)..."
+            placeholderTextColor="#A1A1AA"
+            value={noteInput}
+            onChangeText={setNoteInput}
+          />
+
+          <View style={styles.selectionFooterActions}>
+            <TouchableOpacity
+              style={[styles.btnCancel, { borderColor: barBorder }]}
+              onPress={() => { setSelectionData(null); setNoteInput(''); }}
+            >
+              <Text style={{ color: barText, fontSize: 13 }}>Hủy</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.btnSaveHighlight}
+              onPress={handleSaveHighlight}
+            >
+              <Text style={styles.btnSaveHighlightText}>Lưu tô sáng</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Reader Drawer Modal (Mục lục, Dấu trang, Ghi chú, Tìm kiếm) */}
+      <Modal visible={showDrawerModal} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: barBg }]}>
+            {/* Modal Header */}
             <View style={[styles.modalHeader, { borderBottomColor: barBorder }]}>
-              <Text style={[styles.modalTitle, { color: barText }]}>Mục lục</Text>
-              <TouchableOpacity onPress={() => setShowTocModal(false)}>
+              <Text style={[styles.modalTitle, { color: barText }]}>Tủ đọc & Ghi chú</Text>
+              <TouchableOpacity onPress={() => setShowDrawerModal(false)}>
                 <Text style={[styles.modalCloseText, { color: barText }]}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            {toc.length === 0 ? (
-              <View style={styles.emptyToc}>
-                <Text style={{ color: '#A1A1AA' }}>Không có mục lục</Text>
-              </View>
-            ) : (
-              <FlatList
-                data={toc}
-                keyExtractor={(_, index) => index.toString()}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={[styles.tocItem, { borderBottomColor: barBorder }]}
-                    onPress={() => {
-                      readerRef.current?.goTo(item.href);
-                      setShowTocModal(false);
-                    }}
-                  >
-                    <Text style={[styles.tocItemText, { color: barText }]} numberOfLines={2}>
-                      {item.label}
+            {/* Navigation Tabs */}
+            <View style={[styles.drawerTabs, { borderBottomColor: barBorder }]}>
+              <TouchableOpacity
+                style={[styles.drawerTab, drawerTab === 'toc' && styles.drawerTabActive]}
+                onPress={() => setDrawerTab('toc')}
+              >
+                <Text style={[styles.drawerTabText, { color: drawerTab === 'toc' ? '#6366F1' : '#71717A' }]}>
+                  Mục lục
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.drawerTab, drawerTab === 'bookmarks' && styles.drawerTabActive]}
+                onPress={() => setDrawerTab('bookmarks')}
+              >
+                <Text style={[styles.drawerTabText, { color: drawerTab === 'bookmarks' ? '#6366F1' : '#71717A' }]}>
+                  Dấu trang ({bookmarks.length})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.drawerTab, drawerTab === 'highlights' && styles.drawerTabActive]}
+                onPress={() => setDrawerTab('highlights')}
+              >
+                <Text style={[styles.drawerTabText, { color: drawerTab === 'highlights' ? '#6366F1' : '#71717A' }]}>
+                  Ghi chú ({highlights.length + notes.length})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.drawerTab, drawerTab === 'search' && styles.drawerTabActive]}
+                onPress={() => setDrawerTab('search')}
+              >
+                <Text style={[styles.drawerTabText, { color: drawerTab === 'search' ? '#6366F1' : '#71717A' }]}>
+                  Tìm kiếm
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Tab 1: TOC */}
+            {drawerTab === 'toc' && (
+              toc.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Text style={{ color: '#A1A1AA' }}>Không có mục lục</Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={toc}
+                  keyExtractor={(_, index) => index.toString()}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={[styles.tocItem, { borderBottomColor: barBorder }]}
+                      onPress={() => {
+                        readerRef.current?.goTo(item.href);
+                        setShowDrawerModal(false);
+                      }}
+                    >
+                      <Text style={[styles.tocItemText, { color: barText }]} numberOfLines={2}>
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                />
+              )
+            )}
+
+            {/* Tab 2: Bookmarks */}
+            {drawerTab === 'bookmarks' && (
+              bookmarks.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Text style={{ color: '#A1A1AA', fontSize: 14 }}>Chưa có dấu trang nào</Text>
+                  <Text style={{ color: '#71717A', fontSize: 12, marginTop: 4 }}>
+                    Nhấn biểu tượng 🔖 trên thanh công cụ để đánh dấu trang hiện tại
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={bookmarks}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => (
+                    <View style={[styles.annotationItem, { borderBottomColor: barBorder }]}>
+                      <TouchableOpacity
+                        style={styles.annotationContent}
+                        onPress={() => {
+                          readerRef.current?.goTo(item.cfi);
+                          setShowDrawerModal(false);
+                        }}
+                      >
+                        <Text style={[styles.annotationTitle, { color: barText }]} numberOfLines={1}>
+                          🔖 {item.title}
+                        </Text>
+                        <Text style={styles.annotationMeta}>
+                          {new Date(item.client_created_at).toLocaleString('vi-VN')}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.deleteBtn}
+                        onPress={() => handleDeleteBookmark(item.id)}
+                      >
+                        <Text style={styles.deleteBtnText}>🗑️</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                />
+              )
+            )}
+
+            {/* Tab 3: Highlights & Notes */}
+            {drawerTab === 'highlights' && (
+              highlights.length === 0 && notes.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Text style={{ color: '#A1A1AA', fontSize: 14 }}>Chưa có tô sáng hoặc ghi chú nào</Text>
+                  <Text style={{ color: '#71717A', fontSize: 12, marginTop: 4 }}>
+                    Bôi đen đoạn văn bản trong sách để tô sáng và ghi chép
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={highlights}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => {
+                    const colorBadge =
+                      item.color === 'yellow' ? '#FACC15' :
+                      item.color === 'green' ? '#4ADE80' :
+                      item.color === 'blue' ? '#60A5FA' : '#F472B6';
+
+                    return (
+                      <View style={[styles.annotationItem, { borderBottomColor: barBorder }]}>
+                        <TouchableOpacity
+                          style={styles.annotationContent}
+                          onPress={() => {
+                            readerRef.current?.goTo(item.cfi_range);
+                            setShowDrawerModal(false);
+                          }}
+                        >
+                          <View style={styles.badgeRow}>
+                            <View style={[styles.colorDot, { backgroundColor: colorBadge }]} />
+                            <Text style={styles.annotationMeta}>
+                              {new Date(item.client_created_at).toLocaleString('vi-VN')}
+                            </Text>
+                          </View>
+                          <Text style={[styles.annotationQuote, { color: barText }]} numberOfLines={2}>
+                            "{item.text}"
+                          </Text>
+                          {item.note && (
+                            <Text style={[styles.annotationNoteText, { color: isDark ? '#A1A1AA' : '#52525B' }]}>
+                              📝 {item.note}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.deleteBtn}
+                          onPress={() => handleDeleteHighlight(item.id, item.cfi_range)}
+                        >
+                          <Text style={styles.deleteBtnText}>🗑️</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  }}
+                />
+              )
+            )}
+
+            {/* Tab 4: Search */}
+            {drawerTab === 'search' && (
+              <View style={styles.searchTabContainer}>
+                <TextInput
+                  style={[
+                    styles.searchInput,
+                    {
+                      color: barText,
+                      borderColor: barBorder,
+                      backgroundColor: isDark ? '#27272A' : '#F4F4F5',
+                    },
+                  ]}
+                  placeholder="Tìm kiếm trong dấu trang, ghi chú, đoạn trích..."
+                  placeholderTextColor="#A1A1AA"
+                  value={searchQuery}
+                  onChangeText={handleSearch}
+                />
+
+                {searchQuery.trim().length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={{ color: '#A1A1AA', fontSize: 13 }}>
+                      Nhập từ khóa để tìm kiếm nhanh tức thì trong sách
                     </Text>
-                  </TouchableOpacity>
+                  </View>
+                ) : searchResults.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={{ color: '#A1A1AA', fontSize: 13 }}>
+                      Không tìm thấy kết quả phù hợp cho "{searchQuery}"
+                    </Text>
+                  </View>
+                ) : (
+                  <FlatList
+                    data={searchResults}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={[styles.searchResultItem, { borderBottomColor: barBorder }]}
+                        onPress={() => {
+                          if (item.cfi) {
+                            readerRef.current?.goTo(item.cfi);
+                            setShowDrawerModal(false);
+                          }
+                        }}
+                      >
+                        <View style={styles.searchResultHeader}>
+                          <Text style={styles.searchResultBadge}>
+                            {item.type === 'bookmark' ? '🔖 Dấu trang' : item.type === 'highlight' ? '✨ Tô sáng' : '📝 Ghi chú'}
+                          </Text>
+                          <Text style={styles.annotationMeta}>
+                            {new Date(item.created_at).toLocaleDateString('vi-VN')}
+                          </Text>
+                        </View>
+                        <Text style={[styles.searchResultSnippet, { color: barText }]} numberOfLines={2}>
+                          {item.snippet}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  />
                 )}
-              />
+              </View>
             )}
           </View>
         </View>
@@ -711,5 +1143,215 @@ const styles = StyleSheet.create({
   shortcutKey: {
     fontWeight: '700',
     color: '#818CF8',
+  },
+  toastContainer: {
+    position: 'absolute',
+    bottom: 76,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(24, 24, 27, 0.95)',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 24,
+    zIndex: 9999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  toastText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  selectionPopup: {
+    position: 'absolute',
+    bottom: 76,
+    alignSelf: 'center',
+    maxWidth: 600,
+    width: '92%',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    zIndex: 9999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  selectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  selectionHeaderTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  selectionCloseBtn: {
+    fontSize: 16,
+    padding: 4,
+  },
+  selectionQuote: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    marginBottom: 12,
+    lineHeight: 18,
+    opacity: 0.85,
+  },
+  colorPaletteRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  colorCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  colorCircleActive: {
+    borderColor: '#FFFFFF',
+    transform: [{ scale: 1.15 }],
+  },
+  selectionNoteInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  selectionFooterActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  btnCancel: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnSaveHighlight: {
+    backgroundColor: '#6366F1',
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnSaveHighlightText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  drawerTabs: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    paddingBottom: 4,
+    marginBottom: 8,
+    gap: 6,
+  },
+  drawerTab: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  drawerTabActive: {
+    backgroundColor: 'rgba(99, 102, 241, 0.12)',
+  },
+  drawerTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  annotationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  annotationContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+  annotationTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  annotationMeta: {
+    fontSize: 11,
+    color: '#A1A1AA',
+  },
+  annotationQuote: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  annotationNoteText: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  deleteBtn: {
+    padding: 8,
+  },
+  deleteBtnText: {
+    fontSize: 16,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  colorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  searchTabContainer: {
+    flex: 1,
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  searchResultItem: {
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  searchResultHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  searchResultBadge: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#818CF8',
+  },
+  searchResultSnippet: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
