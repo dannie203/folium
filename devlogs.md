@@ -12,6 +12,7 @@
 - [Entry #03 (2026-09-18): The 100,000 D1 Writes/Day Dilemma & Adaptive Sync](#entry-03-2026-09-18-the-100000-d1-writesday-dilemma--adaptive-sync)
 - [Entry #04 (2026-09-18): Production Deployment, Domain Setup & pnpm v11 in CI](#entry-04-2026-09-18-production-deployment-domain-setup--pnpm-v11-in-ci)
 - [Entry #05 (2026-09-19): Release Desynchronization & The Multi-Platform Contract](#entry-05-2026-09-19-release-desynchronization--the-multi-platform-contract)
+- [Entry #06 (2026-09-19): Synthesizing The 11-Phase Master Architecture](#entry-06-2026-09-19-synthesizing-the-11-phase-master-architecture)
 
 ---
 
@@ -100,3 +101,20 @@ When shipping a multi-platform app spanning an Edge Worker (instant 5-second dep
    - For JavaScript/TypeScript bug fixes and UI updates, utilize Expo EAS Update to push patches directly to mobile devices over CDN, bypassing store review delays entirely.
 4. **Local Rules Codification**:
    - Formulated these rules into [AGENTS.md](file:///home/aki/folium/AGENTS.md) at the repository root, adding local rule files to `.gitignore` to maintain strict confidentiality and developer discipline.
+
+---
+
+### Entry #06 (2026-09-19): Synthesizing The 11-Phase Master Architecture
+
+#### The Evolution of Scope
+What originated as a 7-phase prototype (Monorepo, Library, EPUB, PDF, Notes, Google Drive, Sync) evolved significantly through production realities:
+1. **The Web First-Mover**: Deploying the web application ahead of mobile store reviews created an active production environment (`aki.is-a.dev`) requiring immediate CI/CD automation.
+2. **Quota Consciousness**: Evaluating real-world reading patterns against Cloudflare D1's 100k writes/day free-tier ceiling dictated dedicated architectural guardrails (debouncing, batch upserts, state hashing) elevated into its own dedicated phase.
+3. **Ecosystem Depth**: Additional strategic capabilities emerged:
+   - On-device Text-to-Speech (TTS) with sentence-synchronized reading.
+   - Google Drive decoupled storage for massive books.
+   - EAS OTA updates and Store submission readiness.
+   - Freemium gating with RevenueCat / Stripe and Zero-Knowledge End-to-End Encryption.
+
+#### The Resulting Master Architecture
+We unified all architectural decisions into a synchronized **11-Phase Master Roadmap** (`roadmap.md`), establishing clear milestone boundaries from current core reader capabilities (Phase 1–5 complete, Phase 6 in progress) to long-term privacy-first cloud synchronization.
