@@ -292,8 +292,8 @@ export default function ReaderScreen() {
 
           <View style={styles.progressInfo}>
             <Text style={[styles.progressPercentage, { color: barText }]}>
-              {pageInfo.page && pageInfo.totalPages
-                ? `Trang ${pageInfo.page}/${pageInfo.totalPages} (${currentProgress.toFixed(1)}%)`
+              {book.file_type === 'pdf' && pageInfo.page && pageInfo.totalPages
+                ? `Trang ${pageInfo.page} / ${pageInfo.totalPages} (${currentProgress.toFixed(1)}%)`
                 : `${currentProgress.toFixed(1)}%`}
             </Text>
           </View>
