@@ -233,7 +233,166 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
       }
     }
 
-    // 8. INSERT INTO sync_outbox
+    // 8. INSERT INTO bookmarks
+    if (normalized.startsWith('INSERT INTO BOOKMARKS')) {
+      const [id, book_id, cfi, title, client_created_at] = params;
+      const record = {
+        id,
+        user_id: 'local_user',
+        book_id,
+        cfi,
+        title,
+        client_created_at: client_created_at ?? Date.now(),
+        is_deleted: 0,
+        sync_seq: 0,
+      };
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORES.bookmarks, 'readwrite');
+        const store = tx.objectStore(STORES.bookmarks);
+        const req = store.put(record);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+      return { lastInsertRowId: 1, changes: 1 };
+    }
+
+    // 9. UPDATE bookmarks SET is_deleted = 1 WHERE id = ?
+    if (normalized.includes('UPDATE BOOKMARKS') && normalized.includes('IS_DELETED = 1')) {
+      const [id] = params;
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORES.bookmarks, 'readwrite');
+        const store = tx.objectStore(STORES.bookmarks);
+        const getReq = store.get(id);
+        getReq.onsuccess = () => {
+          const item = getReq.result;
+          if (item) {
+            item.is_deleted = 1;
+            store.put(item);
+          }
+          resolve();
+        };
+        getReq.onerror = () => reject(getReq.error);
+      });
+      return { lastInsertRowId: 0, changes: 1 };
+    }
+
+    // 10. INSERT INTO highlights
+    if (normalized.startsWith('INSERT INTO HIGHLIGHTS')) {
+      const [id, book_id, cfi_range, text, color, note, client_created_at] = params;
+      const record = {
+        id,
+        user_id: 'local_user',
+        book_id,
+        cfi_range,
+        text,
+        color,
+        note: note ?? null,
+        client_created_at: client_created_at ?? Date.now(),
+        is_deleted: 0,
+        sync_seq: 0,
+      };
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORES.highlights, 'readwrite');
+        const store = tx.objectStore(STORES.highlights);
+        const req = store.put(record);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+      return { lastInsertRowId: 1, changes: 1 };
+    }
+
+    // 11. UPDATE highlights SET is_deleted = 1 WHERE id = ?
+    if (normalized.includes('UPDATE HIGHLIGHTS') && normalized.includes('IS_DELETED = 1')) {
+      const [id] = params;
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORES.highlights, 'readwrite');
+        const store = tx.objectStore(STORES.highlights);
+        const getReq = store.get(id);
+        getReq.onsuccess = () => {
+          const item = getReq.result;
+          if (item) {
+            item.is_deleted = 1;
+            store.put(item);
+          }
+          resolve();
+        };
+        getReq.onerror = () => reject(getReq.error);
+      });
+      return { lastInsertRowId: 0, changes: 1 };
+    }
+
+    // 12. UPDATE highlights SET note = ? WHERE id = ?
+    if (normalized.includes('UPDATE HIGHLIGHTS') && normalized.includes('NOTE = ?')) {
+      const [note, id] = params;
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORES.highlights, 'readwrite');
+        const store = tx.objectStore(STORES.highlights);
+        const getReq = store.get(id);
+        getReq.onsuccess = () => {
+          const item = getReq.result;
+          if (item) {
+            item.note = note;
+            store.put(item);
+          }
+          resolve();
+        };
+        getReq.onerror = () => reject(getReq.error);
+      });
+      return { lastInsertRowId: 0, changes: 1 };
+    }
+
+    // 13. INSERT INTO notes
+    if (normalized.startsWith('INSERT INTO NOTES')) {
+      const [id, book_id, highlight_id, content, client_created_at] = params;
+      const record = {
+        id,
+        user_id: 'local_user',
+        book_id,
+        highlight_id: highlight_id ?? null,
+        content,
+        client_created_at: client_created_at ?? Date.now(),
+        is_deleted: 0,
+        sync_seq: 0,
+      };
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORES.notes, 'readwrite');
+        const store = tx.objectStore(STORES.notes);
+        const req = store.put(record);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+      return { lastInsertRowId: 1, changes: 1 };
+    }
+
+    // 14. UPDATE notes SET is_deleted = 1
+    if (normalized.includes('UPDATE NOTES') && normalized.includes('IS_DELETED = 1')) {
+      const [targetId] = params;
+      const isByHighlight = normalized.includes('HIGHLIGHT_ID =');
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORES.notes, 'readwrite');
+        const store = tx.objectStore(STORES.notes);
+        const req = store.openCursor();
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (cursor) {
+            const matches = isByHighlight
+              ? cursor.value.highlight_id === targetId
+              : cursor.value.id === targetId;
+            if (matches) {
+              const updated = { ...cursor.value, is_deleted: 1 };
+              cursor.update(updated);
+            }
+            cursor.continue();
+          } else {
+            resolve();
+          }
+        };
+        req.onerror = () => reject(req.error);
+      });
+      return { lastInsertRowId: 0, changes: 1 };
+    }
+
+    // 15. INSERT INTO sync_outbox
     if (normalized.startsWith('INSERT INTO SYNC_OUTBOX')) {
       const [id, entity_type, entity_id, payload, created_at] = params;
       await new Promise<void>((resolve, reject) => {
@@ -305,11 +464,93 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
     return null;
   }
 
-  async getAllAsync<T>(sql: string, _params: any[] = []): Promise<T[]> {
+  async getAllAsync<T>(sql: string, params: any[] = []): Promise<T[]> {
     const db = await this.dbPromise;
     const normalized = sql.trim().toUpperCase();
 
-    // SELECT b.*, p.percentage as progress_percentage, p.cfi as last_cfi FROM books b LEFT JOIN reading_progress p ...
+    // 1. SELECT FROM BOOKMARKS
+    if (normalized.includes('FROM BOOKMARKS')) {
+      const isSearch = normalized.includes('LIKE');
+      const allBookmarks = await new Promise<any[]>((resolve, reject) => {
+        const tx = db.transaction(STORES.bookmarks, 'readonly');
+        const store = tx.objectStore(STORES.bookmarks);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+
+      let filtered = allBookmarks.filter((b) => !b.is_deleted);
+      if (isSearch) {
+        const bookId = params.length > 1 ? params[0] : null;
+        const term = (params.length > 1 ? params[1] : params[0]).replace(/%/g, '').toLowerCase();
+        if (bookId) {
+          filtered = filtered.filter((b) => b.book_id === bookId);
+        }
+        filtered = filtered.filter((b) => b.title?.toLowerCase().includes(term));
+      } else if (params[0]) {
+        filtered = filtered.filter((b) => b.book_id === params[0]);
+      }
+      filtered.sort((a, b) => (b.client_created_at || 0) - (a.client_created_at || 0));
+      return filtered as unknown as T[];
+    }
+
+    // 2. SELECT FROM HIGHLIGHTS
+    if (normalized.includes('FROM HIGHLIGHTS')) {
+      const isSearch = normalized.includes('LIKE');
+      const allHighlights = await new Promise<any[]>((resolve, reject) => {
+        const tx = db.transaction(STORES.highlights, 'readonly');
+        const store = tx.objectStore(STORES.highlights);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+
+      let filtered = allHighlights.filter((h) => !h.is_deleted);
+      if (isSearch) {
+        const bookId = params.length > 2 ? params[0] : null;
+        const term = (params.length > 2 ? params[1] : params[0]).replace(/%/g, '').toLowerCase();
+        if (bookId) {
+          filtered = filtered.filter((h) => h.book_id === bookId);
+        }
+        filtered = filtered.filter(
+          (h) =>
+            h.text?.toLowerCase().includes(term) ||
+            (h.note && h.note.toLowerCase().includes(term))
+        );
+      } else if (params[0]) {
+        filtered = filtered.filter((h) => h.book_id === params[0]);
+      }
+      filtered.sort((a, b) => (b.client_created_at || 0) - (a.client_created_at || 0));
+      return filtered as unknown as T[];
+    }
+
+    // 3. SELECT FROM NOTES
+    if (normalized.includes('FROM NOTES')) {
+      const isSearch = normalized.includes('LIKE');
+      const allNotes = await new Promise<any[]>((resolve, reject) => {
+        const tx = db.transaction(STORES.notes, 'readonly');
+        const store = tx.objectStore(STORES.notes);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+
+      let filtered = allNotes.filter((n) => !n.is_deleted);
+      if (isSearch) {
+        const bookId = params.length > 1 ? params[0] : null;
+        const term = (params.length > 1 ? params[1] : params[0]).replace(/%/g, '').toLowerCase();
+        if (bookId) {
+          filtered = filtered.filter((n) => n.book_id === bookId);
+        }
+        filtered = filtered.filter((n) => n.content?.toLowerCase().includes(term));
+      } else if (params[0]) {
+        filtered = filtered.filter((n) => n.book_id === params[0]);
+      }
+      filtered.sort((a, b) => (b.client_created_at || 0) - (a.client_created_at || 0));
+      return filtered as unknown as T[];
+    }
+
+    // 4. SELECT b.*, p.percentage as progress_percentage, p.cfi as last_cfi FROM books b LEFT JOIN reading_progress p ...
     if (normalized.includes('FROM BOOKS')) {
       const [books, progressMap] = await Promise.all([
         new Promise<Book[]>((resolve, reject) => {

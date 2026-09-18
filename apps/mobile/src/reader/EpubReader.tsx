@@ -17,6 +17,8 @@ export interface EpubReaderRef {
   prevPage: () => void;
   goTo: (cfi: string) => void;
   applySettings: (settings: Partial<ReaderSettings>) => void;
+  addHighlight: (id: string, cfiRange: string, color: string) => void;
+  removeHighlight: (cfiRange: string) => void;
 }
 
 interface EpubReaderProps {
@@ -25,6 +27,7 @@ interface EpubReaderProps {
   bookDataUrl?: string;
   initialCfi?: string | null;
   locationsCache?: string | null;
+  highlights?: Array<{ id: string; cfi_range: string; color: string }>;
   settings: ReaderSettings;
   onLocationChange?: (location: { cfi: string; percentage: number; page?: number; totalPages?: number }) => void;
   onLocationsGenerated?: (locations: string) => void;
@@ -33,6 +36,7 @@ interface EpubReaderProps {
   onChangeFontSize?: (delta: number) => void;
   onEscape?: () => void;
   onSelection?: (selection: { cfiRange: string; text: string }) => void;
+  onHighlightClick?: (highlight: { id: string; cfiRange: string }) => void;
   onError?: (errorMessage: string) => void;
 }
 
@@ -80,6 +84,7 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
       dataUrl: props.bookDataUrl,
       initialCfi: props.initialCfi || undefined,
       locationsCache: props.locationsCache || undefined,
+      highlights: props.highlights || [],
     });
     postMessageToViewer({ type: 'APPLY_SETTINGS', settings: props.settings });
   }, [
@@ -88,6 +93,7 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
     props.bookDataUrl,
     props.initialCfi,
     props.locationsCache,
+    props.highlights,
     props.settings,
     postMessageToViewer,
   ]);
@@ -100,6 +106,10 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
       goTo: (cfi: string) => postMessageToViewer({ type: 'GO_TO', cfi }),
       applySettings: (settings: Partial<ReaderSettings>) =>
         postMessageToViewer({ type: 'APPLY_SETTINGS', settings }),
+      addHighlight: (id: string, cfiRange: string, color: string) =>
+        postMessageToViewer({ type: 'ADD_HIGHLIGHT', id, cfiRange, color }),
+      removeHighlight: (cfiRange: string) =>
+        postMessageToViewer({ type: 'REMOVE_HIGHLIGHT', cfiRange }),
     }),
     [postMessageToViewer]
   );
@@ -164,6 +174,10 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
 
           case 'SELECTION_MADE':
             props.onSelection?.(data);
+            break;
+
+          case 'HIGHLIGHT_CLICKED':
+            props.onHighlightClick?.(data);
             break;
 
           case 'ERROR':
