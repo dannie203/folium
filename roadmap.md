@@ -14,7 +14,7 @@
 
 ---
 
-## 🗺️ Master Roadmap: 11-Phase Implementation Plan
+## 🗺️ Master Roadmap: 12-Phase Implementation Plan
 
 ```text
 ┌──────────────────────────────────────────────┐
@@ -32,7 +32,9 @@
 ├──────────────────────────────────────────────┤
 │  PHASE 7: D1 Sync Engine & Quota Defense ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 8: Google Drive Large File Sync   ⏳  │ <── [ CURRENT STAGE ]
+│  PHASE 8: Google Drive & Info Lock Vault ✅  │
+├──────────────────────────────────────────────┤
+│  PHASE 8.5: Community Bookshelf & OPDS   ⏳  │ <── [ NEXT STAGE ]
 ├──────────────────────────────────────────────┤
 │  PHASE 9: Mobile Release Train & Stores  ⏳  │
 ├──────────────────────────────────────────────┤
@@ -141,20 +143,60 @@
 
 ---
 
-### Phase 8: Google Drive Storage & Large Book File Sync ⏳
-*Status: Planned*
+### Phase 8: Google Drive Storage, Info Lock & Legal Shield ✅
+*Status: Completed*
 
-- [ ] **Google OAuth Integration**:
-  - Mobile authentication using `expo-auth-session`.
-  - Web authentication via Google Identity Services.
-- [ ] **Google Drive Storage Sync**:
-  - Scope: `drive.file` creating a dedicated `/Folium` folder (or hidden `appDataFolder`).
+- [x] **Google OAuth Integration**:
+  - Mobile & Web authentication using `expo-auth-session` with PKCE flow and sandbox fallback.
+- [x] **Google Drive Storage Sync**:
+  - Scope: `drive.file` creating a dedicated `/Folium` folder in personal Google Drive.
   - Upload newly imported local books to personal Google Drive.
   - Download missing books when opening library on a secondary device.
-- [ ] **Delta Changes Polling**:
-  - Query Google Drive Changes API to detect newly added or deleted book files across devices.
-- [ ] **Chunked Large File Streaming**:
-  - Resumable upload/download protocol for massive EPUBs (100MB+) and PDFs (500MB+).
+- [x] **Delta Changes Polling & Two-Way Reconciliation**:
+  - Query Google Drive files to detect newly added or deleted book files across devices.
+- [x] **Chunked & Multipart Streaming**:
+  - Multipart upload protocol for massive EPUBs and PDFs.
+- [x] **Folium Zero-Knowledge Information Locking ("Cơ Chế Khóa Thông Tin")**:
+  - **Client-Side AES-256-GCM Vault**: WebCrypto / PBKDF2 client-side encryption of user reading progress, bookmarks, private notes, and shelf metadata *before* network transmission.
+  - **Zero-Knowledge D1 Cloud Architecture**: Cloudflare D1 and sync workers store exclusively blind, opaque ciphertext blobs. The server never receives or holds decryption keys, guaranteeing zero exposure even under server breach or legal subpoena.
+  - **Sandboxed Reader Execution Shield**: Hardened iframe/WebView isolation with strict Content Security Policy (CSP) and restricted permissions (`sandbox="allow-same-origin"`), prohibiting untrusted embedded EPUB scripts from accessing OPFS, IndexedDB, local SQLite tokens, or making outbound network leaks.
+  - **Local Biometric & PIN App Lock**: On-device biometric authentication (`expo-local-authentication` - FaceID / Fingerprint / PIN) to lock private bookshelves and sensitive reading material.
+- [x] **Public Cryptographic Proof Snippet (Kerckhoffs's Principle)**:
+  - Standalone, zero-dependency browser/Node audit snippet published publicly on `/security` and GitHub.
+  - Allows techies and security researchers to inspect and execute the encryption handshake locally, proving mathematically that zero unencrypted reading data ever touches external servers.
+- [x] **Privacy, DMCA Safe Harbor & Security Portal**:
+  - Public static routes hosted at `https://aki.is-a.dev`:
+    - `/privacy`: Local-first data declaration, zero-telemetry policy, and storage breakdown (prerequisite for Google OAuth App Verification).
+    - `/terms` & `/dmca`: Safe Harbor statutory declaration (DMCA § 512 / OCILLA), terms of service, and designated copyright takedown agent to protect against third-party copyright claims.
+    - `/security`: Open architecture documentation, threat model, and interactive cryptographic proof inspector.
+
+---
+
+### Phase 8.5: Community Bookshelf, OPDS & Social Reading ⏳
+*Status: Planned*
+
+- [ ] **Public Domain Open Library**:
+  - Integration with standard OPDS (Open Publication Distribution System) feeds: Standard Ebooks, Project Gutenberg, and Vietnamese classic literature.
+  - One-tap download and import of public domain masterpieces directly into personal bookshelf.
+- [ ] **Community Bookshelf Catalog (Cloudflare D1)**:
+  - Table `community_books` in D1: title, author, description, tags, contributor, downloads count, and ⭐ ratings.
+  - Search, genre filtering, and curated reading lists.
+- [ ] **Decentralized P2P Drive Sharing (0 Server Cost)**:
+  - User-driven sharing via Google Drive public view links (`drive.google.com/file/d/...`), downloading directly between Google Drive and reader without costly centralized file hosting.
+  - Private Book Clubs / Family Library: invite friends via shared Drive folders.
+- [ ] **Folder-as-a-Shelf & Smart Inbox Subfolder Sync**:
+  - **Drop-Box Root Inbox**: Root `/Folium` directory acts as a smart intake folder; users can drop EPUBs/PDFs from any PC/browser, and Folium automatically ingests them upon sync.
+  - **Subfolder Mirroring (Shelves/Tags)**: Subfolders inside `/Folium` (e.g. `/Folium/Văn Học/`, `/Folium/Kỹ Thuật/`) automatically map to Shelves / Collection Tabs in the app UI.
+  - **Recursive Public Folder Traversal**: Deep recursive scanning (`scanPublicFolderRecursive`) traversing multi-level nested folders in shared community Google Drive links.
+  - **On-Demand Lazy Caching**: Ingests metadata and covers without mass-downloading gigabytes; streams and caches full book binaries only upon first reader open.
+- [ ] **User-Centric Classification & Metadata Editor (EPUB & PDF)**:
+  - **Zero Unsolicited Auto-Sorting**: Eliminates incorrect machine guesses from messy community metadata (uploader tags, generic titles, scan numbers). The user retains 100% agency over their library hierarchy.
+  - **Universal Smart Inbox ("Chưa Xếp Kệ")**: Newly imported or dropped books default to an Unsorted Inbox buffer for 1-tap shelf assignment.
+  - **In-App Quick Metadata Editor**: Long-press on any book card to clean up Title, correct Author, pick custom Cover, or assign Shelves.
+  - **Two-Way Drive Subfolder Alignment**: Moving a book to a new shelf in the app automatically organizes it into the corresponding Google Drive subfolder.
+- [ ] **Social Highlights & Chapter Discussions**:
+  - Anonymous aggregated popular highlights ("X people highlighted this passage").
+  - Community chapter reflections and discussion threads.
 
 ---
 
@@ -192,7 +234,7 @@
 
 ---
 
-### Phase 11: Freemium Gating, E2E Encryption & Self-Hosting 🔮
+### Phase 11: Freemium Gating, In-App Subscriptions & Self-Hosting 🔮
 *Status: Future Vision*
 
 - [ ] **Freemium Tier Separation**:
@@ -201,9 +243,6 @@
 - [ ] **In-App Subscriptions & Billing**:
   - RevenueCat integration for Android / iOS in-app purchases.
   - Stripe / LemonSqueezy integration for Web payments.
-- [ ] **Zero-Knowledge End-to-End Encryption (E2EE)**:
-  - Client-side encryption of reading progress, notes, and bookmarks before leaving the device.
-  - Edge worker stores only encrypted ciphertext blocks.
 - [ ] **OPDS Catalog Integration**:
   - Ingest books directly from personal Calibre servers and public OPDS feeds.
 - [ ] **One-Click Self-Hostable Package**:
@@ -220,12 +259,14 @@
 | **Zero-CDN EPUB Reader** | 3 | ✅ Done | 🟡 In Dev | 🟡 In Dev | N/A |
 | **Zero-CDN PDF Reader & Ergonomics** | 4 | ✅ Done | 🟡 In Dev | 🟡 In Dev | N/A |
 | **Production Web Deployment** | 5 | ✅ Done | N/A | N/A | N/A |
-| **Bookmarks, Highlights & Notes** | 6 | ⏳ Next | ⏳ Next | ⏳ Next | ⏳ Next |
-| **FTS5 Full-Text Search** | 6 | ⏳ Next | ⏳ Next | ⏳ Next | N/A |
-| **D1 Sync & Quota Defense** | 7 | ⏳ In Progress | ⏳ In Progress | ⏳ In Progress | ✅ Live |
-| **Google Drive File Sync** | 8 | 📋 Planned | 📋 Planned | 📋 Planned | N/A |
+| **Bookmarks, Highlights & Notes** | 6 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
+| **FTS5 Full-Text Search** | 6 | ✅ Done | ✅ Done | ✅ Done | N/A |
+| **D1 Sync & Quota Defense** | 7 | ✅ Done | ✅ Done | ✅ Done | ✅ Live |
+| **Google Drive & Info Lock (E2EE)** | 8 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
+| **Privacy, DMCA & Security Portal** | 8 | ✅ Done | ✅ Done | ✅ Done | N/A |
+| **Community Bookshelf & OPDS** | 8.5 | ⏳ Next | ⏳ Next | ⏳ Next | ⏳ Next |
 | **EAS Build & Store Release** | 9 | N/A | 📋 Planned | 📋 Planned | N/A |
 | **EAS OTA Updates** | 9 | N/A | 📋 Planned | 📋 Planned | N/A |
 | **Text-to-Speech (TTS)** | 10 | 📋 Planned | 📋 Planned | 📋 Planned | N/A |
 | **Freemium & In-App Purchase** | 11 | 🔮 Future | 🔮 Future | 🔮 Future | 🔮 Future |
-| **E2E Encryption & Self-Host** | 11 | 🔮 Future | 🔮 Future | 🔮 Future | 🔮 Future |
+| **Self-Hostable Worker Package** | 11 | 🔮 Future | 🔮 Future | 🔮 Future | 🔮 Future |

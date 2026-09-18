@@ -21,6 +21,7 @@ import {
 } from '../src/services/bookService';
 import { BookCard } from '../src/components/BookCard';
 import { SyncStatusBadge } from '../src/components/SyncStatusBadge';
+import { DriveSyncModal } from '../src/components/DriveSyncModal';
 import { performFullSync, initSyncLifecycle } from '../src/services/syncService';
 
 type FilterType = 'all' | 'epub' | 'pdf';
@@ -33,6 +34,7 @@ export default function BookshelfScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
 
   const loadBooks = useCallback(async () => {
     try {
@@ -138,6 +140,14 @@ export default function BookshelfScreen() {
         <SyncStatusBadge theme="dark" />
 
         <TouchableOpacity
+          style={styles.driveButton}
+          activeOpacity={0.8}
+          onPress={() => setIsDriveModalOpen(true)}
+        >
+          <Text style={styles.driveButtonText}>☁️ Drive</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={styles.importButton}
           activeOpacity={0.8}
           onPress={handleImport}
@@ -224,8 +234,32 @@ export default function BookshelfScreen() {
               tintColor="#6366F1"
             />
           }
+          ListFooterComponent={
+            <View style={styles.footerContainer}>
+              <View style={styles.footerLinksRow}>
+                <TouchableOpacity onPress={() => router.push('/privacy' as any)}>
+                  <Text style={styles.footerLinkText}>Quyền riêng tư</Text>
+                </TouchableOpacity>
+                <Text style={styles.footerDivider}>•</Text>
+                <TouchableOpacity onPress={() => router.push('/terms' as any)}>
+                  <Text style={styles.footerLinkText}>Điều khoản & DMCA</Text>
+                </TouchableOpacity>
+                <Text style={styles.footerDivider}>•</Text>
+                <TouchableOpacity onPress={() => router.push('/security' as any)}>
+                  <Text style={styles.footerLinkText}>Bảo mật ZK</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.footerCopyright}>Folium 🍃 Local-First & Zero-Knowledge E-Reader</Text>
+            </View>
+          }
         />
       )}
+
+      <DriveSyncModal
+        visible={isDriveModalOpen}
+        onClose={() => setIsDriveModalOpen(false)}
+        onSyncComplete={() => loadBooks()}
+      />
     </SafeAreaView>
   );
 }
@@ -342,5 +376,43 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 14,
+  },
+  driveButton: {
+    backgroundColor: '#27272A',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3F3F46',
+  },
+  driveButtonText: {
+    color: '#E4E4E7',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  footerContainer: {
+    paddingTop: 32,
+    paddingBottom: 40,
+    alignItems: 'center',
+    gap: 8,
+  },
+  footerLinksRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  footerLinkText: {
+    color: '#71717A',
+    fontSize: 12,
+    textDecorationLine: 'underline',
+  },
+  footerDivider: {
+    color: '#3F3F46',
+    fontSize: 12,
+  },
+  footerCopyright: {
+    color: '#52525B',
+    fontSize: 11,
+    marginTop: 4,
   },
 });

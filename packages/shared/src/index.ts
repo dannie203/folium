@@ -122,3 +122,42 @@ export type AppToReaderMessage =
   | { type: 'APPLY_SETTINGS'; settings: Partial<ReaderSettings> }
   | { type: 'ADD_HIGHLIGHT'; id: string; cfiRange: string; color: string }
   | { type: 'REMOVE_HIGHLIGHT'; cfiRange: string };
+
+// ------------------------------------------------------------------------------
+// Phase 8: Google OAuth, Google Drive Sync & Zero-Knowledge Vault Types
+// ------------------------------------------------------------------------------
+
+export interface AuthUser {
+  id: string; // Google subject ID
+  email: string;
+  name: string;
+  picture?: string;
+  accessToken: string;
+  expiresAt: number; // UTC ms
+}
+
+export interface DriveFileMetadata {
+  id: string; // Google Drive file ID
+  name: string;
+  size: number;
+  mimeType: string;
+  modifiedTime: string;
+  foliumBookId?: string;
+}
+
+export interface DriveSyncResult {
+  uploadedCount: number;
+  downloadedCount: number;
+  syncedCount: number;
+  errors: string[];
+}
+
+export interface EncryptedVaultPayload {
+  version: 1;
+  algorithm: 'AES-GCM-256';
+  salt: string; // Base64
+  iv: string; // Base64
+  ciphertext: string; // Base64
+  createdAt: number;
+}
+
