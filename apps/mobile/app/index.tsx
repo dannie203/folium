@@ -11,17 +11,20 @@ import {
   Alert,
   Platform,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   getBooksWithProgress,
   importBookFromPicker,
   deleteBook,
+  getAvailableShelves,
   type BookWithProgress,
 } from '../src/services/bookService';
 import { BookCard } from '../src/components/BookCard';
 import { SyncStatusBadge } from '../src/components/SyncStatusBadge';
 import { DriveSyncModal } from '../src/components/DriveSyncModal';
+import { MetadataEditModal } from '../src/components/MetadataEditModal';
 import { performFullSync, initSyncLifecycle } from '../src/services/syncService';
 
 type FilterType = 'all' | 'epub' | 'pdf';
@@ -31,15 +34,20 @@ export default function BookshelfScreen() {
   const [books, setBooks] = useState<BookWithProgress[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [selectedShelf, setSelectedShelf] = useState<string>('all');
+  const [availableShelves, setAvailableShelves] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
+  const [editingBook, setEditingBook] = useState<BookWithProgress | null>(null);
 
   const loadBooks = useCallback(async () => {
     try {
       const data = await getBooksWithProgress();
       setBooks(data);
+      const shelves = await getAvailableShelves();
+      setAvailableShelves(shelves);
     } catch (e) {
       console.error('Failed to load books:', e);
     } finally {
@@ -106,12 +114,20 @@ export default function BookshelfScreen() {
         b.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         b.author.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchesFilter =
-        activeFilter === 'all' || b.file_type === activeFilter;
+      let matchesFilter = true;
+      if (activeFilter === 'epub') matchesFilter = b.file_type === 'epub';
+      else if (activeFilter === 'pdf') matchesFilter = b.file_type === 'pdf';
 
-      return matchesSearch && matchesFilter;
+      let matchesShelf = true;
+      if (selectedShelf === 'Inbox') {
+        matchesShelf = !b.shelf || b.shelf === 'Inbox';
+      } else if (selectedShelf !== 'all') {
+        matchesShelf = b.shelf === selectedShelf;
+      }
+
+      return matchesSearch && matchesFilter && matchesShelf;
     });
-  }, [books, searchQuery, activeFilter]);
+  }, [books, searchQuery, activeFilter, selectedShelf]);
 
   if (isLoading) {
     return (
@@ -148,6 +164,14 @@ export default function BookshelfScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={styles.communityButton}
+          activeOpacity={0.8}
+          onPress={() => router.push('/community' as any)}
+        >
+          <Text style={styles.communityButtonText}>🌐 Cộng đồng</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={styles.importButton}
           activeOpacity={0.8}
           onPress={handleImport}
@@ -161,31 +185,59 @@ export default function BookshelfScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Filter Tabs */}
-      <View style={styles.filterRow}>
-        {(['all', 'epub', 'pdf'] as FilterType[]).map((filter) => {
-          const isActive = activeFilter === filter;
-          const label =
-            filter === 'all'
-              ? `Tất cả (${books.length})`
-              : filter === 'epub'
-              ? `EPUB (${books.filter((b) => b.file_type === 'epub').length})`
-              : `PDF (${books.filter((b) => b.file_type === 'pdf').length})`;
+      {/* Filter & Shelves Tabs */}
+      <View style={styles.filterWrapper}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          <TouchableOpacity
+            style={[styles.filterChip, selectedShelf === 'all' && activeFilter === 'all' && styles.filterChipActive]}
+            onPress={() => { setSelectedShelf('all'); setActiveFilter('all'); }}
+          >
+            <Text style={[styles.filterText, selectedShelf === 'all' && activeFilter === 'all' && styles.filterTextActive]}>
+              Tất cả ({books.length})
+            </Text>
+          </TouchableOpacity>
 
-          return (
-            <TouchableOpacity
-              key={filter}
-              style={[styles.filterChip, isActive && styles.filterChipActive]}
-              onPress={() => setActiveFilter(filter)}
-            >
-              <Text
-                style={[styles.filterText, isActive && styles.filterTextActive]}
+          <TouchableOpacity
+            style={[styles.filterChip, selectedShelf === 'Inbox' && styles.filterChipActive]}
+            onPress={() => setSelectedShelf(selectedShelf === 'Inbox' ? 'all' : 'Inbox')}
+          >
+            <Text style={[styles.filterText, selectedShelf === 'Inbox' && styles.filterTextActive]}>
+              📥 Hộp thư đến ({books.filter(b => !b.shelf || b.shelf === 'Inbox').length})
+            </Text>
+          </TouchableOpacity>
+
+          {availableShelves.filter(s => s !== 'Inbox').map((shelfName) => {
+            const isSelected = selectedShelf === shelfName;
+            const count = books.filter(b => b.shelf === shelfName).length;
+            return (
+              <TouchableOpacity
+                key={shelfName}
+                style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                onPress={() => setSelectedShelf(isSelected ? 'all' : shelfName)}
               >
-                {label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                <Text style={[styles.filterText, isSelected && styles.filterTextActive]}>
+                  📁 {shelfName} ({count})
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+
+          {(['epub', 'pdf'] as FilterType[]).map((filter) => {
+            const isActive = activeFilter === filter;
+            const count = books.filter(b => b.file_type === filter).length;
+            return (
+              <TouchableOpacity
+                key={filter}
+                style={[styles.filterChip, isActive && styles.filterChipActive]}
+                onPress={() => setActiveFilter(isActive ? 'all' : filter)}
+              >
+                <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
+                  {filter.toUpperCase()} ({count})
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Bookshelf Grid */}
@@ -224,6 +276,7 @@ export default function BookshelfScreen() {
               book={item}
               onPress={handleOpenBook}
               onDelete={handleDelete}
+              onLongPress={(b) => setEditingBook(b)}
             />
           )}
           contentContainerStyle={styles.gridContent}
@@ -259,6 +312,13 @@ export default function BookshelfScreen() {
         visible={isDriveModalOpen}
         onClose={() => setIsDriveModalOpen(false)}
         onSyncComplete={() => loadBooks()}
+      />
+
+      <MetadataEditModal
+        visible={!!editingBook}
+        book={editingBook}
+        onClose={() => setEditingBook(null)}
+        onSaved={() => loadBooks()}
       />
     </SafeAreaView>
   );
@@ -389,6 +449,22 @@ const styles = StyleSheet.create({
     color: '#E4E4E7',
     fontSize: 12,
     fontWeight: '600',
+  },
+  communityButton: {
+    backgroundColor: '#1E1B4B',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#4338CA',
+  },
+  communityButtonText: {
+    color: '#A5B4FC',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  filterWrapper: {
+    paddingBottom: 4,
   },
   footerContainer: {
     paddingTop: 32,

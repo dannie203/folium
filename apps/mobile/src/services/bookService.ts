@@ -87,6 +87,8 @@ export async function importBookFromPicker(): Promise<BookWithProgress | null> {
     local_path: localPath,
     drive_file_id: null,
     locations_cache: null,
+    shelf: 'Inbox',
+    tags: [],
     created_at: now,
     updated_at: now,
   };
@@ -94,8 +96,8 @@ export async function importBookFromPicker(): Promise<BookWithProgress | null> {
   // Insert into local SQLite
   const db = await getDatabase();
   await db.runAsync(
-    `INSERT INTO books (id, title, author, cover_url, file_type, file_size, local_path, drive_file_id, locations_cache, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO books (id, title, author, cover_url, file_type, file_size, local_path, drive_file_id, locations_cache, created_at, updated_at, shelf, tags)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       newBook.id,
       newBook.title,
@@ -108,6 +110,8 @@ export async function importBookFromPicker(): Promise<BookWithProgress | null> {
       newBook.locations_cache ?? null,
       newBook.created_at,
       newBook.updated_at,
+      newBook.shelf ?? 'Inbox',
+      newBook.tags ? newBook.tags.join(',') : '',
     ]
   );
 
@@ -144,11 +148,74 @@ export async function getBooksWithProgress(): Promise<BookWithProgress[]> {
     local_path: r.local_path,
     drive_file_id: r.drive_file_id,
     locations_cache: r.locations_cache,
+    shelf: r.shelf || 'Inbox',
+    tags: r.tags ? (typeof r.tags === 'string' ? r.tags.split(',').filter(Boolean) : r.tags) : [],
     created_at: r.created_at,
     updated_at: r.updated_at,
     progress_percentage: r.progress_percentage || 0,
     last_cfi: r.last_cfi,
   }));
+}
+
+/**
+ * Update a book's metadata (title, author, cover, shelf, tags).
+ */
+export async function updateBookMetadata(
+  bookId: string,
+  updates: {
+    title?: string;
+    author?: string;
+    cover_url?: string | null;
+    shelf?: string | null;
+    tags?: string[];
+  }
+): Promise<void> {
+  const db = await getDatabase();
+  const existing = await db.getFirstAsync<Book>('SELECT * FROM books WHERE id = ?', [bookId]);
+  if (!existing) throw new Error('Không tìm thấy sách.');
+
+  const title = updates.title ?? existing.title;
+  const author = updates.author ?? existing.author;
+  const cover_url = updates.cover_url !== undefined ? updates.cover_url : existing.cover_url;
+  const shelf = updates.shelf !== undefined ? updates.shelf : existing.shelf ?? 'Inbox';
+  const tags = updates.tags !== undefined ? updates.tags : (existing.tags || []);
+  const tagsStr = Array.isArray(tags) ? tags.join(',') : '';
+  const now = Date.now();
+
+  await db.runAsync(
+    `UPDATE books SET title = ?, author = ?, cover_url = ?, shelf = ?, tags = ?, updated_at = ? WHERE id = ?`,
+    [title, author, cover_url ?? null, shelf ?? 'Inbox', tagsStr, now, bookId]
+  );
+
+  const updatedBook: Book = {
+    ...existing,
+    title,
+    author,
+    cover_url,
+    shelf,
+    tags: Array.isArray(tags) ? tags : [],
+    updated_at: now,
+  };
+
+  await queueMutation('book', bookId, updatedBook);
+  triggerDebouncedSync(5000);
+}
+
+/**
+ * Get distinct shelves currently in use.
+ */
+export async function getAvailableShelves(): Promise<string[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{ shelf: string | null }>(
+    'SELECT DISTINCT shelf FROM books WHERE is_deleted = 0'
+  );
+  const set = new Set<string>(['Inbox']);
+  for (const r of rows) {
+    if (r.shelf && r.shelf.trim()) {
+      set.add(r.shelf.trim());
+    }
+  }
+  return Array.from(set);
 }
 
 /**

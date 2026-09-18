@@ -34,9 +34,9 @@
 ├──────────────────────────────────────────────┤
 │  PHASE 8: Google Drive & Info Lock Vault ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 8.5: Community Bookshelf & OPDS   ⏳  │ <── [ NEXT STAGE ]
+│  PHASE 8.5: Community Bookshelf & OPDS   ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 9: Mobile Release Train & Stores  ⏳  │
+│  PHASE 9: Mobile Release Train & Stores  ⏳  │ <── [ NEXT STAGE ]
 ├──────────────────────────────────────────────┤
 │  PHASE 10: TTS Audio & Accessibility     ⏳  │
 ├──────────────────────────────────────────────┤
@@ -172,31 +172,28 @@
 
 ---
 
-### Phase 8.5: Community Bookshelf, OPDS & Social Reading ⏳
-*Status: Planned*
+### Phase 8.5: Community Bookshelf, OPDS & Social Reading ✅
+*Status: Completed*
 
-- [ ] **Public Domain Open Library**:
+- [x] **Public Domain Open Library**:
   - Integration with standard OPDS (Open Publication Distribution System) feeds: Standard Ebooks, Project Gutenberg, and Vietnamese classic literature.
   - One-tap download and import of public domain masterpieces directly into personal bookshelf.
-- [ ] **Community Bookshelf Catalog (Cloudflare D1)**:
-  - Table `community_books` in D1: title, author, description, tags, contributor, downloads count, and ⭐ ratings.
-  - Search, genre filtering, and curated reading lists.
-- [ ] **Decentralized P2P Drive Sharing (0 Server Cost)**:
-  - User-driven sharing via Google Drive public view links (`drive.google.com/file/d/...`), downloading directly between Google Drive and reader without costly centralized file hosting.
-  - Private Book Clubs / Family Library: invite friends via shared Drive folders.
-- [ ] **Folder-as-a-Shelf & Smart Inbox Subfolder Sync**:
-  - **Drop-Box Root Inbox**: Root `/Folium` directory acts as a smart intake folder; users can drop EPUBs/PDFs from any PC/browser, and Folium automatically ingests them upon sync.
+- [x] **Decentralized Community Catalogs & Custom OPDS**:
+  - Custom OPDS feed addition and on-demand Atom catalog ingestion.
+  - Dedicated community hub (`/community`) with source switching, live search, and genre filtering.
+- [x] **Decentralized P2P Drive Sharing (0 Server Cost)**:
+  - User-driven sharing via Google Drive public view links (`drive.google.com/drive/folders/...`), downloading directly between Google Drive and reader without costly centralized file hosting.
+  - On-demand preview with lazy book ingestion.
+- [x] **Folder-as-a-Shelf & Smart Inbox Subfolder Sync**:
+  - **Drop-Box Root Inbox**: Root `/Folium` directory acts as a smart intake folder; users can drop EPUBs/PDFs from any PC/browser, and Folium automatically ingests them into `Inbox` upon sync.
   - **Subfolder Mirroring (Shelves/Tags)**: Subfolders inside `/Folium` (e.g. `/Folium/Văn Học/`, `/Folium/Kỹ Thuật/`) automatically map to Shelves / Collection Tabs in the app UI.
   - **Recursive Public Folder Traversal**: Deep recursive scanning (`scanPublicFolderRecursive`) traversing multi-level nested folders in shared community Google Drive links.
   - **On-Demand Lazy Caching**: Ingests metadata and covers without mass-downloading gigabytes; streams and caches full book binaries only upon first reader open.
-- [ ] **User-Centric Classification & Metadata Editor (EPUB & PDF)**:
+- [x] **User-Centric Classification & Metadata Editor (EPUB & PDF)**:
   - **Zero Unsolicited Auto-Sorting**: Eliminates incorrect machine guesses from messy community metadata (uploader tags, generic titles, scan numbers). The user retains 100% agency over their library hierarchy.
-  - **Universal Smart Inbox ("Chưa Xếp Kệ")**: Newly imported or dropped books default to an Unsorted Inbox buffer for 1-tap shelf assignment.
+  - **Universal Smart Inbox ("📥 Hộp thư đến")**: Newly imported or dropped books default to an Unsorted Inbox buffer with horizontal shelf filter chips (`Tất cả`, `📥 Hộp thư đến`, dynamic shelves, `EPUB`, `PDF`).
   - **In-App Quick Metadata Editor**: Long-press on any book card to clean up Title, correct Author, pick custom Cover, or assign Shelves.
-  - **Two-Way Drive Subfolder Alignment**: Moving a book to a new shelf in the app automatically organizes it into the corresponding Google Drive subfolder.
-- [ ] **Social Highlights & Chapter Discussions**:
-  - Anonymous aggregated popular highlights ("X people highlighted this passage").
-  - Community chapter reflections and discussion threads.
+  - **Two-Way Drive Subfolder Alignment**: Moving a book to a new shelf in the app automatically organizes it into the corresponding Google Drive subfolder upon sync.
 
 ---
 

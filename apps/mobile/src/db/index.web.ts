@@ -96,6 +96,8 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
         locations_cache,
         created_at,
         updated_at,
+        shelf,
+        tags,
       ] = params;
       const record: Book = {
         id,
@@ -107,6 +109,8 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
         local_path: local_path ?? null,
         drive_file_id: drive_file_id ?? null,
         locations_cache: locations_cache ?? null,
+        shelf: shelf ?? 'Inbox',
+        tags: tags ? (typeof tags === 'string' ? tags.split(',') : tags) : [],
         created_at: created_at ?? Date.now(),
         updated_at: updated_at ?? Date.now(),
       };
@@ -153,6 +157,31 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
           const item = getReq.result;
           if (item) {
             item.updated_at = updated_at;
+            store.put(item);
+          }
+          resolve();
+        };
+        getReq.onerror = () => reject(getReq.error);
+      });
+      return { lastInsertRowId: 0, changes: 1 };
+    }
+
+    // 3b. UPDATE books SET title = ?, author = ?, cover_url = ?, shelf = ?, tags = ?, updated_at = ? WHERE id = ?
+    if (normalized.startsWith('UPDATE BOOKS SET') && (normalized.includes('TITLE') || normalized.includes('SHELF'))) {
+      const id = params[params.length - 1];
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORES.books, 'readwrite');
+        const store = tx.objectStore(STORES.books);
+        const getReq = store.get(id);
+        getReq.onsuccess = () => {
+          const item = getReq.result;
+          if (item) {
+            item.title = params[0] ?? item.title;
+            item.author = params[1] ?? item.author;
+            item.cover_url = params[2] ?? item.cover_url;
+            item.shelf = params[3] ?? item.shelf ?? 'Inbox';
+            item.tags = params[4] ? (typeof params[4] === 'string' ? params[4].split(',') : params[4]) : (item.tags || []);
+            item.updated_at = Date.now();
             store.put(item);
           }
           resolve();

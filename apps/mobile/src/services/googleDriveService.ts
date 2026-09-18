@@ -68,6 +68,56 @@ export async function getOrCreateFoliumFolder(): Promise<string> {
 }
 
 /**
+ * Get or create a shelf subfolder inside the /Folium folder (e.g. /Folium/Văn Học).
+ */
+export async function getOrCreateShelfSubfolder(shelfName: string): Promise<string> {
+  const user = getCurrentUser();
+  if (!user) throw new Error('Chưa đăng nhập Google Drive.');
+
+  if (user.accessToken.startsWith('demo_')) {
+    return `demo_folder_${shelfName}`;
+  }
+
+  const rootFolderId = await getOrCreateFoliumFolder();
+  const safeName = shelfName.replace(/'/g, "\\'");
+  const query = encodeURIComponent(
+    `'${rootFolderId}' in parents and name = '${safeName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+  );
+
+  const searchResp = await fetch(`${DRIVE_API_BASE}/files?q=${query}&fields=files(id, name)`, {
+    headers: { Authorization: `Bearer ${user.accessToken}` },
+  });
+
+  if (searchResp.ok) {
+    const data = await searchResp.json();
+    if (data.files && data.files.length > 0) {
+      return data.files[0].id;
+    }
+  }
+
+  // Create subfolder
+  const createResp = await fetch(`${DRIVE_API_BASE}/files`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${user.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: shelfName,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [rootFolderId],
+    }),
+  });
+
+  if (!createResp.ok) {
+    throw new Error(`Không thể tạo thư mục kệ sách /Folium/${shelfName} trên Google Drive.`);
+  }
+
+  const newFolder = await createResp.json();
+  return newFolder.id;
+}
+
+/**
  * Upload a book binary file to the user's /Folium folder on Google Drive.
  */
 export async function uploadBookToDrive(book: Book): Promise<string> {
@@ -82,7 +132,16 @@ export async function uploadBookToDrive(book: Book): Promise<string> {
     return mockDriveId;
   }
 
-  const folderId = await getOrCreateFoliumFolder();
+  const rootFolderId = await getOrCreateFoliumFolder();
+  let targetFolderId = rootFolderId;
+  if (book.shelf && book.shelf !== 'Inbox') {
+    try {
+      targetFolderId = await getOrCreateShelfSubfolder(book.shelf);
+    } catch {
+      targetFolderId = rootFolderId;
+    }
+  }
+
   const filename = `${book.title}.${book.file_type}`;
   const mimeType = book.file_type === 'pdf' ? 'application/pdf' : 'application/epub+zip';
 
@@ -109,10 +168,11 @@ export async function uploadBookToDrive(book: Book): Promise<string> {
   // Construct multipart/related upload payload
   const metadata = {
     name: filename,
-    parents: [folderId],
+    parents: [targetFolderId],
     appProperties: {
       foliumBookId: book.id,
       foliumFormat: book.file_type,
+      foliumShelf: book.shelf || 'Inbox',
     },
   };
 
@@ -165,7 +225,7 @@ export async function uploadBookToDrive(book: Book): Promise<string> {
 }
 
 /**
- * List files in the Google Drive /Folium folder.
+ * List files in the Google Drive /Folium folder (including nested shelf subfolders).
  */
 export async function listDriveBooks(): Promise<DriveFileMetadata[]> {
   const user = getCurrentUser();
@@ -181,12 +241,13 @@ export async function listDriveBooks(): Promise<DriveFileMetadata[]> {
         mimeType: 'application/epub+zip',
         modifiedTime: new Date().toISOString(),
         foliumBookId: 'demo-cloud-book-001',
+        shelf: 'Văn Học',
       },
     ];
   }
 
-  const folderId = await getOrCreateFoliumFolder();
-  const query = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+  const rootFolderId = await getOrCreateFoliumFolder();
+  const query = encodeURIComponent(`'${rootFolderId}' in parents and trashed = false`);
   const resp = await fetch(
     `${DRIVE_API_BASE}/files?q=${query}&fields=files(id, name, size, mimeType, modifiedTime, appProperties)`,
     {
@@ -199,14 +260,50 @@ export async function listDriveBooks(): Promise<DriveFileMetadata[]> {
   }
 
   const data = await resp.json();
-  return (data.files || []).map((f: any) => ({
-    id: f.id,
-    name: f.name,
-    size: parseInt(f.size || '0', 10),
-    mimeType: f.mimeType,
-    modifiedTime: f.modifiedTime,
-    foliumBookId: f.appProperties?.foliumBookId,
-  }));
+  const items = data.files || [];
+  const results: DriveFileMetadata[] = [];
+
+  for (const item of items) {
+    if (item.mimeType === 'application/vnd.google-apps.folder') {
+      // Nested subfolder represents a shelf
+      const subQuery = encodeURIComponent(`'${item.id}' in parents and trashed = false`);
+      const subResp = await fetch(
+        `${DRIVE_API_BASE}/files?q=${subQuery}&fields=files(id, name, size, mimeType, modifiedTime, appProperties)`,
+        {
+          headers: { Authorization: `Bearer ${user.accessToken}` },
+        }
+      );
+      if (subResp.ok) {
+        const subData = await subResp.json();
+        for (const subItem of subData.files || []) {
+          if (subItem.mimeType !== 'application/vnd.google-apps.folder') {
+            results.push({
+              id: subItem.id,
+              name: subItem.name,
+              size: parseInt(subItem.size || '0', 10),
+              mimeType: subItem.mimeType,
+              modifiedTime: subItem.modifiedTime,
+              foliumBookId: subItem.appProperties?.foliumBookId,
+              shelf: subItem.appProperties?.foliumShelf || item.name,
+            });
+          }
+        }
+      }
+    } else {
+      // File dropped directly in root /Folium folder (Inbox)
+      results.push({
+        id: item.id,
+        name: item.name,
+        size: parseInt(item.size || '0', 10),
+        mimeType: item.mimeType,
+        modifiedTime: item.modifiedTime,
+        foliumBookId: item.appProperties?.foliumBookId,
+        shelf: item.appProperties?.foliumShelf || 'Inbox',
+      });
+    }
+  }
+
+  return results;
 }
 
 /**
@@ -300,8 +397,8 @@ export async function syncWithGoogleDrive(): Promise<DriveSyncResult> {
           const now = Date.now();
 
           await db.runAsync(
-            `INSERT INTO books (id, title, author, cover_url, file_type, file_size, local_path, drive_file_id, locations_cache, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO books (id, title, author, cover_url, file_type, file_size, local_path, drive_file_id, locations_cache, shelf, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               newId,
               title,
@@ -312,6 +409,7 @@ export async function syncWithGoogleDrive(): Promise<DriveSyncResult> {
               localPath,
               driveFile.id,
               null,
+              driveFile.shelf || 'Inbox',
               now,
               now,
             ]
