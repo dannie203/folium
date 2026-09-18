@@ -30,6 +30,8 @@ interface EpubReaderProps {
   onLocationsGenerated?: (locations: string) => void;
   onTocLoaded?: (toc: Array<{ label: string; href: string }>) => void;
   onToggleUI?: () => void;
+  onChangeFontSize?: (delta: number) => void;
+  onEscape?: () => void;
   onSelection?: (selection: { cfiRange: string; text: string }) => void;
   onError?: (errorMessage: string) => void;
 }
@@ -152,6 +154,14 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
             props.onToggleUI?.();
             break;
 
+          case 'CHANGE_FONT_SIZE':
+            props.onChangeFontSize?.(data.delta);
+            break;
+
+          case 'ESCAPE':
+            props.onEscape?.();
+            break;
+
           case 'SELECTION_MADE':
             props.onSelection?.(data);
             break;
@@ -188,6 +198,8 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
             'LOCATIONS_GENERATED',
             'TOC_LOADED',
             'TOGGLE_UI',
+            'CHANGE_FONT_SIZE',
+            'ESCAPE',
             'SELECTION_MADE',
             'ERROR',
           ];

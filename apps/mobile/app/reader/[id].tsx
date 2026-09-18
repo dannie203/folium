@@ -173,12 +173,74 @@ export default function ReaderScreen() {
     setSettings((prev) => ({ ...prev, theme }));
   };
 
-  const changeFontSize = (delta: number) => {
+  const changeFontSize = useCallback((delta: number) => {
     setSettings((prev) => ({
       ...prev,
-      fontSize: Math.min(160, Math.max(70, prev.fontSize + delta)),
+      fontSize: Math.min(200, Math.max(70, prev.fontSize + delta)),
     }));
-  };
+  }, []);
+
+  const handleEscape = useCallback(() => {
+    if (showSettingsModal) {
+      setShowSettingsModal(false);
+    } else if (showTocModal) {
+      setShowTocModal(false);
+    } else {
+      setShowUI((prev) => !prev);
+    }
+  }, [showSettingsModal, showTocModal]);
+
+  // Global keyboard shortcuts for web (desktop navigation)
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const handleWindowKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (
+        e.key === 'ArrowRight' ||
+        e.key === 'PageDown' ||
+        (e.key === ' ' && !e.shiftKey) ||
+        e.key === 'j'
+      ) {
+        e.preventDefault();
+        readerRef.current?.nextPage();
+      } else if (
+        e.key === 'ArrowLeft' ||
+        e.key === 'PageUp' ||
+        (e.key === ' ' && e.shiftKey) ||
+        e.key === 'k'
+      ) {
+        e.preventDefault();
+        readerRef.current?.prevPage();
+      } else if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        setShowUI((prev) => !prev);
+      } else if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        changeFontSize(10);
+      } else if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        changeFontSize(-10);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleEscape();
+      }
+    };
+
+    window.addEventListener('keydown', handleWindowKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleWindowKeyDown);
+    };
+  }, [handleEscape, changeFontSize]);
 
   if (isLoading) {
     return (
@@ -260,6 +322,8 @@ export default function ReaderScreen() {
               onLocationChange={handleLocationChange}
               onTocLoaded={setToc}
               onToggleUI={() => setShowUI((prev) => !prev)}
+              onChangeFontSize={changeFontSize}
+              onEscape={handleEscape}
               onError={(err) => setErrorMessage(err)}
             />
           ) : (
@@ -275,6 +339,8 @@ export default function ReaderScreen() {
               onLocationsGenerated={handleLocationsGenerated}
               onTocLoaded={setToc}
               onToggleUI={() => setShowUI((prev) => !prev)}
+              onChangeFontSize={changeFontSize}
+              onEscape={handleEscape}
               onError={(err) => setErrorMessage(err)}
             />
           )}
@@ -400,6 +466,24 @@ export default function ReaderScreen() {
                 <Text style={[styles.fontButtonText, { color: barText }]}>A +</Text>
               </TouchableOpacity>
             </View>
+
+            {Platform.OS === 'web' && (
+              <View style={[styles.shortcutBox, { borderTopColor: barBorder }]}>
+                <Text style={[styles.shortcutTitle, { color: barText }]}>PHÍM TẮT BÀN PHÍM</Text>
+                <Text style={styles.shortcutRow}>
+                  <Text style={styles.shortcutKey}>← / → hoặc Space</Text>: Lật trang
+                </Text>
+                <Text style={styles.shortcutRow}>
+                  <Text style={styles.shortcutKey}>+ / -</Text>: Chỉnh cỡ chữ (70% - 200%)
+                </Text>
+                <Text style={styles.shortcutRow}>
+                  <Text style={styles.shortcutKey}>T</Text>: Ẩn / Hiện thanh công cụ
+                </Text>
+                <Text style={styles.shortcutRow}>
+                  <Text style={styles.shortcutKey}>Esc</Text>: Đóng bảng / Menu
+                </Text>
+              </View>
+            )}
           </View>
         </TouchableOpacity>
       </Modal>
@@ -606,5 +690,26 @@ const styles = StyleSheet.create({
   fontValue: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  shortcutBox: {
+    marginTop: 18,
+    paddingTop: 14,
+    borderTopWidth: 1,
+  },
+  shortcutTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    opacity: 0.65,
+  },
+  shortcutRow: {
+    fontSize: 12,
+    color: '#A1A1AA',
+    lineHeight: 20,
+  },
+  shortcutKey: {
+    fontWeight: '700',
+    color: '#818CF8',
   },
 });

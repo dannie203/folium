@@ -28,6 +28,8 @@ export interface PdfReaderProps {
   onLocationChange?: (location: { cfi: string; percentage: number; page?: number; totalPages?: number }) => void;
   onTocLoaded?: (toc: Array<{ label: string; href: string }>) => void;
   onToggleUI?: () => void;
+  onChangeFontSize?: (delta: number) => void;
+  onEscape?: () => void;
   onError?: (errorMessage: string) => void;
 }
 
@@ -144,6 +146,14 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
             props.onToggleUI?.();
             break;
 
+          case 'CHANGE_FONT_SIZE':
+            props.onChangeFontSize?.(data.delta);
+            break;
+
+          case 'ESCAPE':
+            props.onEscape?.();
+            break;
+
           case 'ERROR':
             props.onError?.(data.message);
             break;
@@ -170,7 +180,7 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
           }
         }
         if (data && data.type) {
-          const knownTypes = ['READY', 'LOCATION_CHANGED', 'TOC_LOADED', 'TOGGLE_UI', 'ERROR'];
+          const knownTypes = ['READY', 'LOCATION_CHANGED', 'TOC_LOADED', 'TOGGLE_UI', 'CHANGE_FONT_SIZE', 'ESCAPE', 'ERROR'];
           if (knownTypes.includes(data.type)) {
             handleMessage(data);
           }
