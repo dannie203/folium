@@ -1,0 +1,55 @@
+name: Deploy Web to Production (aki.is-a.dev)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck Monorepo
+        run: pnpm typecheck
+
+      - name: Build Web App
+        run: pnpm --filter @folium/mobile exec expo export --platform web
+
+      - name: Prepare SPA Fallback & Metadata
+        run: |
+          cp apps/mobile/dist/index.html apps/mobile/dist/404.html
+          echo "aki.is-a.dev" > apps/mobile/dist/CNAME
+          touch apps/mobile/dist/.nojekyll
+
+      - name: Deploy to dannie203.github.io
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          deploy_key: ${{ secrets.DEPLOY_SSH_KEY }}
+          external_repository: dannie203/dannie203.github.io
+          publish_branch: main
+          publish_dir: ./apps/mobile/dist
+          cname: aki.is-a.dev
+          commit_message: "deploy(prod): automated build from folium@${{ github.sha }}"
