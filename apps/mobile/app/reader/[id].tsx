@@ -248,35 +248,37 @@ export default function ReaderScreen() {
 
       {/* Reader Viewer (EPUB or PDF) */}
       <View style={styles.readerWrapper}>
-        {book.file_type === 'pdf' ? (
-          <PdfReader
-            ref={readerRef}
-            bookDataBase64={bookBase64}
-            bookDataArrayBuffer={bookArrayBuffer}
-            bookDataUrl={bookDataUrl}
-            initialCfi={initialCfi}
-            settings={settings}
-            onLocationChange={handleLocationChange}
-            onTocLoaded={setToc}
-            onToggleUI={() => setShowUI((prev) => !prev)}
-            onError={(err) => setErrorMessage(err)}
-          />
-        ) : (
-          <EpubReader
-            ref={readerRef}
-            bookDataBase64={bookBase64}
-            bookDataArrayBuffer={bookArrayBuffer}
-            bookDataUrl={bookDataUrl}
-            initialCfi={initialCfi}
-            locationsCache={locationsCache}
-            settings={settings}
-            onLocationChange={handleLocationChange}
-            onLocationsGenerated={handleLocationsGenerated}
-            onTocLoaded={setToc}
-            onToggleUI={() => setShowUI((prev) => !prev)}
-            onError={(err) => setErrorMessage(err)}
-          />
-        )}
+        <View style={styles.readerPageContainer}>
+          {book.file_type === 'pdf' ? (
+            <PdfReader
+              ref={readerRef}
+              bookDataBase64={bookBase64}
+              bookDataArrayBuffer={bookArrayBuffer}
+              bookDataUrl={bookDataUrl}
+              initialCfi={initialCfi}
+              settings={settings}
+              onLocationChange={handleLocationChange}
+              onTocLoaded={setToc}
+              onToggleUI={() => setShowUI((prev) => !prev)}
+              onError={(err) => setErrorMessage(err)}
+            />
+          ) : (
+            <EpubReader
+              ref={readerRef}
+              bookDataBase64={bookBase64}
+              bookDataArrayBuffer={bookArrayBuffer}
+              bookDataUrl={bookDataUrl}
+              initialCfi={initialCfi}
+              locationsCache={locationsCache}
+              settings={settings}
+              onLocationChange={handleLocationChange}
+              onLocationsGenerated={handleLocationsGenerated}
+              onTocLoaded={setToc}
+              onToggleUI={() => setShowUI((prev) => !prev)}
+              onError={(err) => setErrorMessage(err)}
+            />
+          )}
+        </View>
       </View>
 
       {/* Bottom Footer Overlay */}
@@ -444,6 +446,17 @@ const styles = StyleSheet.create({
   },
   readerWrapper: {
     flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'stretch',
+    backgroundColor: '#121214',
+    width: '100%',
+  },
+  readerPageContainer: {
+    flex: 1,
+    maxWidth: 840,
+    width: '100%',
+    height: '100%',
   },
   topBar: {
     flexDirection: 'row',
