@@ -1,6 +1,7 @@
 import type { Bookmark, Highlight, Note } from '@folium/shared';
 import { getDatabase } from '../db';
 import { generateUUID } from './bookService';
+import { queueMutation, triggerDebouncedSync } from './syncService';
 
 export interface SearchResultItem {
   type: 'bookmark' | 'highlight' | 'note' | 'book';
@@ -40,11 +41,8 @@ export async function addBookmark(bookId: string, cfi: string, title?: string): 
   );
 
   // Queue for cloud sync
-  await db.runAsync(
-    `INSERT INTO sync_outbox (id, entity_type, entity_id, payload, created_at)
-     VALUES (?, 'bookmark', ?, ?, ?)`,
-    [generateUUID(), bookmark.id, JSON.stringify(bookmark), now]
-  );
+  await queueMutation('bookmark', bookmark.id, bookmark);
+  triggerDebouncedSync(30000);
 
   return bookmark;
 }
@@ -70,7 +68,6 @@ export async function getBookmarks(bookId: string): Promise<Bookmark[]> {
 
 export async function deleteBookmark(bookmarkId: string): Promise<void> {
   const db = await getDatabase();
-  const now = Date.now();
 
   await db.runAsync(
     `UPDATE bookmarks SET is_deleted = 1 WHERE id = ?`,
@@ -78,11 +75,8 @@ export async function deleteBookmark(bookmarkId: string): Promise<void> {
   );
 
   // Queue tombstone for sync
-  await db.runAsync(
-    `INSERT INTO sync_outbox (id, entity_type, entity_id, payload, created_at)
-     VALUES (?, 'bookmark', ?, ?, ?)`,
-    [generateUUID(), bookmarkId, JSON.stringify({ id: bookmarkId, is_deleted: true }), now]
-  );
+  await queueMutation('bookmark', bookmarkId, { id: bookmarkId, is_deleted: true });
+  triggerDebouncedSync(30000);
 }
 
 // ------------------------------------------------------------------------------
@@ -128,11 +122,8 @@ export async function addHighlight(
   );
 
   // Queue for cloud sync
-  await db.runAsync(
-    `INSERT INTO sync_outbox (id, entity_type, entity_id, payload, created_at)
-     VALUES (?, 'highlight', ?, ?, ?)`,
-    [generateUUID(), highlight.id, JSON.stringify(highlight), now]
-  );
+  await queueMutation('highlight', highlight.id, highlight);
+  triggerDebouncedSync(30000);
 
   return highlight;
 }
@@ -160,7 +151,6 @@ export async function getHighlights(bookId: string): Promise<Highlight[]> {
 
 export async function deleteHighlight(highlightId: string): Promise<void> {
   const db = await getDatabase();
-  const now = Date.now();
 
   await db.runAsync(
     `UPDATE highlights SET is_deleted = 1 WHERE id = ?`,
@@ -174,11 +164,8 @@ export async function deleteHighlight(highlightId: string): Promise<void> {
   );
 
   // Queue tombstone
-  await db.runAsync(
-    `INSERT INTO sync_outbox (id, entity_type, entity_id, payload, created_at)
-     VALUES (?, 'highlight', ?, ?, ?)`,
-    [generateUUID(), highlightId, JSON.stringify({ id: highlightId, is_deleted: true }), now]
-  );
+  await queueMutation('highlight', highlightId, { id: highlightId, is_deleted: true });
+  triggerDebouncedSync(30000);
 }
 
 // ------------------------------------------------------------------------------
@@ -220,11 +207,8 @@ export async function addNote(
   }
 
   // Queue for cloud sync
-  await db.runAsync(
-    `INSERT INTO sync_outbox (id, entity_type, entity_id, payload, created_at)
-     VALUES (?, 'note', ?, ?, ?)`,
-    [generateUUID(), note.id, JSON.stringify(note), now]
-  );
+  await queueMutation('note', note.id, note);
+  triggerDebouncedSync(30000);
 
   return note;
 }
@@ -250,18 +234,14 @@ export async function getNotes(bookId: string): Promise<Note[]> {
 
 export async function deleteNote(noteId: string): Promise<void> {
   const db = await getDatabase();
-  const now = Date.now();
 
   await db.runAsync(
     `UPDATE notes SET is_deleted = 1 WHERE id = ?`,
     [noteId]
   );
 
-  await db.runAsync(
-    `INSERT INTO sync_outbox (id, entity_type, entity_id, payload, created_at)
-     VALUES (?, 'note', ?, ?, ?)`,
-    [generateUUID(), noteId, JSON.stringify({ id: noteId, is_deleted: true }), now]
-  );
+  await queueMutation('note', noteId, { id: noteId, is_deleted: true });
+  triggerDebouncedSync(30000);
 }
 
 // ------------------------------------------------------------------------------

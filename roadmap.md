@@ -28,11 +28,11 @@
 ├──────────────────────────────────────────────┤
 │  PHASE 5: Production Web & Automated CI  ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 6: Bookmarks, Notes & FTS5 Search ⏳  │ <── [ CURRENT STAGE ]
+│  PHASE 6: Bookmarks, Notes & FTS5 Search ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 7: D1 Sync Engine & Quota Defense ⏳  │
+│  PHASE 7: D1 Sync Engine & Quota Defense ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 8: Google Drive Large File Sync   ⏳  │
+│  PHASE 8: Google Drive Large File Sync   ⏳  │ <── [ CURRENT STAGE ]
 ├──────────────────────────────────────────────┤
 │  PHASE 9: Mobile Release Train & Stores  ⏳  │
 ├──────────────────────────────────────────────┤
@@ -105,29 +105,29 @@
 
 ---
 
-### Phase 6: Bookmarks, Highlights, Notes & Full-Text Search (FTS5) ⏳
-*Status: Current Priority / Next Up*
+### Phase 6: Bookmarks, Highlights, Notes & Full-Text Search (FTS5) ✅
+*Status: Completed (`ee315f4`)*
 
-- [ ] **Reader Annotation UI**:
+- [x] **Reader Annotation UI**:
   - Selection toolbar on text highlight with 4 distinct color palettes (Yellow, Green, Blue, Pink).
   - Inline sticky notes linked to EPUB CFI coordinates and PDF text positions.
-- [ ] **Visual Bookmark Manager**:
+- [x] **Visual Bookmark Manager**:
   - Instant bookmark toggle (`Ctrl+D` / ribbon button).
   - Drawer list of bookmarks with snippet quotes and timestamp history.
-- [ ] **On-Device SQLite FTS5 Search**:
+- [x] **On-Device SQLite FTS5 Search**:
   - Indexing user notes, highlights, and book metadata into SQLite FTS5 virtual tables.
   - Instant sub-millisecond search across the entire personal annotation library.
-- [ ] **On-Demand In-Book Text Search**:
+- [x] **On-Demand In-Book Text Search**:
   - Chunked chapter-by-chapter text search to prevent memory exhaustion on mobile devices.
 
 ---
 
-### Phase 7: Cloudflare D1 Sync Engine & Quota Defense ⏳
-*Status: Backend Ready / Client Integration Pending*
+### Phase 7: Cloudflare D1 Sync Engine & Quota Defense ✅
+*Status: Completed (`feat/phase-7-d1-sync-engine`)*
 
 - [x] **Cloudflare Worker Backend (`folium-sync-worker`)**: Live Hono worker interfacing with `folium-d1` in APAC region.
 - [x] **Rate-Safe Sync Schema**: Tables for `books`, `reading_progress`, `bookmarks`, `highlights`, `notes`, `sync_state`.
-- [ ] **100k Writes/Day Quota Defense Implementation**:
+- [x] **100k Writes/Day Quota Defense Implementation**:
   - **Adaptive Sync Debouncing**: Local-first write queue that defers remote sync calls until:
     - Reader screen exit to bookshelf.
     - 30-second idle threshold during reading.
@@ -135,7 +135,7 @@
   - **Single Batch Upsert**: `INSERT INTO sync_mutations ... ON CONFLICT DO UPDATE` collapsing dozens of page turns into 1 D1 row write.
   - **Compact Data Types**: Unix millisecond integers and compact IDs saving B-Tree index storage.
   - **ETag / State Hash Gating**: Return `304 Not Modified` on unchanged sync pulls to eliminate redundant query executions.
-- [ ] **Offline Outbox & Conflict Resolution**:
+- [x] **Offline Outbox & Conflict Resolution**:
   - Persistent SQLite outbox queue with exponential backoff retry.
   - Monotonic `sync_seq` server assignment preventing clock drift.
 

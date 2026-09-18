@@ -17,7 +17,7 @@ export interface SQLiteDatabaseLike {
 }
 
 const DB_NAME = 'folium_sqlite_web';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = {
   books: 'books',
@@ -26,6 +26,7 @@ const STORES = {
   highlights: 'highlights',
   notes: 'notes',
   sync_outbox: 'sync_outbox',
+  sync_meta: 'sync_meta',
 } as const;
 
 function openWebDatabase(): Promise<IDBDatabase> {
@@ -55,6 +56,9 @@ function openWebDatabase(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORES.sync_outbox)) {
         db.createObjectStore(STORES.sync_outbox, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORES.sync_meta)) {
+        db.createObjectStore(STORES.sync_meta, { keyPath: 'key' });
       }
     };
 
@@ -173,23 +177,29 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
 
     // 5. INSERT INTO reading_progress ... ON CONFLICT(book_id) DO UPDATE ...
     if (normalized.startsWith('INSERT INTO READING_PROGRESS')) {
-      const [id, book_id, cfi, percentage, client_updated_at] = params;
+      const [id, book_id, cfi, percentage, client_updated_at, is_deleted, sync_seq] = params;
       const record = {
         id,
         book_id,
         cfi,
         percentage,
         client_updated_at,
-        is_deleted: 0,
-        sync_seq: 0,
+        is_deleted: is_deleted ? 1 : 0,
+        sync_seq: sync_seq || 0,
       };
 
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(STORES.reading_progress, 'readwrite');
         const store = tx.objectStore(STORES.reading_progress);
-        const req = store.put(record);
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
+        const getReq = store.get(book_id);
+        getReq.onsuccess = () => {
+          const existing = getReq.result;
+          if (!existing || client_updated_at >= (existing.client_updated_at || 0)) {
+            store.put(record);
+          }
+          resolve();
+        };
+        getReq.onerror = () => reject(getReq.error);
       });
 
       return { lastInsertRowId: 1, changes: 1 };
@@ -235,7 +245,7 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
 
     // 8. INSERT INTO bookmarks
     if (normalized.startsWith('INSERT INTO BOOKMARKS')) {
-      const [id, book_id, cfi, title, client_created_at] = params;
+      const [id, book_id, cfi, title, client_created_at, is_deleted, sync_seq] = params;
       const record = {
         id,
         user_id: 'local_user',
@@ -243,8 +253,8 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
         cfi,
         title,
         client_created_at: client_created_at ?? Date.now(),
-        is_deleted: 0,
-        sync_seq: 0,
+        is_deleted: is_deleted ? 1 : 0,
+        sync_seq: sync_seq || 0,
       };
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(STORES.bookmarks, 'readwrite');
@@ -278,7 +288,7 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
 
     // 10. INSERT INTO highlights
     if (normalized.startsWith('INSERT INTO HIGHLIGHTS')) {
-      const [id, book_id, cfi_range, text, color, note, client_created_at] = params;
+      const [id, book_id, cfi_range, text, color, note, client_created_at, is_deleted, sync_seq] = params;
       const record = {
         id,
         user_id: 'local_user',
@@ -288,8 +298,8 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
         color,
         note: note ?? null,
         client_created_at: client_created_at ?? Date.now(),
-        is_deleted: 0,
-        sync_seq: 0,
+        is_deleted: is_deleted ? 1 : 0,
+        sync_seq: sync_seq || 0,
       };
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(STORES.highlights, 'readwrite');
@@ -343,7 +353,7 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
 
     // 13. INSERT INTO notes
     if (normalized.startsWith('INSERT INTO NOTES')) {
-      const [id, book_id, highlight_id, content, client_created_at] = params;
+      const [id, book_id, highlight_id, content, client_created_at, is_deleted, sync_seq] = params;
       const record = {
         id,
         user_id: 'local_user',
@@ -351,8 +361,8 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
         highlight_id: highlight_id ?? null,
         content,
         client_created_at: client_created_at ?? Date.now(),
-        is_deleted: 0,
-        sync_seq: 0,
+        is_deleted: is_deleted ? 1 : 0,
+        sync_seq: sync_seq || 0,
       };
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(STORES.notes, 'readwrite');
@@ -399,6 +409,32 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
         const tx = db.transaction(STORES.sync_outbox, 'readwrite');
         const store = tx.objectStore(STORES.sync_outbox);
         const req = store.put({ id, entity_type, entity_id, payload, created_at });
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+      return { lastInsertRowId: 1, changes: 1 };
+    }
+
+    // 16. DELETE FROM sync_outbox
+    if (normalized.startsWith('DELETE FROM SYNC_OUTBOX')) {
+      const [id] = params;
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORES.sync_outbox, 'readwrite');
+        const store = tx.objectStore(STORES.sync_outbox);
+        const req = id ? store.delete(id) : store.clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+      return { lastInsertRowId: 0, changes: 1 };
+    }
+
+    // 17. INSERT OR REPLACE INTO sync_meta
+    if (normalized.includes('SYNC_META')) {
+      const [key, value] = params;
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORES.sync_meta, 'readwrite');
+        const store = tx.objectStore(STORES.sync_meta);
+        const req = store.put({ key, value: String(value) });
         req.onsuccess = () => resolve();
         req.onerror = () => reject(req.error);
       });
@@ -456,6 +492,33 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
           } else {
             resolve(null);
           }
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    // 4. SELECT value FROM sync_meta WHERE key = ?
+    if (normalized.includes('FROM SYNC_META') && normalized.includes('WHERE KEY =')) {
+      const [key] = params;
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORES.sync_meta, 'readonly');
+        const store = tx.objectStore(STORES.sync_meta);
+        const req = store.get(key);
+        req.onsuccess = () => {
+          resolve(req.result ? ({ value: req.result.value } as any) : null);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    // 5. SELECT COUNT(*) FROM sync_outbox
+    if (normalized.includes('COUNT') && normalized.includes('FROM SYNC_OUTBOX')) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORES.sync_outbox, 'readonly');
+        const store = tx.objectStore(STORES.sync_outbox);
+        const req = store.count();
+        req.onsuccess = () => {
+          resolve({ count: req.result, 'COUNT(*)': req.result } as any);
         };
         req.onerror = () => reject(req.error);
       });
@@ -589,6 +652,19 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
       // Sort by updated_at DESC
       result.sort((a: any, b: any) => (b.updated_at || 0) - (a.updated_at || 0));
       return result;
+    }
+
+    // 5. SELECT FROM SYNC_OUTBOX
+    if (normalized.includes('FROM SYNC_OUTBOX')) {
+      const allOutbox = await new Promise<any[]>((resolve, reject) => {
+        const tx = db.transaction(STORES.sync_outbox, 'readonly');
+        const store = tx.objectStore(STORES.sync_outbox);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+      allOutbox.sort((a, b) => (a.created_at || 0) - (b.created_at || 0));
+      return allOutbox as unknown as T[];
     }
 
     return [];

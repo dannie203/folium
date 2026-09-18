@@ -17,6 +17,8 @@ export interface Book {
   locations_cache?: string | null; // Cached epub.js CFI locations JSON
   created_at: number;
   updated_at: number;
+  is_deleted?: boolean;
+  sync_seq?: number;
 }
 
 export interface ReadingProgress {
@@ -70,6 +72,7 @@ export interface Note {
 // ------------------------------------------------------------------------------
 
 export interface SyncPushPayload {
+  books?: Book[];
   progress?: ReadingProgress[];
   bookmarks?: Bookmark[];
   highlights?: Highlight[];
@@ -78,6 +81,7 @@ export interface SyncPushPayload {
 
 export interface SyncPullResponse {
   server_sync_seq: number;
+  books?: Book[];
   progress: ReadingProgress[];
   bookmarks: Bookmark[];
   highlights: Highlight[];
