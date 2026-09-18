@@ -38,6 +38,7 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
   const nativeWebViewRef = useRef<any>(null);
   const webIframeRef = useRef<HTMLIFrameElement | null>(null);
   const isViewerReadyRef = useRef(false);
+  const lastLoadedKeyRef = useRef<any>(null);
 
   const postMessageToViewer = useCallback((message: any) => {
     if (Platform.OS === 'web') {
@@ -51,6 +52,18 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
   }, []);
 
   const sendLoadBook = useCallback(() => {
+    if (!props.bookDataArrayBuffer && !props.bookDataBase64 && !props.bookDataUrl) {
+      return;
+    }
+    const currentKey =
+      props.bookDataUrl ||
+      props.bookDataBase64?.slice(0, 32) ||
+      (props.bookDataArrayBuffer ? props.bookDataArrayBuffer.byteLength : null);
+    if (lastLoadedKeyRef.current === currentKey) {
+      return;
+    }
+    lastLoadedKeyRef.current = currentKey;
+
     console.log('[EpubReader] sendLoadBook called. Available payloads:', {
       hasArrayBuffer: !!props.bookDataArrayBuffer,
       arrayBufferSize: props.bookDataArrayBuffer?.byteLength,
