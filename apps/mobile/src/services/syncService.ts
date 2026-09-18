@@ -50,7 +50,8 @@ const META_KEYS = {
 } as const;
 
 const DEFAULT_SERVER_URL =
-  process.env.EXPO_PUBLIC_SYNC_WORKER_URL || 'https://folium-sync-worker.workers.dev';
+  process.env.EXPO_PUBLIC_SYNC_WORKER_URL ||
+  'https://folium-sync-worker.hung23012.workers.dev';
 const DEFAULT_USER_ID = 'dev-user-001';
 
 // Active state
