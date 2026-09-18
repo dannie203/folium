@@ -43,6 +43,7 @@ jobs:
           cp apps/mobile/dist/index.html apps/mobile/dist/404.html
           echo "aki.is-a.dev" > apps/mobile/dist/CNAME
           touch apps/mobile/dist/.nojekyll
+          cp README_DEPLOY.md apps/mobile/dist/README.md
 
       - name: Deploy to Folio (aki.is-a.dev)
         uses: peaceiris/actions-gh-pages@v4
