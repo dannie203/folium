@@ -189,6 +189,11 @@
   - **Subfolder Mirroring (Shelves/Tags)**: Subfolders inside `/Folium` (e.g. `/Folium/Văn Học/`, `/Folium/Kỹ Thuật/`) automatically map to Shelves / Collection Tabs in the app UI.
   - **Recursive Public Folder Traversal**: Deep recursive scanning (`scanPublicFolderRecursive`) traversing multi-level nested folders in shared community Google Drive links.
   - **On-Demand Lazy Caching**: Ingests metadata and covers without mass-downloading gigabytes; streams and caches full book binaries only upon first reader open.
+- [ ] **User-Centric Classification & Metadata Editor (EPUB & PDF)**:
+  - **Zero Unsolicited Auto-Sorting**: Eliminates incorrect machine guesses from messy community metadata (uploader tags, generic titles, scan numbers). The user retains 100% agency over their library hierarchy.
+  - **Universal Smart Inbox ("Chưa Xếp Kệ")**: Newly imported or dropped books default to an Unsorted Inbox buffer for 1-tap shelf assignment.
+  - **In-App Quick Metadata Editor**: Long-press on any book card to clean up Title, correct Author, pick custom Cover, or assign Shelves.
+  - **Two-Way Drive Subfolder Alignment**: Moving a book to a new shelf in the app automatically organizes it into the corresponding Google Drive subfolder.
 - [ ] **Social Highlights & Chapter Discussions**:
   - Anonymous aggregated popular highlights ("X people highlighted this passage").
   - Community chapter reflections and discussion threads.
