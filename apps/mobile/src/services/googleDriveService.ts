@@ -4,6 +4,7 @@ import type { DriveFileMetadata, DriveSyncResult, Book } from '@folium/shared';
 import { getCurrentUser } from './authService';
 import { getDatabase } from '../db';
 import { getWebBook, saveWebBook, saveBookFile } from './storage';
+import { deleteBook } from './bookService';
 
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3';
@@ -225,6 +226,38 @@ export async function uploadBookToDrive(book: Book): Promise<string> {
 }
 
 /**
+ * Move a book file on Google Drive to Trash (Soft delete, recoverable for 30 days).
+ */
+export async function trashDriveBook(driveFileId: string): Promise<boolean> {
+  const user = getCurrentUser();
+  if (!user) return false;
+
+  if (user.accessToken.startsWith('demo_')) {
+    return true;
+  }
+
+  try {
+    const resp = await fetch(`${DRIVE_API_BASE}/files/${driveFileId}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${user.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ trashed: true }),
+    });
+
+    if (resp.status === 404) {
+      return true;
+    }
+
+    return resp.ok;
+  } catch (err) {
+    console.warn('[GoogleDriveService] Failed to trash file on Drive:', err);
+    return false;
+  }
+}
+
+/**
  * List files in the Google Drive /Folium folder (including nested shelf subfolders).
  */
 export async function listDriveBooks(): Promise<DriveFileMetadata[]> {
@@ -417,6 +450,33 @@ export async function syncWithGoogleDrive(): Promise<DriveSyncResult> {
           result.downloadedCount++;
         } catch (err: any) {
           result.errors.push(`Lỗi tải về ${driveFile.name}: ${err.message}`);
+        }
+      }
+    }
+
+    // 3. Reconcile deletions: detect books deleted/trashed on Google Drive and remove locally
+    const driveFileIdSet = new Set(driveFiles.map((f) => f.id));
+    const driveFoliumBookIdSet = new Set(
+      driveFiles.filter((f) => f.foliumBookId).map((f) => f.foliumBookId!)
+    );
+
+    for (const book of localBooks) {
+      if (book.drive_file_id) {
+        const existsInDrive =
+          driveFileIdSet.has(book.drive_file_id) || driveFoliumBookIdSet.has(book.id);
+
+        if (!existsInDrive) {
+          console.log(
+            `[GoogleDriveService] Book "${book.title}" (${book.id}) was deleted in Google Drive. Removing locally.`
+          );
+          try {
+            await deleteBook(book.id, { skipDriveTrash: true });
+            result.deletedCount = (result.deletedCount || 0) + 1;
+          } catch (err: any) {
+            result.errors.push(
+              `Lỗi xoá sách "${book.title}" sau khi phát hiện xoá trên Drive: ${err.message}`
+            );
+          }
         }
       }
     }

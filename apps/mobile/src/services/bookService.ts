@@ -3,6 +3,7 @@ import type { Book, BookFormat } from '@folium/shared';
 import { getDatabase } from '../db';
 import { saveBookFile, deleteBookFile } from './storage';
 import { queueMutation, triggerDebouncedSync } from './syncService';
+import { trashDriveBook } from './googleDriveService';
 
 export interface BookWithProgress extends Book {
   progress_percentage: number;
@@ -221,7 +222,10 @@ export async function getAvailableShelves(): Promise<string[]> {
 /**
  * Delete a book from local disk and SQLite database.
  */
-export async function deleteBook(bookId: string): Promise<void> {
+export async function deleteBook(
+  bookId: string,
+  options?: { skipDriveTrash?: boolean }
+): Promise<void> {
   const db = await getDatabase();
 
   const book = await db.getFirstAsync<{
@@ -230,10 +234,18 @@ export async function deleteBook(bookId: string): Promise<void> {
     author?: string;
     file_type?: string;
     file_size?: number;
-  }>('SELECT local_path, title, author, file_type, file_size FROM books WHERE id = ?', [bookId]);
+    drive_file_id?: string | null;
+  }>('SELECT local_path, title, author, file_type, file_size, drive_file_id FROM books WHERE id = ?', [bookId]);
 
   if (book && book.local_path) {
     await deleteBookFile(book.local_path, bookId);
+  }
+
+  // If connected to Google Drive and not skipping drive trash, move to Drive Trash (30-day window)
+  if (!options?.skipDriveTrash && book?.drive_file_id) {
+    trashDriveBook(book.drive_file_id).catch((e) =>
+      console.warn('[BookService] Could not trash file on Drive:', e)
+    );
   }
 
   // Delete records in SQLite

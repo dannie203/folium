@@ -80,12 +80,13 @@ app.post('/api/sync/push', async (c) => {
         const fileType = b.file_type || 'epub';
         const fileSize = typeof b.file_size === 'number' && !isNaN(b.file_size) ? b.file_size : 0;
         const isDeleted = b.is_deleted ? 1 : 0;
+        const deletedAt = isDeleted ? (b.deleted_at || now) : null;
 
         statements.push(
           db
             .prepare(
-              `INSERT INTO books (id, user_id, title, author, cover_url, file_type, file_size, drive_file_id, is_deleted, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `INSERT INTO books (id, user_id, title, author, cover_url, file_type, file_size, drive_file_id, is_deleted, deleted_at, sync_seq)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
                  title = CASE WHEN excluded.is_deleted = 0 AND excluded.title != 'Chưa có tiêu đề' THEN excluded.title ELSE books.title END,
                  author = CASE WHEN excluded.is_deleted = 0 AND excluded.author != 'Tác giả không rõ' THEN excluded.author ELSE books.author END,
@@ -94,6 +95,7 @@ app.post('/api/sync/push', async (c) => {
                  file_size = CASE WHEN excluded.is_deleted = 0 AND excluded.file_size > 0 THEN excluded.file_size ELSE books.file_size END,
                  drive_file_id = CASE WHEN excluded.is_deleted = 0 THEN COALESCE(excluded.drive_file_id, books.drive_file_id) ELSE books.drive_file_id END,
                  is_deleted = excluded.is_deleted,
+                 deleted_at = excluded.deleted_at,
                  sync_seq = excluded.sync_seq`
             )
             .bind(
@@ -106,6 +108,7 @@ app.post('/api/sync/push', async (c) => {
               fileSize,
               b.drive_file_id ?? null,
               isDeleted,
+              deletedAt,
               newSeq
             )
         );
@@ -121,17 +124,19 @@ app.post('/api/sync/push', async (c) => {
         const percentage = typeof p.percentage === 'number' && !isNaN(p.percentage) ? p.percentage : 0;
         const clientUpdatedAt = typeof p.client_updated_at === 'number' && !isNaN(p.client_updated_at) ? p.client_updated_at : now;
         const isDeleted = p.is_deleted ? 1 : 0;
+        const deletedAt = isDeleted ? (p.deleted_at || now) : null;
 
         statements.push(
           db
             .prepare(
-              `INSERT INTO reading_progress (id, user_id, book_id, cfi, percentage, client_updated_at, is_deleted, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `INSERT INTO reading_progress (id, user_id, book_id, cfi, percentage, client_updated_at, is_deleted, deleted_at, sync_seq)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(user_id, book_id) DO UPDATE SET
                  cfi = CASE WHEN excluded.is_deleted = 0 AND excluded.cfi != '' THEN excluded.cfi ELSE reading_progress.cfi END,
                  percentage = CASE WHEN excluded.is_deleted = 0 THEN excluded.percentage ELSE reading_progress.percentage END,
                  client_updated_at = excluded.client_updated_at,
                  is_deleted = excluded.is_deleted,
+                 deleted_at = excluded.deleted_at,
                  sync_seq = excluded.sync_seq
                WHERE excluded.client_updated_at >= reading_progress.client_updated_at`
             )
@@ -143,6 +148,7 @@ app.post('/api/sync/push', async (c) => {
               percentage,
               clientUpdatedAt,
               isDeleted,
+              deletedAt,
               newSeq
             )
         );
@@ -159,17 +165,19 @@ app.post('/api/sync/push', async (c) => {
         const title = b.title || '';
         const clientCreatedAt = typeof b.client_created_at === 'number' && !isNaN(b.client_created_at) ? b.client_created_at : now;
         const isDeleted = b.is_deleted ? 1 : 0;
+        const deletedAt = isDeleted ? (b.deleted_at || now) : null;
 
         statements.push(
           db
             .prepare(
-              `INSERT INTO bookmarks (id, user_id, book_id, cfi, title, client_created_at, is_deleted, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `INSERT INTO bookmarks (id, user_id, book_id, cfi, title, client_created_at, is_deleted, deleted_at, sync_seq)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
                  book_id = CASE WHEN excluded.is_deleted = 0 AND excluded.book_id != '' THEN excluded.book_id ELSE bookmarks.book_id END,
                  title = CASE WHEN excluded.is_deleted = 0 AND excluded.title != '' THEN excluded.title ELSE bookmarks.title END,
                  cfi = CASE WHEN excluded.is_deleted = 0 AND excluded.cfi != '' THEN excluded.cfi ELSE bookmarks.cfi END,
                  is_deleted = excluded.is_deleted,
+                 deleted_at = excluded.deleted_at,
                  sync_seq = excluded.sync_seq`
             )
             .bind(
@@ -180,6 +188,7 @@ app.post('/api/sync/push', async (c) => {
               title,
               clientCreatedAt,
               isDeleted,
+              deletedAt,
               newSeq
             )
         );
@@ -197,12 +206,13 @@ app.post('/api/sync/push', async (c) => {
         const color = h.color || 'yellow';
         const clientCreatedAt = typeof h.client_created_at === 'number' && !isNaN(h.client_created_at) ? h.client_created_at : now;
         const isDeleted = h.is_deleted ? 1 : 0;
+        const deletedAt = isDeleted ? (h.deleted_at || now) : null;
 
         statements.push(
           db
             .prepare(
-              `INSERT INTO highlights (id, user_id, book_id, cfi_range, text, color, note, client_created_at, is_deleted, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `INSERT INTO highlights (id, user_id, book_id, cfi_range, text, color, note, client_created_at, is_deleted, deleted_at, sync_seq)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
                  book_id = CASE WHEN excluded.is_deleted = 0 AND excluded.book_id != '' THEN excluded.book_id ELSE highlights.book_id END,
                  cfi_range = CASE WHEN excluded.is_deleted = 0 AND excluded.cfi_range != '' THEN excluded.cfi_range ELSE highlights.cfi_range END,
@@ -210,6 +220,7 @@ app.post('/api/sync/push', async (c) => {
                  color = CASE WHEN excluded.is_deleted = 0 AND excluded.color != '' THEN excluded.color ELSE highlights.color END,
                  note = CASE WHEN excluded.is_deleted = 0 THEN COALESCE(excluded.note, highlights.note) ELSE highlights.note END,
                  is_deleted = excluded.is_deleted,
+                 deleted_at = excluded.deleted_at,
                  sync_seq = excluded.sync_seq`
             )
             .bind(
@@ -222,6 +233,7 @@ app.post('/api/sync/push', async (c) => {
               h.note ?? null,
               clientCreatedAt,
               isDeleted,
+              deletedAt,
               newSeq
             )
         );
@@ -237,17 +249,19 @@ app.post('/api/sync/push', async (c) => {
         const content = n.content || '';
         const clientCreatedAt = typeof n.client_created_at === 'number' && !isNaN(n.client_created_at) ? n.client_created_at : now;
         const isDeleted = n.is_deleted ? 1 : 0;
+        const deletedAt = isDeleted ? (n.deleted_at || now) : null;
 
         statements.push(
           db
             .prepare(
-              `INSERT INTO notes (id, user_id, book_id, highlight_id, content, client_created_at, is_deleted, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `INSERT INTO notes (id, user_id, book_id, highlight_id, content, client_created_at, is_deleted, deleted_at, sync_seq)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
                  book_id = CASE WHEN excluded.is_deleted = 0 AND excluded.book_id != '' THEN excluded.book_id ELSE notes.book_id END,
                  highlight_id = CASE WHEN excluded.is_deleted = 0 THEN COALESCE(excluded.highlight_id, notes.highlight_id) ELSE notes.highlight_id END,
                  content = CASE WHEN excluded.is_deleted = 0 AND excluded.content != '' THEN excluded.content ELSE notes.content END,
                  is_deleted = excluded.is_deleted,
+                 deleted_at = excluded.deleted_at,
                  sync_seq = excluded.sync_seq`
             )
             .bind(
@@ -258,12 +272,26 @@ app.post('/api/sync/push', async (c) => {
               content,
               clientCreatedAt,
               isDeleted,
+              deletedAt,
               newSeq
             )
         );
         acceptedCount++;
       }
     }
+
+    // 30-Day Tombstone Retention & Auto Garbage Collection
+    // Purges tombstones older than 30 days during sync cycles
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const gcThreshold = now - THIRTY_DAYS_MS;
+
+    statements.push(
+      db.prepare('DELETE FROM books WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
+      db.prepare('DELETE FROM reading_progress WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
+      db.prepare('DELETE FROM bookmarks WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
+      db.prepare('DELETE FROM highlights WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
+      db.prepare('DELETE FROM notes WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold)
+    );
 
     if (statements.length > 0) {
       await db.batch(statements);
@@ -278,6 +306,35 @@ app.post('/api/sync/push', async (c) => {
   } catch (err: any) {
     console.error('[Sync Worker] Push error:', err);
     return c.json({ error: err?.message || 'Sync push failed on server' }, 500);
+  }
+});
+
+// ------------------------------------------------------------------------------
+// Explicit 30-Day Garbage Collection Trigger (Cron / Maintenance)
+// ------------------------------------------------------------------------------
+app.post('/api/sync/gc', async (c) => {
+  try {
+    const db = c.env.DB;
+    const now = Date.now();
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const gcThreshold = now - THIRTY_DAYS_MS;
+
+    await db.batch([
+      db.prepare('DELETE FROM books WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
+      db.prepare('DELETE FROM reading_progress WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
+      db.prepare('DELETE FROM bookmarks WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
+      db.prepare('DELETE FROM highlights WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
+      db.prepare('DELETE FROM notes WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
+    ]);
+
+    return c.json({
+      status: 'ok',
+      purged_before: gcThreshold,
+      timestamp: now,
+    });
+  } catch (err: any) {
+    console.error('[Sync Worker] GC error:', err);
+    return c.json({ error: err?.message || 'Garbage collection failed' }, 500);
   }
 });
 

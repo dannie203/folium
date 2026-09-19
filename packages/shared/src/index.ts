@@ -20,6 +20,7 @@ export interface Book {
   created_at: number;
   updated_at: number;
   is_deleted?: boolean;
+  deleted_at?: number | null;
   sync_seq?: number;
 }
 
@@ -31,6 +32,7 @@ export interface ReadingProgress {
   percentage: number; // 0.0 - 100.0
   client_updated_at: number; // UTC unix timestamp ms
   is_deleted: boolean;
+  deleted_at?: number | null;
   sync_seq: number;
 }
 
@@ -42,6 +44,7 @@ export interface Bookmark {
   title: string;
   client_created_at: number;
   is_deleted: boolean;
+  deleted_at?: number | null;
   sync_seq: number;
 }
 
@@ -55,6 +58,7 @@ export interface Highlight {
   note?: string | null;
   client_created_at: number;
   is_deleted: boolean;
+  deleted_at?: number | null;
   sync_seq: number;
 }
 
@@ -66,6 +70,7 @@ export interface Note {
   content: string;
   client_created_at: number;
   is_deleted: boolean;
+  deleted_at?: number | null;
   sync_seq: number;
 }
 
@@ -152,6 +157,7 @@ export interface DriveSyncResult {
   uploadedCount: number;
   downloadedCount: number;
   syncedCount: number;
+  deletedCount?: number;
   errors: string[];
 }
 
