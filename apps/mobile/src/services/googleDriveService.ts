@@ -143,7 +143,10 @@ export async function uploadBookToDrive(book: Book): Promise<string> {
     }
   }
 
-  const filename = `${book.title}.${book.file_type}`;
+  // Zero-Knowledge metadata protection:
+  // Use UUID filename `${book.id}.${book.file_type}` instead of plaintext book title
+  // to prevent cloud storage providers from fingerprinting user reading libraries.
+  const filename = `${book.id}.${book.file_type}`;
   const mimeType = book.file_type === 'pdf' ? 'application/pdf' : 'application/epub+zip';
 
   // Read binary data
@@ -174,6 +177,7 @@ export async function uploadBookToDrive(book: Book): Promise<string> {
       foliumBookId: book.id,
       foliumFormat: book.file_type,
       foliumShelf: book.shelf || 'Inbox',
+      foliumTitle: book.title,
     },
   };
 
@@ -318,6 +322,7 @@ export async function listDriveBooks(): Promise<DriveFileMetadata[]> {
               modifiedTime: subItem.modifiedTime,
               foliumBookId: subItem.appProperties?.foliumBookId,
               shelf: subItem.appProperties?.foliumShelf || item.name,
+              foliumTitle: subItem.appProperties?.foliumTitle,
             });
           }
         }
@@ -332,6 +337,7 @@ export async function listDriveBooks(): Promise<DriveFileMetadata[]> {
         modifiedTime: item.modifiedTime,
         foliumBookId: item.appProperties?.foliumBookId,
         shelf: item.appProperties?.foliumShelf || 'Inbox',
+        foliumTitle: item.appProperties?.foliumTitle,
       });
     }
   }
@@ -424,7 +430,7 @@ export async function syncWithGoogleDrive(): Promise<DriveSyncResult> {
       if (!existsLocally) {
         try {
           const localPath = await downloadBookFromDrive(driveFile);
-          const title = driveFile.name.replace(/\.(epub|pdf)$/i, '');
+          const title = driveFile.foliumTitle || driveFile.name.replace(/\.(epub|pdf)$/i, '');
           const format = driveFile.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'epub';
           const newId = driveFile.foliumBookId || `drive_${driveFile.id.substring(0, 12)}`;
           const now = Date.now();

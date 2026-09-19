@@ -151,6 +151,7 @@ export interface DriveFileMetadata {
   modifiedTime: string;
   foliumBookId?: string;
   shelf?: string;
+  foliumTitle?: string;
 }
 
 export interface DriveSyncResult {
