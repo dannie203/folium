@@ -29,6 +29,7 @@ import { ShelfFilterChips, type FilterType } from '../src/components/bookshelf/S
 import { EmptyBookshelf } from '../src/components/bookshelf/EmptyBookshelf';
 import { BookshelfFooter } from '../src/components/bookshelf/BookshelfFooter';
 import { BottomTabBar } from '../src/components/navigation/BottomTabBar';
+import { SidebarNav } from '../src/components/navigation/SidebarNav';
 
 export default function BookshelfScreen() {
   const router = useRouter();
@@ -109,6 +110,16 @@ export default function BookshelfScreen() {
     router.push(`/reader/${book.id}` as any);
   };
 
+  const shelfCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const b of books) {
+      if (b.shelf) {
+        counts[b.shelf] = (counts[b.shelf] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [books]);
+
   const filteredBooks = useMemo(() => {
     return books.filter((b) => {
       const matchesSearch =
@@ -139,8 +150,8 @@ export default function BookshelfScreen() {
     );
   }
 
-  return (
-    <SafeAreaView style={styles.container}>
+  const mainBookshelfView = (
+    <View style={styles.mainContent}>
       <BookshelfHeader
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -168,9 +179,10 @@ export default function BookshelfScreen() {
         />
       ) : (
         <FlatList
+          key={isDesktop ? 'desktop-grid' : 'mobile-grid'}
           data={filteredBooks}
           keyExtractor={(item) => item.id}
-          numColumns={2}
+          numColumns={isDesktop ? 4 : 2}
           renderItem={({ item }) => (
             <BookCard
               book={item}
@@ -200,6 +212,33 @@ export default function BookshelfScreen() {
           onOpenSync={() => setIsDriveModalOpen(true)}
         />
       )}
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {isDesktop ? (
+        <View style={styles.desktopLayout}>
+          <SidebarNav
+            selectedShelf={selectedShelf}
+            onSelectShelf={setSelectedShelf}
+            availableShelves={availableShelves}
+            totalBooksCount={books.length}
+            inboxCount={books.filter((b) => !b.shelf || b.shelf === 'Inbox').length}
+            shelfCounts={shelfCounts}
+            activeRoute="bookshelf"
+            onOpenDriveModal={() => setIsDriveModalOpen(true)}
+            onOpenCommunity={() => router.push('/community' as any)}
+            onOpenBookshelf={() => setSelectedShelf('all')}
+            onOpenTerms={() => router.push('/terms' as any)}
+            onOpenSecurity={() => router.push('/security' as any)}
+            onOpenPrivacy={() => router.push('/privacy' as any)}
+          />
+          {mainBookshelfView}
+        </View>
+      ) : (
+        mainBookshelfView
+      )}
 
       <DriveSyncModal
         visible={isDriveModalOpen}
@@ -223,14 +262,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bgBase,
   },
+  desktopLayout: {
+    flex: 1,
+    flexDirection: 'row',
+    height: '100%',
+  },
+  mainContent: {
+    flex: 1,
+    flexDirection: 'column',
+    height: '100%',
+  },
   centerContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.bgBase,
   },
   gridContent: {
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
     paddingBottom: 72,
   },
 });

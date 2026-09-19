@@ -453,7 +453,7 @@ export default function ReaderScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: barBg }]}>
       {/* Top Header Overlay */}
       {showUI && (
-        <View style={[styles.topBar, { backgroundColor: barBg, borderBottomColor: barBorder }]}>
+        <View style={[styles.topBar, { backgroundColor: barBg, borderColor: barBorder }]}>
           <TouchableOpacity
             style={styles.iconButton}
             onPress={() => {
@@ -555,7 +555,7 @@ export default function ReaderScreen() {
 
       {/* Bottom Footer Overlay */}
       {showUI && (
-        <View style={[styles.bottomBar, { backgroundColor: barBg, borderTopColor: barBorder }]}>
+        <View style={[styles.bottomBar, { backgroundColor: barBg, borderColor: barBorder }]}>
           <TouchableOpacity
             style={styles.pageButton}
             onPress={() => readerRef.current?.prevPage()}
@@ -1031,13 +1031,21 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   topBar: {
+    position: 'absolute',
+    top: Platform.OS === 'web' ? 14 : 44,
+    left: 16,
+    right: 16,
+    maxWidth: 860,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    height: 52,
-    borderBottomWidth: 1,
-    zIndex: 10,
-  },
+    paddingHorizontal: 16,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
+    zIndex: 50,
+  } as any,
   iconButton: {
     padding: 8,
   },
@@ -1055,17 +1063,26 @@ const styles = StyleSheet.create({
   },
   actionsRight: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 4,
   },
   bottomBar: {
+    position: 'absolute',
+    bottom: Platform.OS === 'web' ? 16 : 24,
+    left: 16,
+    right: 16,
+    maxWidth: 480,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    height: 52,
-    borderTopWidth: 1,
-    zIndex: 10,
-  },
+    paddingHorizontal: 18,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
+    zIndex: 50,
+  } as any,
   pageButton: {
     flexDirection: 'row',
     alignItems: 'center',
