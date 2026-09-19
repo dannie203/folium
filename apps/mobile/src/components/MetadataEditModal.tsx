@@ -8,17 +8,20 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Platform,
+  Alert,
 } from 'react-native';
 import type { Book } from '@folium/shared';
-import { updateBookMetadata, getAvailableShelves } from '../services/bookService';
+import { updateBookMetadata, getAvailableShelves, deleteBook } from '../services/bookService';
 import { colors, typography, radius, spacing } from '../theme/tokens';
-import { EditPencilIcon, CloseIcon, FolderIcon, InboxTrayIcon } from './icons/Icons';
+import { EditPencilIcon, CloseIcon, FolderIcon, InboxTrayIcon, TrashIcon } from './icons/Icons';
 
 interface MetadataEditModalProps {
   visible: boolean;
   book: Book | null;
   onClose: () => void;
   onSaved: () => void;
+  onDelete?: (book: Book) => void | Promise<void>;
 }
 
 export function MetadataEditModal({
@@ -26,6 +29,7 @@ export function MetadataEditModal({
   book,
   onClose,
   onSaved,
+  onDelete,
 }: MetadataEditModalProps) {
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
@@ -34,6 +38,7 @@ export function MetadataEditModal({
   const [newShelfInput, setNewShelfInput] = useState('');
   const [availableShelves, setAvailableShelves] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (book) {
@@ -80,6 +85,41 @@ export function MetadataEditModal({
       alert(`Lỗi lưu thông tin: ${err.message}`);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDeleteBook = async () => {
+    if (!book) return;
+
+    const confirmMsg = `Bạn có chắc chắn muốn xoá cuốn "${book.title}" khỏi thư viện?\n(Sách sẽ được dọn dẹp và chuyển vào thùng rác nếu có liên kết Google Drive)`;
+
+    let confirmed = false;
+    if (Platform.OS === 'web') {
+      confirmed = window.confirm(confirmMsg);
+    } else {
+      confirmed = await new Promise<boolean>((resolve) => {
+        Alert.alert('Xoá sách', confirmMsg, [
+          { text: 'Huỷ', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Xoá', style: 'destructive', onPress: () => resolve(true) },
+        ]);
+      });
+    }
+
+    if (!confirmed) return;
+
+    try {
+      setIsDeleting(true);
+      if (onDelete) {
+        await onDelete(book);
+      } else {
+        await deleteBook(book.id);
+        onSaved();
+      }
+      onClose();
+    } catch (err: any) {
+      alert(`Lỗi xoá sách: ${err.message}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -183,20 +223,43 @@ export function MetadataEditModal({
 
             {/* Action Buttons */}
             <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={isSaving}>
-                <Text style={styles.cancelBtnText}>Hủy</Text>
-              </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.saveBtn, isSaving && styles.btnDisabled]}
-                onPress={handleSave}
-                disabled={isSaving}
+                style={styles.deleteBtn}
+                onPress={handleDeleteBook}
+                disabled={isSaving || isDeleting}
+                activeOpacity={0.8}
+                accessibilityLabel="Xoá sách khỏi thư viện"
               >
-                {isSaving ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                {isDeleting ? (
+                  <ActivityIndicator size="small" color={colors.statusError} />
                 ) : (
-                  <Text style={styles.saveBtnText}>Lưu Thay Đổi</Text>
+                  <>
+                    <TrashIcon size={16} color={colors.statusError} />
+                    <Text style={styles.deleteBtnText}>Xoá Sách</Text>
+                  </>
                 )}
               </TouchableOpacity>
+
+              <View style={styles.rightActionBtns}>
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={onClose}
+                  disabled={isSaving || isDeleting}
+                >
+                  <Text style={styles.cancelBtnText}>Hủy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.saveBtn, (isSaving || isDeleting) && styles.btnDisabled]}
+                  onPress={handleSave}
+                  disabled={isSaving || isDeleting}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.saveBtnText}>Lưu Thay Đổi</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </ScrollView>
         </View>
@@ -319,9 +382,34 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: spacing.md,
-    marginTop: spacing.md,
+    marginTop: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+  },
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+  },
+  deleteBtnText: {
+    color: colors.statusError,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  rightActionBtns: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   cancelBtn: {
     paddingVertical: 10,
