@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS books (
     local_path TEXT,
     drive_file_id TEXT,
     locations_cache TEXT,
+    shelf TEXT DEFAULT 'Inbox',
+    tags TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );

@@ -6,9 +6,10 @@ interface BookCardProps {
   book: BookWithProgress;
   onPress: (book: BookWithProgress) => void;
   onDelete: (book: BookWithProgress) => void;
+  onLongPress?: (book: BookWithProgress) => void;
 }
 
-export function BookCard({ book, onPress, onDelete }: BookCardProps) {
+export function BookCard({ book, onPress, onDelete, onLongPress }: BookCardProps) {
   const isPdf = book.file_type === 'pdf';
   const progressPercent = Math.round(book.progress_percentage || 0);
 
@@ -29,6 +30,14 @@ export function BookCard({ book, onPress, onDelete }: BookCardProps) {
     }
   };
 
+  const handleLongPress = () => {
+    if (onLongPress) {
+      onLongPress(book);
+    } else {
+      confirmDelete();
+    }
+  };
+
   const formatFileSize = (bytes: number) => {
     if (!bytes) return '';
     const mb = bytes / (1024 * 1024);
@@ -40,7 +49,7 @@ export function BookCard({ book, onPress, onDelete }: BookCardProps) {
       style={styles.card}
       activeOpacity={0.7}
       onPress={() => onPress(book)}
-      onLongPress={confirmDelete}
+      onLongPress={handleLongPress}
     >
       {/* Book Cover / Placeholder */}
       <View style={[styles.coverContainer, isPdf ? styles.coverPdf : styles.coverEpub]}>
@@ -49,6 +58,11 @@ export function BookCard({ book, onPress, onDelete }: BookCardProps) {
           <Text style={[styles.badgeText, isPdf ? styles.badgePdf : styles.badgeEpub]}>
             {book.file_type.toUpperCase()}
           </Text>
+          {book.shelf && book.shelf !== 'Inbox' ? (
+            <Text style={styles.shelfBadge} numberOfLines={1}>
+              {book.shelf}
+            </Text>
+          ) : null}
         </View>
 
         <Text style={styles.coverTitlePreview} numberOfLines={3}>
@@ -122,6 +136,20 @@ const styles = StyleSheet.create({
   },
   badgeContainer: {
     alignSelf: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  shelfBadge: {
+    fontSize: 9,
+    fontWeight: '600',
+    backgroundColor: 'rgba(168, 85, 247, 0.25)',
+    color: '#D8B4FE',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
+    maxWidth: 75,
   },
   badgeText: {
     fontSize: 10,

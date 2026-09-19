@@ -15,6 +15,8 @@ export interface Book {
   local_path?: string | null;
   drive_file_id?: string | null;
   locations_cache?: string | null; // Cached epub.js CFI locations JSON
+  shelf?: string | null; // e.g. 'Inbox', 'Văn Học', 'Kỹ Thuật'
+  tags?: string[] | null;
   created_at: number;
   updated_at: number;
   is_deleted?: boolean;
@@ -143,6 +145,7 @@ export interface DriveFileMetadata {
   mimeType: string;
   modifiedTime: string;
   foliumBookId?: string;
+  shelf?: string;
 }
 
 export interface DriveSyncResult {
@@ -160,4 +163,30 @@ export interface EncryptedVaultPayload {
   ciphertext: string; // Base64
   createdAt: number;
 }
+
+// ------------------------------------------------------------------------------
+// Phase 8.5: OPDS & Community Catalog Models
+// ------------------------------------------------------------------------------
+
+export interface OpdsBookEntry {
+  id: string;
+  title: string;
+  author: string;
+  summary?: string;
+  coverUrl?: string;
+  downloadUrl: string;
+  format: BookFormat;
+  source: 'standard_ebooks' | 'gutenberg' | 'vietnamese_classics' | 'custom_opds';
+  fileSize?: number;
+}
+
+export interface CommunityCatalogSource {
+  id: string;
+  name: string;
+  description: string;
+  url: string;
+  icon?: string;
+  type: 'opds' | 'google_drive';
+}
+
 

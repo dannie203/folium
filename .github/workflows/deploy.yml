@@ -43,12 +43,13 @@ jobs:
           cp apps/mobile/dist/index.html apps/mobile/dist/404.html
           echo "aki.is-a.dev" > apps/mobile/dist/CNAME
           touch apps/mobile/dist/.nojekyll
+          cp README_DEPLOY.md apps/mobile/dist/README.md
 
-      - name: Deploy to dannie203.github.io
+      - name: Deploy to Folio (aki.is-a.dev)
         uses: peaceiris/actions-gh-pages@v4
         with:
           deploy_key: ${{ secrets.DEPLOY_SSH_KEY }}
-          external_repository: dannie203/dannie203.github.io
+          external_repository: dannie203/Folio
           publish_branch: main
           publish_dir: ./apps/mobile/dist
           cname: aki.is-a.dev

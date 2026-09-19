@@ -14,6 +14,8 @@
 - [Entry #05 (2026-09-19): Release Desynchronization & The Multi-Platform Contract](#entry-05-2026-09-19-release-desynchronization--the-multi-platform-contract)
 - [Entry #06 (2026-09-19): Synthesizing The 11-Phase Master Architecture](#entry-06-2026-09-19-synthesizing-the-11-phase-master-architecture)
 - [Entry #07 (2026-09-19): Cloudflare D1 Quota Defense & The Edge Sync Engine](#entry-07-2026-09-19-cloudflare-d1-quota-defense--the-edge-sync-engine)
+- [Entry #08 (2026-09-19): Google Drive Storage, OAuth & The Zero-Knowledge Privacy Vault](#entry-08-2026-09-19-google-drive-storage-oauth--the-zero-knowledge-privacy-vault)
+- [Entry #09 (2026-09-19): Community Bookshelf, OPDS & Folder-as-a-Shelf Sync](#entry-09-2026-09-19-community-bookshelf-opds--folder-as-a-shelf-sync)
 
 ---
 
@@ -176,3 +178,31 @@ In Phase 8, we resolved two fundamental architectural challenges:
      - `/privacy`: Declares local-first architecture and justifies `drive.file` scope for Google OAuth verification.
      - `/terms`: Formal DMCA § 512 / OCILLA Safe Harbor statutory declaration and Notice-and-Takedown contact protocol.
      - `/security`: Interactive cryptographic proof inspector and threat model matrix.
+
+---
+
+### Entry #09 (2026-09-19): Community Bookshelf, OPDS & Folder-as-a-Shelf Sync
+
+#### Context & Objectives
+In Phase 8.5, we addressed open community catalog access and user-centric library organization:
+1. **Public Domain Open Library & OPDS**: Free, legal access to high-quality books via standard OPDS (Open Publication Distribution System) feeds (Standard Ebooks, Project Gutenberg, Vietnamese Classics) and arbitrary custom OPDS endpoints.
+2. **P2P Google Drive Sharing & Recursive Folder Traversal**: Direct sharing via public Google Drive folder links (`drive.google.com/drive/folders/...`) with multi-level nested scanning (`scanPublicFolderRecursive`), enabling community libraries without server file-hosting costs ($0 cloud cost).
+3. **Folder-as-a-Shelf & Smart Inbox Subfolder Sync**: The user's Google Drive `/Folium` root acts as an inbox drop-box. Subfolders inside `/Folium` (e.g. `/Folium/Văn Học/`, `/Folium/Kỹ Thuật/`) map 1:1 to Shelves in the app, with two-way synchronization.
+4. **User Agency & Zero Unsolicited Auto-Sorting**: In the wild, both EPUB and PDF files contain notoriously messy metadata (uploader tags, generic titles, scan file numbers). Machine auto-sorting creates frustration and misplaced files. Folium enforces strict user agency: incoming books default to `📥 Hộp thư đến (Inbox)`, and a quick long-press metadata editor empowers users to clean up Title, Author, Cover, and Shelf chips in seconds.
+
+#### Key Implementation Breakthroughs
+1. **OPDS Feed Parser & 1-Tap Import Engine (`opdsService.ts`)**:
+   - Zero-dependency XML Atom feed parser converting OPDS XML into typed `OpdsBookEntry` models.
+   - Built-in curated catalogs (Standard Ebooks, Project Gutenberg, Vietnamese Literature classics) and custom OPDS URL reader.
+   - One-tap download and ingestion directly into local IndexedDB / SQLite storage.
+2. **Recursive Public Drive Folder Scanner (`publicDriveService.ts`)**:
+   - Parses public folder IDs from any standard Google Drive URL.
+   - Deep recursive traversal (`scanPublicFolderRecursive`) navigating nested folders, extracting book metadata, covers, and direct download streams without mass-downloading gigabytes.
+3. **Folder-as-a-Shelf Engine (`googleDriveService.ts`)**:
+   - Creates and reconciles shelf subfolders on user's Google Drive.
+   - Uploading a book on shelf "Văn Học" places it into `/Folium/Văn Học/` with `foliumShelf` metadata.
+   - Drive sync queries both root and subfolders, correctly mapping dropped files into their respective shelf collections.
+4. **Quick Metadata Editor & Dynamic Shelf Filter (`MetadataEditModal.tsx`, `index.tsx`, `community.tsx`)**:
+   - Long-press any book card to adjust title, author, cover, or shelf tags.
+   - Horizontally scrollable filter chips (`Tất cả`, `📥 Hộp thư đến`, dynamic shelves, `EPUB`, `PDF`) with active item counters.
+   - Clean, high-performance community route (`/community`) providing tabbed navigation between public domain OPDS, shared Drive folders, and custom feeds.

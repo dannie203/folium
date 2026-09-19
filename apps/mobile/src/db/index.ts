@@ -10,6 +10,15 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
 
   const db = await SQLite.openDatabaseAsync('folium.db');
   await db.execAsync(INIT_SQL);
+
+  // Safe migration for Phase 8.5
+  try {
+    await db.execAsync("ALTER TABLE books ADD COLUMN shelf TEXT DEFAULT 'Inbox';");
+  } catch {}
+  try {
+    await db.execAsync("ALTER TABLE books ADD COLUMN tags TEXT;");
+  } catch {}
+
   dbInstance = db;
   return db;
 }
