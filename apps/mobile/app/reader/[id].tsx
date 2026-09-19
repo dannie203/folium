@@ -38,6 +38,20 @@ import {
   flushSyncImmediately,
 } from '../../src/services/syncService';
 import { SyncStatusBadge } from '../../src/components/SyncStatusBadge';
+import { colors, readerThemes, typography, spacing, radius } from '../../src/theme/tokens';
+import {
+  ArrowLeftIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  BookmarkIcon,
+  ListTocIcon,
+  SettingsIcon,
+  CloseIcon,
+  TrashIcon,
+  SearchIcon,
+  CheckIcon,
+  TextAaIcon,
+} from '../../src/components/icons/Icons';
 
 export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -429,11 +443,11 @@ export default function ReaderScreen() {
     );
   }
 
+  const currentThemeTokens = readerThemes[settings.theme] || readerThemes.dark;
   const isDark = settings.theme === 'dark';
-  const isSepia = settings.theme === 'sepia';
-  const barBg = isDark ? '#18181B' : isSepia ? '#EADBB6' : '#FFFFFF';
-  const barText = isDark ? '#FAFAFA' : isSepia ? '#433422' : '#18181B';
-  const barBorder = isDark ? '#27272A' : isSepia ? '#D7C295' : '#E4E4E7';
+  const barBg = currentThemeTokens.surface;
+  const barText = currentThemeTokens.text;
+  const barBorder = currentThemeTokens.border;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: barBg }]}>
@@ -447,8 +461,9 @@ export default function ReaderScreen() {
               router.back();
             }}
             activeOpacity={0.7}
+            accessibilityLabel="Quay lại tủ sách"
           >
-            <Text style={[styles.iconButtonText, { color: barText }]}>←</Text>
+            <ArrowLeftIcon size={18} color={barText} />
           </TouchableOpacity>
 
           <View style={styles.titleContainer}>
@@ -466,9 +481,11 @@ export default function ReaderScreen() {
               activeOpacity={0.7}
               accessibilityLabel="Đánh dấu trang"
             >
-              <Text style={[styles.iconButtonText, { color: isCurrentBookmarked ? '#F59E0B' : barText }]}>
-                {isCurrentBookmarked ? '🔖' : '🏷️'}
-              </Text>
+              <BookmarkIcon
+                size={18}
+                color={isCurrentBookmarked ? '#F59E0B' : barText}
+                filled={isCurrentBookmarked}
+              />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -480,7 +497,7 @@ export default function ReaderScreen() {
               activeOpacity={0.7}
               accessibilityLabel="Mục lục và Dấu trang"
             >
-              <Text style={[styles.iconButtonText, { color: barText }]}>📚</Text>
+              <ListTocIcon size={18} color={barText} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -489,7 +506,7 @@ export default function ReaderScreen() {
               activeOpacity={0.7}
               accessibilityLabel="Cài đặt giao diện"
             >
-              <Text style={[styles.iconButtonText, { color: barText }]}>Aa</Text>
+              <TextAaIcon size={18} color={barText} />
             </TouchableOpacity>
           </View>
         </View>
@@ -543,8 +560,10 @@ export default function ReaderScreen() {
             style={styles.pageButton}
             onPress={() => readerRef.current?.prevPage()}
             activeOpacity={0.7}
+            accessibilityLabel="Trang trước"
           >
-            <Text style={[styles.pageButtonText, { color: barText }]}>Trang trước</Text>
+            <ChevronLeftIcon size={16} color={barText} />
+            <Text style={[styles.pageButtonText, { color: barText, marginLeft: 4 }]}>Trước</Text>
           </TouchableOpacity>
 
           <View style={styles.progressInfo}>
@@ -559,8 +578,10 @@ export default function ReaderScreen() {
             style={styles.pageButton}
             onPress={() => readerRef.current?.nextPage()}
             activeOpacity={0.7}
+            accessibilityLabel="Trang sau"
           >
-            <Text style={[styles.pageButtonText, { color: barText }]}>Trang sau</Text>
+            <Text style={[styles.pageButtonText, { color: barText, marginRight: 4 }]}>Sau</Text>
+            <ChevronRightIcon size={16} color={barText} />
           </TouchableOpacity>
         </View>
       )}
@@ -578,7 +599,7 @@ export default function ReaderScreen() {
           <View style={styles.selectionHeader}>
             <Text style={[styles.selectionHeaderTitle, { color: barText }]}>Tô sáng & Ghi chú</Text>
             <TouchableOpacity onPress={() => { setSelectionData(null); setNoteInput(''); }}>
-              <Text style={[styles.selectionCloseBtn, { color: barText }]}>✕</Text>
+              <CloseIcon size={16} color={barText} />
             </TouchableOpacity>
           </View>
 
@@ -646,8 +667,8 @@ export default function ReaderScreen() {
             {/* Modal Header */}
             <View style={[styles.modalHeader, { borderBottomColor: barBorder }]}>
               <Text style={[styles.modalTitle, { color: barText }]}>Tủ đọc & Ghi chú</Text>
-              <TouchableOpacity onPress={() => setShowDrawerModal(false)}>
-                <Text style={[styles.modalCloseText, { color: barText }]}>✕</Text>
+              <TouchableOpacity onPress={() => setShowDrawerModal(false)} accessibilityLabel="Đóng">
+                <CloseIcon size={18} color={barText} />
               </TouchableOpacity>
             </View>
 
@@ -657,7 +678,7 @@ export default function ReaderScreen() {
                 style={[styles.drawerTab, drawerTab === 'toc' && styles.drawerTabActive]}
                 onPress={() => setDrawerTab('toc')}
               >
-                <Text style={[styles.drawerTabText, { color: drawerTab === 'toc' ? '#6366F1' : '#71717A' }]}>
+                <Text style={[styles.drawerTabText, { color: drawerTab === 'toc' ? colors.accentPrimary : colors.textSecondary }]}>
                   Mục lục
                 </Text>
               </TouchableOpacity>
@@ -665,7 +686,7 @@ export default function ReaderScreen() {
                 style={[styles.drawerTab, drawerTab === 'bookmarks' && styles.drawerTabActive]}
                 onPress={() => setDrawerTab('bookmarks')}
               >
-                <Text style={[styles.drawerTabText, { color: drawerTab === 'bookmarks' ? '#6366F1' : '#71717A' }]}>
+                <Text style={[styles.drawerTabText, { color: drawerTab === 'bookmarks' ? colors.accentPrimary : colors.textSecondary }]}>
                   Dấu trang ({bookmarks.length})
                 </Text>
               </TouchableOpacity>
@@ -673,7 +694,7 @@ export default function ReaderScreen() {
                 style={[styles.drawerTab, drawerTab === 'highlights' && styles.drawerTabActive]}
                 onPress={() => setDrawerTab('highlights')}
               >
-                <Text style={[styles.drawerTabText, { color: drawerTab === 'highlights' ? '#6366F1' : '#71717A' }]}>
+                <Text style={[styles.drawerTabText, { color: drawerTab === 'highlights' ? colors.accentPrimary : colors.textSecondary }]}>
                   Ghi chú ({highlights.length + notes.length})
                 </Text>
               </TouchableOpacity>
@@ -681,7 +702,7 @@ export default function ReaderScreen() {
                 style={[styles.drawerTab, drawerTab === 'search' && styles.drawerTabActive]}
                 onPress={() => setDrawerTab('search')}
               >
-                <Text style={[styles.drawerTabText, { color: drawerTab === 'search' ? '#6366F1' : '#71717A' }]}>
+                <Text style={[styles.drawerTabText, { color: drawerTab === 'search' ? colors.accentPrimary : colors.textSecondary }]}>
                   Tìm kiếm
                 </Text>
               </TouchableOpacity>
@@ -691,7 +712,7 @@ export default function ReaderScreen() {
             {drawerTab === 'toc' && (
               toc.length === 0 ? (
                 <View style={styles.emptyContainer}>
-                  <Text style={{ color: '#A1A1AA' }}>Không có mục lục</Text>
+                  <Text style={{ color: colors.textSecondary }}>Không có mục lục</Text>
                 </View>
               ) : (
                 <FlatList
@@ -718,9 +739,9 @@ export default function ReaderScreen() {
             {drawerTab === 'bookmarks' && (
               bookmarks.length === 0 ? (
                 <View style={styles.emptyContainer}>
-                  <Text style={{ color: '#A1A1AA', fontSize: 14 }}>Chưa có dấu trang nào</Text>
-                  <Text style={{ color: '#71717A', fontSize: 12, marginTop: 4 }}>
-                    Nhấn biểu tượng 🔖 trên thanh công cụ để đánh dấu trang hiện tại
+                  <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Chưa có dấu trang nào</Text>
+                  <Text style={{ color: colors.textTertiary, fontSize: 12, marginTop: 4 }}>
+                    Nhấn biểu tượng dấu trang trên thanh công cụ để đánh dấu trang hiện tại
                   </Text>
                 </View>
               ) : (
@@ -736,9 +757,12 @@ export default function ReaderScreen() {
                           setShowDrawerModal(false);
                         }}
                       >
-                        <Text style={[styles.annotationTitle, { color: barText }]} numberOfLines={1}>
-                          🔖 {item.title}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                          <BookmarkIcon size={14} color={colors.accentAmber} filled />
+                          <Text style={[styles.annotationTitle, { color: barText, marginBottom: 0 }]} numberOfLines={1}>
+                            {item.title}
+                          </Text>
+                        </View>
                         <Text style={styles.annotationMeta}>
                           {new Date(item.client_created_at).toLocaleString('vi-VN')}
                         </Text>
@@ -746,8 +770,9 @@ export default function ReaderScreen() {
                       <TouchableOpacity
                         style={styles.deleteBtn}
                         onPress={() => handleDeleteBookmark(item.id)}
+                        accessibilityLabel="Xóa dấu trang"
                       >
-                        <Text style={styles.deleteBtnText}>🗑️</Text>
+                        <TrashIcon size={14} color={colors.statusError} />
                       </TouchableOpacity>
                     </View>
                   )}
@@ -794,15 +819,16 @@ export default function ReaderScreen() {
                           </Text>
                           {item.note && (
                             <Text style={[styles.annotationNoteText, { color: isDark ? '#A1A1AA' : '#52525B' }]}>
-                              📝 {item.note}
+                              {item.note}
                             </Text>
                           )}
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.deleteBtn}
                           onPress={() => handleDeleteHighlight(item.id, item.cfi_range)}
+                          accessibilityLabel="Xóa tô sáng"
                         >
-                          <Text style={styles.deleteBtnText}>🗑️</Text>
+                          <TrashIcon size={14} color={colors.statusError} />
                         </TouchableOpacity>
                       </View>
                     );
@@ -857,7 +883,7 @@ export default function ReaderScreen() {
                       >
                         <View style={styles.searchResultHeader}>
                           <Text style={styles.searchResultBadge}>
-                            {item.type === 'bookmark' ? '🔖 Dấu trang' : item.type === 'highlight' ? '✨ Tô sáng' : '📝 Ghi chú'}
+                            {item.type === 'bookmark' ? 'Dấu trang' : item.type === 'highlight' ? 'Tô sáng' : 'Ghi chú'}
                           </Text>
                           <Text style={styles.annotationMeta}>
                             {new Date(item.created_at).toLocaleDateString('vi-VN')}
@@ -1041,6 +1067,8 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   pageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 12,
   },

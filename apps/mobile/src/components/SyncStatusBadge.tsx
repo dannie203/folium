@@ -14,6 +14,8 @@ import {
   getSyncServerUrl,
   type SyncState,
 } from '../services/syncService';
+import { colors, typography, radius } from '../theme/tokens';
+import { SyncIcon } from './icons/Icons';
 
 interface Props {
   compact?: boolean;
@@ -46,7 +48,6 @@ export function SyncStatusBadge({ compact = false, theme = 'dark' }: Props) {
         : 'Chưa từng';
 
       if (compact) {
-        // In compact mode, immediately trigger sync
         performFullSync();
         return;
       }
@@ -78,31 +79,23 @@ export function SyncStatusBadge({ compact = false, theme = 'dark' }: Props) {
 
   const isDark = theme === 'dark';
   const isSepia = theme === 'sepia';
-  const textColor = isDark ? '#A1A1AA' : isSepia ? '#6D5B46' : '#71717A';
-  const activeColor = '#10B981'; // Emerald
-  const syncingColor = '#6366F1'; // Indigo
-  const errorColor = '#EF4444'; // Red
-  const offlineColor = '#9CA3AF'; // Gray
+  const textColor = isDark ? colors.textSecondary : isSepia ? '#6D5B46' : colors.textMuted;
 
-  let icon = '☁️';
+  let dotColor: string = colors.statusSuccess;
   let label = 'Đã đồng bộ';
-  let badgeColor = activeColor;
 
   if (syncState.status === 'syncing') {
     label = 'Đang đồng bộ...';
-    badgeColor = syncingColor;
+    dotColor = colors.statusSyncing;
   } else if (syncState.status === 'offline') {
-    icon = '⚡';
     label = 'Ngoại tuyến';
-    badgeColor = offlineColor;
+    dotColor = colors.statusOffline;
   } else if (syncState.status === 'error') {
-    icon = '⚠️';
     label = 'Lỗi đồng bộ';
-    badgeColor = errorColor;
+    dotColor = colors.statusError;
   } else if (syncState.pendingCount > 0) {
-    icon = '⏳';
-    label = `${syncState.pendingCount} chờ`;
-    badgeColor = '#F59E0B';
+    label = `${syncState.pendingCount} chờ sync`;
+    dotColor = colors.statusSyncing;
   }
 
   return (
@@ -111,9 +104,9 @@ export function SyncStatusBadge({ compact = false, theme = 'dark' }: Props) {
         styles.container,
         compact ? styles.containerCompact : styles.containerFull,
         {
-          borderColor: isDark ? '#27272A' : isSepia ? '#D7C295' : '#E4E4E7',
+          borderColor: isDark ? colors.borderSubtle : isSepia ? '#D7C295' : '#E4E4E7',
           backgroundColor: isDark
-            ? 'rgba(39, 39, 42, 0.6)'
+            ? 'rgba(20, 20, 23, 0.8)'
             : isSepia
             ? 'rgba(234, 219, 182, 0.7)'
             : 'rgba(244, 244, 245, 0.8)',
@@ -124,9 +117,9 @@ export function SyncStatusBadge({ compact = false, theme = 'dark' }: Props) {
       accessibilityLabel={`Trạng thái đồng bộ: ${label}`}
     >
       {syncState.status === 'syncing' ? (
-        <ActivityIndicator size="small" color={syncingColor} style={styles.spinner} />
+        <ActivityIndicator size="small" color={colors.accentPrimary} style={styles.spinner} />
       ) : (
-        <Text style={[styles.icon, { color: badgeColor }]}>{icon}</Text>
+        <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
       )}
 
       {!compact && (
@@ -134,6 +127,8 @@ export function SyncStatusBadge({ compact = false, theme = 'dark' }: Props) {
           {label}
         </Text>
       )}
+
+      <SyncIcon size={12} color={textColor} />
     </TouchableOpacity>
   );
 }
@@ -142,27 +137,30 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: radius.full,
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 6,
   },
   containerCompact: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    gap: 4,
   },
   containerFull: {
-    gap: 5,
+    gap: 6,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: radius.full,
   },
   spinner: {
-    transform: [{ scale: 0.75 }],
-    marginRight: 2,
-  },
-  icon: {
-    fontSize: 12,
+    transform: [{ scale: 0.65 }],
   },
   label: {
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.medium,
   },
 });
