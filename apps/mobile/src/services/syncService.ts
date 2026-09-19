@@ -278,11 +278,55 @@ export async function drainAndCompactOutbox(): Promise<{
   }
 
   const payload: SyncPushPayload = {};
-  if (booksMap.size > 0) payload.books = Array.from(booksMap.values());
-  if (progressMap.size > 0) payload.progress = Array.from(progressMap.values());
-  if (bookmarksMap.size > 0) payload.bookmarks = Array.from(bookmarksMap.values());
-  if (highlightsMap.size > 0) payload.highlights = Array.from(highlightsMap.values());
-  if (notesMap.size > 0) payload.notes = Array.from(notesMap.values());
+  if (booksMap.size > 0) {
+    payload.books = Array.from(booksMap.values()).map((b) => ({
+      ...b,
+      title: b.title || 'Untitled',
+      author: b.author || 'Unknown',
+      file_type: b.file_type || 'epub',
+      file_size: typeof b.file_size === 'number' && !isNaN(b.file_size) ? b.file_size : 0,
+      is_deleted: Boolean(b.is_deleted),
+    }));
+  }
+  if (progressMap.size > 0) {
+    payload.progress = Array.from(progressMap.values()).map((p) => ({
+      ...p,
+      cfi: p.cfi || '',
+      percentage: typeof p.percentage === 'number' && !isNaN(p.percentage) ? p.percentage : 0,
+      client_updated_at: p.client_updated_at || Date.now(),
+      is_deleted: Boolean(p.is_deleted),
+    }));
+  }
+  if (bookmarksMap.size > 0) {
+    payload.bookmarks = Array.from(bookmarksMap.values()).map((bm) => ({
+      ...bm,
+      book_id: bm.book_id || '',
+      cfi: bm.cfi || '',
+      title: bm.title || '',
+      client_created_at: bm.client_created_at || Date.now(),
+      is_deleted: Boolean(bm.is_deleted),
+    }));
+  }
+  if (highlightsMap.size > 0) {
+    payload.highlights = Array.from(highlightsMap.values()).map((h) => ({
+      ...h,
+      book_id: h.book_id || '',
+      cfi_range: h.cfi_range || '',
+      text: h.text || '',
+      color: h.color || 'yellow',
+      client_created_at: h.client_created_at || Date.now(),
+      is_deleted: Boolean(h.is_deleted),
+    }));
+  }
+  if (notesMap.size > 0) {
+    payload.notes = Array.from(notesMap.values()).map((n) => ({
+      ...n,
+      book_id: n.book_id || '',
+      content: n.content || '',
+      client_created_at: n.client_created_at || Date.now(),
+      is_deleted: Boolean(n.is_deleted),
+    }));
+  }
 
   return { payload, outboxIds };
 }
@@ -329,8 +373,14 @@ export async function pushPendingMutations(): Promise<{
   });
 
   if (!res.ok) {
-    const errorText = await res.text().catch(() => '');
-    throw new Error(`Sync push failed (${res.status}): ${errorText}`);
+    let errorDetail = '';
+    try {
+      const errJson = await res.json();
+      errorDetail = errJson.error || JSON.stringify(errJson);
+    } catch {
+      errorDetail = await res.text().catch(() => '');
+    }
+    throw new Error(`Sync push failed (${res.status}): ${errorDetail || res.statusText}`);
   }
 
   const data = (await res.json()) as SyncPushResponse;
