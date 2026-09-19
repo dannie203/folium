@@ -24,6 +24,15 @@ import {
   importScannedDriveBook,
   type ScannedDriveBook,
 } from '../src/services/publicDriveService';
+import { colors, typography, radius, spacing } from '../src/theme/tokens';
+import {
+  BookLibraryIcon,
+  CloudDriveIcon,
+  CommunityGlobeIcon,
+  FoliumLeafIcon,
+  CheckIcon,
+  FolderIcon,
+} from '../src/components/icons/Icons';
 
 type CommunityTab = 'opds' | 'drive' | 'custom';
 
@@ -51,7 +60,6 @@ export default function CommunityBookshelfScreen() {
   const [isFetchingCustom, setIsFetchingCustom] = useState(false);
   const [customBooks, setCustomBooks] = useState<OpdsBookEntry[]>([]);
 
-  // Load selected official catalog
   useEffect(() => {
     if (activeTab === 'opds') {
       loadCatalog(selectedCatalog);
@@ -94,11 +102,9 @@ export default function CommunityBookshelfScreen() {
       setDriveScanMessage(null);
       const books = await scanPublicFolderRecursive(folderId);
       setScannedDriveBooks(books);
-      setDriveScanMessage(
-        `🎉 Đã tìm thấy ${books.length} file sách trong các thư mục con lồng nhau!`
-      );
+      setDriveScanMessage(`Đã tìm thấy ${books.length} file sách trong các thư mục con lồng nhau!`);
     } catch (err: any) {
-      setDriveScanMessage(`❌ Lỗi quét thư mục: ${err.message}`);
+      setDriveScanMessage(`Lỗi quét thư mục: ${err.message}`);
     } finally {
       setIsScanningDrive(false);
     }
@@ -135,36 +141,61 @@ export default function CommunityBookshelfScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ title: 'Tủ Sách Cộng Đồng & OPDS', headerShown: true }} />
+      <Stack.Screen
+        options={{
+          title: 'Tủ Sách Cộng Đồng & OPDS',
+          headerShown: true,
+          headerStyle: { backgroundColor: colors.bgBase },
+          headerTintColor: colors.textPrimary,
+        }}
+      />
 
-      {/* Navigation Tabs */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'opds' && styles.tabItemActive]}
-          onPress={() => setActiveTab('opds')}
+      {/* Navigation Tab Bar */}
+      <View style={styles.tabBarContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabBar}
         >
-          <Text style={[styles.tabText, activeTab === 'opds' && styles.tabTextActive]}>
-            📚 Sách Công Quyền
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'opds' && styles.tabItemActive]}
+            onPress={() => setActiveTab('opds')}
+          >
+            <BookLibraryIcon
+              size={16}
+              color={activeTab === 'opds' ? colors.accentPrimary : colors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'opds' && styles.tabTextActive]}>
+              Sách Công Quyền
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'drive' && styles.tabItemActive]}
-          onPress={() => setActiveTab('drive')}
-        >
-          <Text style={[styles.tabText, activeTab === 'drive' && styles.tabTextActive]}>
-            ☁️ Google Drive Chia Sẻ
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'drive' && styles.tabItemActive]}
+            onPress={() => setActiveTab('drive')}
+          >
+            <CloudDriveIcon
+              size={16}
+              color={activeTab === 'drive' ? colors.accentPrimary : colors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'drive' && styles.tabTextActive]}>
+              Google Drive Chia Sẻ
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'custom' && styles.tabItemActive]}
-          onPress={() => setActiveTab('custom')}
-        >
-          <Text style={[styles.tabText, activeTab === 'custom' && styles.tabTextActive]}>
-            🔗 Nguồn OPDS Riêng
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'custom' && styles.tabItemActive]}
+            onPress={() => setActiveTab('custom')}
+          >
+            <CommunityGlobeIcon
+              size={16}
+              color={activeTab === 'custom' ? colors.accentPrimary : colors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'custom' && styles.tabTextActive]}>
+              Nguồn OPDS Riêng
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -182,7 +213,7 @@ export default function CommunityBookshelfScreen() {
                     onPress={() => setSelectedCatalog(cat)}
                   >
                     <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                      {cat.icon} {cat.name}
+                      {cat.name}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -193,7 +224,7 @@ export default function CommunityBookshelfScreen() {
 
             {isLoadingCatalog ? (
               <View style={styles.centerLoading}>
-                <ActivityIndicator size="large" color="#4F46E5" />
+                <ActivityIndicator size="large" color={colors.accentPrimary} />
                 <Text style={styles.loadingText}>Đang tải danh mục sách công quyền...</Text>
               </View>
             ) : (
@@ -208,7 +239,7 @@ export default function CommunityBookshelfScreen() {
                         <Image source={{ uri: b.coverUrl }} style={styles.bookCover} />
                       ) : (
                         <View style={[styles.bookCover, styles.coverPlaceholder]}>
-                          <Text style={styles.coverPlaceholderText}>📖</Text>
+                          <FoliumLeafIcon size={24} color="rgba(255, 255, 255, 0.2)" />
                         </View>
                       )}
                       <View style={styles.bookMeta}>
@@ -216,7 +247,7 @@ export default function CommunityBookshelfScreen() {
                           {b.title}
                         </Text>
                         <Text style={styles.bookAuthor} numberOfLines={1}>
-                          ✍️ {b.author}
+                          {b.author}
                         </Text>
                         {b.summary ? (
                           <Text style={styles.bookSummary} numberOfLines={2}>
@@ -236,9 +267,12 @@ export default function CommunityBookshelfScreen() {
                           {isImporting ? (
                             <ActivityIndicator size="small" color="#FFFFFF" />
                           ) : (
-                            <Text style={styles.importBtnText}>
-                              {isImported ? '✓ Đã có trong kệ' : '+ Tải vào Thư Viện'}
-                            </Text>
+                            <View style={styles.btnContentRow}>
+                              {isImported && <CheckIcon size={14} color="#FFFFFF" />}
+                              <Text style={styles.importBtnText}>
+                                {isImported ? 'Đã có trong kệ' : '+ Tải vào Thư Viện'}
+                              </Text>
+                            </View>
                           )}
                         </TouchableOpacity>
                       </View>
@@ -254,11 +288,13 @@ export default function CommunityBookshelfScreen() {
         {activeTab === 'drive' && (
           <View style={styles.driveSection}>
             <View style={styles.driveHeaderCard}>
-              <Text style={styles.driveHeaderTitle}>📁 Kết Nối Folder Google Drive Cộng Đồng</Text>
+              <View style={styles.driveHeaderTitleRow}>
+                <FolderIcon size={20} color={colors.accentPrimary} />
+                <Text style={styles.driveHeaderTitle}>Kết Nối Folder Google Drive Cộng Đồng</Text>
+              </View>
               <Text style={styles.driveHeaderDesc}>
                 Dán đường dẫn thư mục Google Drive do bạn bè hoặc cộng đồng chia sẻ. Folium sẽ quét
-                đệ quy toàn bộ các thư mục con lồng nhau và tự động biến tên subfolder thành Thể loại /
-                Kệ sách tương ứng!
+                đệ quy toàn bộ các thư mục con lồng nhau và tự động biến tên subfolder thành Kệ sách tương ứng!
               </Text>
 
               <View style={styles.driveInputRow}>
@@ -266,8 +302,8 @@ export default function CommunityBookshelfScreen() {
                   style={styles.driveInput}
                   value={driveFolderInput}
                   onChangeText={setDriveFolderInput}
-                  placeholder="https://drive.google.com/drive/folders/1ABC_XYZ... hoặc ID folder"
-                  placeholderTextColor="#71717A"
+                  placeholder="https://drive.google.com/drive/folders/... hoặc Folder ID"
+                  placeholderTextColor={colors.textMuted}
                 />
                 <TouchableOpacity
                   style={[styles.scanBtn, isScanningDrive && styles.btnDisabled]}
@@ -304,7 +340,7 @@ export default function CommunityBookshelfScreen() {
                           {b.title}
                         </Text>
                         <View style={styles.scannedBadgeRow}>
-                          <Text style={styles.categoryBadge}>🏷️ {b.categoryPath}</Text>
+                          <Text style={styles.categoryBadge}>{b.categoryPath}</Text>
                           <Text style={styles.formatBadge}>
                             {b.format.toUpperCase()} • {(b.fileSize / 1024 / 1024).toFixed(1)} MB
                           </Text>
@@ -323,9 +359,12 @@ export default function CommunityBookshelfScreen() {
                         {isImporting ? (
                           <ActivityIndicator size="small" color="#FFFFFF" />
                         ) : (
-                          <Text style={styles.addScannedBtnText}>
-                            {isImported ? '✓ Đã Thêm' : '+ Thêm Kệ'}
-                          </Text>
+                          <View style={styles.btnContentRow}>
+                            {isImported && <CheckIcon size={14} color="#FFFFFF" />}
+                            <Text style={styles.addScannedBtnText}>
+                              {isImported ? 'Đã Thêm' : '+ Thêm Kệ'}
+                            </Text>
+                          </View>
                         )}
                       </TouchableOpacity>
                     </View>
@@ -340,7 +379,10 @@ export default function CommunityBookshelfScreen() {
         {activeTab === 'custom' && (
           <View style={styles.customSection}>
             <View style={styles.customCard}>
-              <Text style={styles.customTitle}>🔗 Nguồn Thư Viện OPDS Tùy Chỉnh</Text>
+              <View style={styles.driveHeaderTitleRow}>
+                <CommunityGlobeIcon size={20} color={colors.accentPrimary} />
+                <Text style={styles.customTitle}>Nguồn Thư Viện OPDS Tùy Chỉnh</Text>
+              </View>
               <Text style={styles.customDesc}>
                 Kết nối với máy chủ Calibre Content Server tại nhà hoặc bất kỳ feed catalog OPDS mở
                 nào khác trên internet:
@@ -352,7 +394,7 @@ export default function CommunityBookshelfScreen() {
                   value={customOpdsUrl}
                   onChangeText={setCustomOpdsUrl}
                   placeholder="https://my-calibre-server.org/opds"
-                  placeholderTextColor="#71717A"
+                  placeholderTextColor={colors.textMuted}
                 />
                 <TouchableOpacity
                   style={[styles.scanBtn, isFetchingCustom && styles.btnDisabled]}
@@ -374,7 +416,7 @@ export default function CommunityBookshelfScreen() {
                   <View key={b.id} style={styles.bookCard}>
                     <View style={styles.bookMeta}>
                       <Text style={styles.bookTitle}>{b.title}</Text>
-                      <Text style={styles.bookAuthor}>✍️ {b.author}</Text>
+                      <Text style={styles.bookAuthor}>{b.author}</Text>
                       <TouchableOpacity
                         style={styles.importBtn}
                         onPress={() => handleImportOpds(b)}
@@ -396,35 +438,44 @@ export default function CommunityBookshelfScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090B',
+    backgroundColor: colors.bgBase,
+  },
+  tabBarContainer: {
+    backgroundColor: colors.bgSurface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#18181B',
-    borderBottomWidth: 1,
-    borderBottomColor: '#27272A',
+    minWidth: '100%',
   },
   tabItem: {
     flex: 1,
+    minWidth: 130,
+    flexDirection: 'row',
+    gap: 6,
     paddingVertical: 14,
+    paddingHorizontal: 12,
     alignItems: 'center',
+    justifyContent: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   tabItemActive: {
-    borderBottomColor: '#4F46E5',
+    borderBottomColor: colors.accentPrimary,
   },
   tabText: {
-    color: '#71717A',
-    fontSize: 13,
-    fontWeight: '600',
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.medium,
   },
   tabTextActive: {
-    color: '#FAFAFA',
+    color: colors.textPrimary,
+    fontWeight: typography.fontWeight.bold,
   },
   content: {
-    padding: 16,
-    maxWidth: 800,
+    padding: spacing.lg,
+    maxWidth: 860,
     alignSelf: 'center',
     width: '100%',
   },
@@ -432,33 +483,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   chip: {
-    backgroundColor: '#18181B',
-    borderRadius: 20,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.full,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#27272A',
+    borderColor: colors.borderSubtle,
   },
   chipActive: {
-    backgroundColor: '#4F46E5',
-    borderColor: '#6366F1',
+    backgroundColor: colors.accentPrimary,
+    borderColor: colors.accentPrimary,
   },
   chipText: {
-    color: '#A1A1AA',
-    fontSize: 13,
-    fontWeight: '500',
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.medium,
   },
   chipTextActive: {
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: typography.fontWeight.bold,
   },
   catalogDesc: {
-    color: '#71717A',
-    fontSize: 13,
-    marginBottom: 16,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
+    marginBottom: spacing.lg,
     lineHeight: 18,
   },
   centerLoading: {
@@ -467,69 +518,72 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    color: '#A1A1AA',
-    fontSize: 14,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.body,
   },
   bookList: {
     gap: 12,
   },
   bookCard: {
     flexDirection: 'row',
-    backgroundColor: '#18181B',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
     borderWidth: 1,
-    borderColor: '#27272A',
-    gap: 12,
+    borderColor: colors.borderSubtle,
+    gap: 14,
   },
   bookCover: {
     width: 70,
     height: 100,
-    borderRadius: 6,
-    backgroundColor: '#27272A',
+    borderRadius: radius.sm,
+    backgroundColor: colors.borderSubtle,
   },
   coverPlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  coverPlaceholderText: {
-    fontSize: 28,
+    backgroundColor: '#1E1B4B',
   },
   bookMeta: {
     flex: 1,
     justifyContent: 'center',
   },
   bookTitle: {
-    color: '#FAFAFA',
-    fontSize: 15,
-    fontWeight: '700',
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.titleMd,
+    fontWeight: typography.fontWeight.bold,
     marginBottom: 4,
   },
   bookAuthor: {
-    color: '#818CF8',
-    fontSize: 13,
+    color: '#A5B4FC',
+    fontSize: typography.fontSize.caption,
     marginBottom: 6,
   },
   bookSummary: {
-    color: '#A1A1AA',
-    fontSize: 12,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
     lineHeight: 16,
     marginBottom: 10,
   },
   importBtn: {
     alignSelf: 'flex-start',
-    backgroundColor: '#4F46E5',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: colors.accentPrimary,
+    borderRadius: radius.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
   },
   importBtnDone: {
-    backgroundColor: '#10B981',
+    backgroundColor: colors.statusSuccess,
+  },
+  btnContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   importBtnText: {
     color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
   },
   btnDisabled: {
     opacity: 0.6,
@@ -538,23 +592,28 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   driveHeaderCard: {
-    backgroundColor: '#18181B',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
     borderWidth: 1,
-    borderColor: '#27272A',
+    borderColor: colors.borderSubtle,
   },
-  driveHeaderTitle: {
-    color: '#FAFAFA',
-    fontSize: 16,
-    fontWeight: '700',
+  driveHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 6,
   },
+  driveHeaderTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.titleMd,
+    fontWeight: typography.fontWeight.bold,
+  },
   driveHeaderDesc: {
-    color: '#A1A1AA',
-    fontSize: 13,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
     lineHeight: 18,
-    marginBottom: 14,
+    marginBottom: spacing.md,
   },
   driveInputRow: {
     flexDirection: 'row',
@@ -562,58 +621,58 @@ const styles = StyleSheet.create({
   },
   driveInput: {
     flex: 1,
-    backgroundColor: '#27272A',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    backgroundColor: colors.bgElevated,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    color: '#FAFAFA',
-    fontSize: 13,
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.caption,
     borderWidth: 1,
-    borderColor: '#3F3F46',
+    borderColor: colors.borderSubtle,
   },
   scanBtn: {
-    backgroundColor: '#10B981',
-    borderRadius: 8,
-    paddingHorizontal: 16,
+    backgroundColor: colors.statusSuccess,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.lg,
     justifyContent: 'center',
   },
   scanBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
   },
   scanFeedback: {
-    color: '#34D399',
-    fontSize: 13,
+    color: colors.statusSuccess,
+    fontSize: typography.fontSize.caption,
     marginTop: 10,
-    fontWeight: '500',
+    fontWeight: typography.fontWeight.medium,
   },
   scannedList: {
     gap: 10,
   },
   scannedTitle: {
-    color: '#FAFAFA',
-    fontSize: 14,
-    fontWeight: '700',
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.body,
+    fontWeight: typography.fontWeight.bold,
   },
   scannedCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#18181B',
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.md,
+    padding: spacing.md,
     borderWidth: 1,
-    borderColor: '#27272A',
+    borderColor: colors.borderSubtle,
   },
   scannedMeta: {
     flex: 1,
     marginRight: 10,
   },
   scannedBookTitle: {
-    color: '#FAFAFA',
-    fontSize: 14,
-    fontWeight: '600',
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.body,
+    fontWeight: typography.fontWeight.semibold,
     marginBottom: 4,
   },
   scannedBadgeRow: {
@@ -622,45 +681,44 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   categoryBadge: {
-    color: '#A78BFA',
-    fontSize: 11,
-    fontWeight: '500',
+    color: '#C4B5FD',
+    fontSize: typography.fontSize.micro,
+    fontWeight: typography.fontWeight.medium,
   },
   formatBadge: {
-    color: '#71717A',
-    fontSize: 11,
+    color: colors.textMuted,
+    fontSize: typography.fontSize.micro,
   },
   addScannedBtn: {
-    backgroundColor: '#4F46E5',
-    borderRadius: 6,
+    backgroundColor: colors.accentPrimary,
+    borderRadius: radius.sm,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   addScannedBtnText: {
     color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
   },
   customSection: {
     gap: 16,
   },
   customCard: {
-    backgroundColor: '#18181B',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
     borderWidth: 1,
-    borderColor: '#27272A',
+    borderColor: colors.borderSubtle,
   },
   customTitle: {
-    color: '#FAFAFA',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 6,
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.titleMd,
+    fontWeight: typography.fontWeight.bold,
   },
   customDesc: {
-    color: '#A1A1AA',
-    fontSize: 13,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
     lineHeight: 18,
-    marginBottom: 14,
+    marginBottom: spacing.md,
   },
 });

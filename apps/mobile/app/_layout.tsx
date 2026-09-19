@@ -35,8 +35,7 @@ export default function RootLayout() {
         <Stack.Screen
           name="index"
           options={{
-            title: 'Folium',
-            headerLargeTitle: false,
+            headerShown: false,
           }}
         />
         <Stack.Screen

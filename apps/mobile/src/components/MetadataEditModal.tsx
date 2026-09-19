@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import type { Book } from '@folium/shared';
 import { updateBookMetadata, getAvailableShelves } from '../services/bookService';
+import { colors, typography, radius, spacing } from '../theme/tokens';
+import { EditPencilIcon, CloseIcon, FolderIcon, InboxTrayIcon } from './icons/Icons';
 
 interface MetadataEditModalProps {
   visible: boolean;
@@ -88,51 +90,60 @@ export function MetadataEditModal({
       <View style={styles.overlay}>
         <View style={styles.modalCard}>
           <View style={styles.header}>
-            <Text style={styles.title}>✏️ Chỉnh Sửa Sách & Kệ</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeBtnText}>✕</Text>
+            <View style={styles.headerTitleRow}>
+              <EditPencilIcon size={18} color={colors.accentPrimary} />
+              <Text style={styles.title}>Chỉnh Sửa Sách & Kệ</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityLabel="Đóng">
+              <CloseIcon size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
           <ScrollView contentContainerStyle={styles.body}>
             {/* Title Input */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Tên sách:</Text>
+              <Text style={styles.label}>Tên sách</Text>
               <TextInput
                 style={styles.input}
                 value={title}
                 onChangeText={setTitle}
                 placeholder="Nhập tên sách..."
-                placeholderTextColor="#71717A"
+                placeholderTextColor={colors.textMuted}
               />
             </View>
 
             {/* Author Input */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Tác giả:</Text>
+              <Text style={styles.label}>Tác giả</Text>
               <TextInput
                 style={styles.input}
                 value={author}
                 onChangeText={setAuthor}
                 placeholder="Tên tác giả..."
-                placeholderTextColor="#71717A"
+                placeholderTextColor={colors.textMuted}
               />
             </View>
 
             {/* Shelf / Category Selection */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Kệ sách (Thư mục):</Text>
+              <Text style={styles.label}>Kệ sách (Folder trên Google Drive)</Text>
               <View style={styles.shelfChipsRow}>
                 {availableShelves.map((s) => {
                   const isSelected = shelf === s;
+                  const isInbox = s === 'Inbox';
                   return (
                     <TouchableOpacity
                       key={s}
                       style={[styles.shelfChip, isSelected && styles.shelfChipSelected]}
                       onPress={() => handleSelectShelf(s)}
                     >
+                      {isInbox ? (
+                        <InboxTrayIcon size={12} color={isSelected ? '#FFFFFF' : colors.textSecondary} />
+                      ) : (
+                        <FolderIcon size={12} color={isSelected ? '#FFFFFF' : colors.textSecondary} />
+                      )}
                       <Text style={[styles.shelfChipText, isSelected && styles.shelfChipTextSelected]}>
-                        {s === 'Inbox' ? '📥 Hộp thư đến (Inbox)' : `📁 ${s}`}
+                        {isInbox ? 'Hộp thư đến (Inbox)' : s}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -146,7 +157,7 @@ export function MetadataEditModal({
                   value={newShelfInput}
                   onChangeText={setNewShelfInput}
                   placeholder="+ Tên kệ mới (Văn học, Kỹ thuật...)"
-                  placeholderTextColor="#71717A"
+                  placeholderTextColor={colors.textMuted}
                 />
                 <TouchableOpacity
                   style={styles.addShelfBtn}
@@ -160,13 +171,13 @@ export function MetadataEditModal({
 
             {/* Cover URL Input */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Đường dẫn ảnh bìa (Cover URL - Tùy chọn):</Text>
+              <Text style={styles.label}>Đường dẫn ảnh bìa (Cover URL - Tùy chọn)</Text>
               <TextInput
                 style={styles.input}
                 value={coverUrl}
                 onChangeText={setCoverUrl}
                 placeholder="https://example.com/cover.jpg"
-                placeholderTextColor="#71717A"
+                placeholderTextColor={colors.textMuted}
               />
             </View>
 
@@ -197,138 +208,141 @@ export function MetadataEditModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: colors.bgOverlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    padding: spacing.lg,
   },
   modalCard: {
-    backgroundColor: '#18181B',
-    borderRadius: 16,
+    backgroundColor: colors.bgElevated,
+    borderRadius: radius.xl,
     width: '100%',
-    maxWidth: 500,
+    maxWidth: 520,
     maxHeight: '90%',
     borderWidth: 1,
-    borderColor: '#27272A',
+    borderColor: colors.borderSubtle,
     overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#27272A',
+    borderBottomColor: colors.borderSubtle,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   title: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#FAFAFA',
+    fontSize: typography.fontSize.titleLg,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.textPrimary,
   },
   closeBtn: {
-    padding: 4,
-  },
-  closeBtnText: {
-    color: '#A1A1AA',
-    fontSize: 18,
-    fontWeight: '600',
+    padding: 6,
   },
   body: {
-    padding: 20,
+    padding: spacing.xl,
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   label: {
-    color: '#A1A1AA',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 6,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
+    marginBottom: spacing.xs,
   },
   input: {
-    backgroundColor: '#27272A',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    color: '#FAFAFA',
-    fontSize: 14,
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.body,
     borderWidth: 1,
-    borderColor: '#3F3F46',
+    borderColor: colors.borderSubtle,
   },
   shelfChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 10,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   shelfChip: {
-    backgroundColor: '#27272A',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
     borderWidth: 1,
-    borderColor: '#3F3F46',
+    borderColor: colors.borderSubtle,
   },
   shelfChipSelected: {
-    backgroundColor: '#4F46E5',
-    borderColor: '#6366F1',
+    backgroundColor: colors.accentPrimary,
+    borderColor: colors.accentPrimary,
   },
   shelfChipText: {
-    color: '#D4D4D8',
-    fontSize: 12,
-    fontWeight: '500',
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.medium,
   },
   shelfChipTextSelected: {
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: typography.fontWeight.semibold,
   },
   addShelfRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   addShelfInput: {
     flex: 1,
     paddingVertical: 8,
   },
   addShelfBtn: {
-    backgroundColor: '#3F3F46',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    backgroundColor: colors.borderMedium,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
   },
   addShelfBtnText: {
-    color: '#FAFAFA',
-    fontSize: 13,
-    fontWeight: '600',
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
   },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 12,
-    marginTop: 12,
+    gap: spacing.md,
+    marginTop: spacing.md,
   },
   cancelBtn: {
     paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.sm,
   },
   cancelBtnText: {
-    color: '#A1A1AA',
-    fontSize: 14,
-    fontWeight: '500',
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.body,
+    fontWeight: typography.fontWeight.medium,
   },
   saveBtn: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accentPrimary,
     paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.sm,
   },
   saveBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: typography.fontSize.body,
+    fontWeight: typography.fontWeight.semibold,
   },
   btnDisabled: {
     opacity: 0.6,
