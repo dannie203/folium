@@ -224,10 +224,13 @@ export async function getAvailableShelves(): Promise<string[]> {
 export async function deleteBook(bookId: string): Promise<void> {
   const db = await getDatabase();
 
-  const book = await db.getFirstAsync<{ local_path: string | null }>(
-    'SELECT local_path FROM books WHERE id = ?',
-    [bookId]
-  );
+  const book = await db.getFirstAsync<{
+    local_path: string | null;
+    title?: string;
+    author?: string;
+    file_type?: string;
+    file_size?: number;
+  }>('SELECT local_path, title, author, file_type, file_size FROM books WHERE id = ?', [bookId]);
 
   if (book && book.local_path) {
     await deleteBookFile(book.local_path, bookId);
@@ -241,6 +244,13 @@ export async function deleteBook(bookId: string): Promise<void> {
   await db.runAsync('DELETE FROM books WHERE id = ?', [bookId]);
 
   // Track deletion in sync_outbox for future D1 synchronization
-  await queueMutation('book', bookId, { id: bookId, is_deleted: true });
+  await queueMutation('book', bookId, {
+    id: bookId,
+    title: book?.title || 'Untitled',
+    author: book?.author || 'Unknown',
+    file_type: book?.file_type || 'epub',
+    file_size: book?.file_size || 0,
+    is_deleted: true,
+  });
   triggerDebouncedSync(30000);
 }
