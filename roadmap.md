@@ -36,6 +36,8 @@
 ├──────────────────────────────────────────────┤
 │  PHASE 8.5: Community Bookshelf & OPDS   ✅  │
 ├──────────────────────────────────────────────┤
+│  PHASE 8.6: 30-Day GC & Bi-Delete Sync   ✅  │
+├──────────────────────────────────────────────┤
 │  PHASE 8.8: Storage Armor & Gatekeeper   ⏳  │ <── [ NEXT STAGE ]
 ├──────────────────────────────────────────────┤
 │  PHASE 9: Mobile Release Train & Stores  ⏳  │
@@ -196,6 +198,22 @@
   - **Universal Smart Inbox ("📥 Hộp thư đến")**: Newly imported or dropped books default to an Unsorted Inbox buffer with horizontal shelf filter chips (`Tất cả`, `📥 Hộp thư đến`, dynamic shelves, `EPUB`, `PDF`).
   - **In-App Quick Metadata Editor**: Long-press on any book card to clean up Title, correct Author, pick custom Cover, or assign Shelves.
   - **Two-Way Drive Subfolder Alignment**: Moving a book to a new shelf in the app automatically organizes it into the corresponding Google Drive subfolder upon sync.
+
+---
+
+### Phase 8.6: 30-Day Tombstone Retention & Bidirectional Deletion Sync ✅
+*Status: Completed*
+
+- [x] **Bidirectional Deletion Sync (Client ⇄ Google Drive)**:
+  - **Client Deletion**: Deleting a book locally triggers `trashDriveBook(driveFileId)` on Google Drive (`PATCH { trashed: true }`), moving it to the Google Drive Trash folder. This prevents accidental permanent loss and aligns with Google Drive's native 30-day trash retention.
+  - **Drive Deletion Reconciliation**: During `syncWithGoogleDrive()`, local books linked to Google Drive are cross-checked against live active Drive files (`trashed = false`). If a file was removed or trashed on Google Drive, Folium automatically purges the local binary/SQLite entry and queues a tombstone for edge sync.
+- [x] **30-Day Tombstone Lifecycle & D1 Garbage Collection**:
+  - **D1 Migration 0002 (`0002_tombstone_gc.sql`)**: Added `deleted_at INTEGER` timestamp column and partial indices (`WHERE is_deleted = 1`) across `books`, `reading_progress`, `bookmarks`, `highlights`, and `notes`.
+  - **Automated Garbage Collection Sweep**: During sync push cycles and via `/api/sync/gc`, Cloudflare D1 automatically purges all tombstones older than 30 days (`deleted_at < now - 30 days`).
+  - **Multi-Device Convergence Guarantee**: Offline or secondary devices reconnecting within 30 days reliably receive `{ id, is_deleted: true }` to replicate deletions. After 30 days, purged tombstones reclaim D1 storage without bloating SQLite B-trees.
+- [x] **Sync Push Hardening & Safe Defaults**:
+  - Protected edge SQL upsert statements with safe fallback defaults for `NOT NULL` columns.
+  - Preserved existing metadata when applying tombstone updates via `CASE WHEN excluded.is_deleted = 0 ...`.
 
 ---
 

@@ -16,6 +16,7 @@
 - [Entry #07 (2026-09-19): Cloudflare D1 Quota Defense & The Edge Sync Engine](#entry-07-2026-09-19-cloudflare-d1-quota-defense--the-edge-sync-engine)
 - [Entry #08 (2026-09-19): Google Drive Storage, OAuth & The Zero-Knowledge Privacy Vault](#entry-08-2026-09-19-google-drive-storage-oauth--the-zero-knowledge-privacy-vault)
 - [Entry #09 (2026-09-19): Community Bookshelf, OPDS & Folder-as-a-Shelf Sync](#entry-09-2026-09-19-community-bookshelf-opds--folder-as-a-shelf-sync)
+- [Entry #10 (2026-09-19): 30-Day Tombstone Retention & Bidirectional Deletion Sync](#entry-10-2026-09-19-30-day-tombstone-retention--bidirectional-deletion-sync)
 
 ---
 
@@ -206,3 +207,36 @@ In Phase 8.5, we addressed open community catalog access and user-centric librar
    - Long-press any book card to adjust title, author, cover, or shelf tags.
    - Horizontally scrollable filter chips (`Tất cả`, `📥 Hộp thư đến`, dynamic shelves, `EPUB`, `PDF`) with active item counters.
    - Clean, high-performance community route (`/community`) providing tabbed navigation between public domain OPDS, shared Drive folders, and custom feeds.
+
+---
+
+### Entry #10 (2026-09-19): 30-Day Tombstone Retention & Bidirectional Deletion Sync
+
+#### The Incident: HTTP 500 On Sync Push
+During live mobile/web synchronization testing, client outbox pushes crashed with `Sync push failed (500): Internal Server Error`.
+1. **Root Cause Diagnosis**:
+   - In Cloudflare D1's initial migration (`0001_init.sql`), tables `books`, `bookmarks`, `highlights`, `notes`, and `reading_progress` enforced strict `NOT NULL` constraints on columns like `file_size`, `title`, `author`, `file_type`, `book_id`, and `cfi`.
+   - When a user deleted a book or annotation locally, the client generated a tombstone mutation containing only `{ id, is_deleted: true }`.
+   - The edge worker in `packages/worker/src/index.ts` passed raw properties to SQLite `.bind()`. Passing `undefined` resulted in SQL `NULL`, violating constraints and throwing unhandled SQLite exceptions that crashed the worker with HTTP 500.
+   - Because HTTP 500 was returned, outbox rows were never deleted, creating an infinite retry deadlock.
+2. **Resolution & Server Hardening**:
+   - Wrapped `/api/sync/push` and `/api/sync/pull` in structured `try/catch` error handlers.
+   - Provided resilient fallback defaults (`title = b.title || 'Chưa có tiêu đề'`, `file_size = b.file_size || 0`, `file_type = b.file_type || 'epub'`).
+   - Implemented conditional conflict resolution (`title = CASE WHEN excluded.is_deleted = 0 ...`), guaranteeing that incoming deletion tombstones cannot overwrite existing book metadata with blank strings.
+
+#### The Architectural Directive: 30-Day Tombstones & Bidirectional Deletion
+In a distributed local-first system, server rows cannot simply be purged immediately (`DELETE FROM books WHERE id = ...`) upon deletion:
+- If server deletes a row instantly, offline secondary devices pulling incremental updates via `GET /api/sync/pull?since=X` will never discover that the book was deleted, causing permanent cross-device state drift.
+- Conversely, retaining tombstones indefinitely pollutes D1 storage and slows down B-Tree index scans.
+
+#### Technical Solution:
+1. **D1 Migration 0002 (`0002_tombstone_gc.sql`)**:
+   - Added `deleted_at INTEGER` timestamp column across all 5 entities (`books`, `reading_progress`, `bookmarks`, `highlights`, `notes`).
+   - Created partial indexes `WHERE is_deleted = 1` targeting `deleted_at` for sub-millisecond sweep execution.
+2. **30-Day Automated Garbage Collection**:
+   - Defined 30-day retention window: `const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;`.
+   - Inlined a batch GC sweep inside sync push cycles and exposed an explicit endpoint `POST /api/sync/gc`.
+   - Purges all tombstones where `is_deleted = 1 AND deleted_at < (now - 30 days)`.
+3. **Bidirectional Deletion Sync (Client ⇄ Google Drive)**:
+   - **Client ➔ Google Drive**: Deleting a book in Folium automatically calls `trashDriveBook(driveFileId)`, executing `PATCH /drive/v3/files/{id}` with `{ trashed: true }`. The book moves to Google Drive's native Trash folder (recoverable for 30 days), matching the exact 30-day lifecycle.
+   - **Google Drive ➔ Client**: During `syncWithGoogleDrive()`, active Google Drive files (`trashed = false`) are reconciled against local books. If a book linked to Drive is no longer present or has been trashed in Drive, Folium automatically purges the local binary/SQLite entry and commits a tombstone to Cloudflare D1.
