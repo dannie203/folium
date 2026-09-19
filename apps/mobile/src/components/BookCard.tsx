@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, Image } from 'react-native';
 import type { BookWithProgress } from '../services/bookService';
 import { colors, typography, radius, spacing } from '../theme/tokens';
-import { FoliumLeafIcon, FolderIcon } from './icons/Icons';
+import { FoliumLeafIcon, FolderIcon, EditPencilIcon } from './icons/Icons';
 
 interface BookCardProps {
   book: BookWithProgress;
@@ -89,6 +89,19 @@ export function BookCard({ book, onPress, onDelete, onLongPress }: BookCardProps
             </View>
           </>
         )}
+
+        {/* Quick Edit / Delete Options Button */}
+        <TouchableOpacity
+          style={styles.moreActionBtn}
+          onPress={(e) => {
+            e.stopPropagation?.();
+            handleLongPress();
+          }}
+          activeOpacity={0.75}
+          accessibilityLabel={`Tùy chọn cho sách ${book.title}`}
+        >
+          <EditPencilIcon size={12} color="#FFFFFF" />
+        </TouchableOpacity>
       </View>
 
       {/* Book Info Section */}
@@ -170,9 +183,21 @@ const styles = StyleSheet.create({
   badgeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     gap: 6,
     zIndex: 2,
+    paddingRight: 28,
+  },
+  moreActionBtn: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    backgroundColor: 'rgba(20, 20, 23, 0.75)',
+    borderRadius: radius.full,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    zIndex: 10,
   },
   badge: {
     paddingHorizontal: 7,

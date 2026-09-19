@@ -238,5 +238,9 @@ In a distributed local-first system, server rows cannot simply be purged immedia
    - Inlined a batch GC sweep inside sync push cycles and exposed an explicit endpoint `POST /api/sync/gc`.
    - Purges all tombstones where `is_deleted = 1 AND deleted_at < (now - 30 days)`.
 3. **Bidirectional Deletion Sync (Client ⇄ Google Drive)**:
-   - **Client ➔ Google Drive**: Deleting a book in Folium automatically calls `trashDriveBook(driveFileId)`, executing `PATCH /drive/v3/files/{id}` with `{ trashed: true }`. The book moves to Google Drive's native Trash folder (recoverable for 30 days), matching the exact 30-day lifecycle.
-   - **Google Drive ➔ Client**: During `syncWithGoogleDrive()`, active Google Drive files (`trashed = false`) are reconciled against local books. If a book linked to Drive is no longer present or has been trashed in Drive, Folium automatically purges the local binary/SQLite entry and commits a tombstone to Cloudflare D1.
+    - **Client ➔ Google Drive**: Deleting a book in Folium automatically calls `trashDriveBook(driveFileId)`, executing `PATCH /drive/v3/files/{id}` with `{ trashed: true }`. The book moves to Google Drive's native Trash folder (recoverable for 30 days), matching the exact 30-day lifecycle.
+    - **Google Drive ➔ Client**: During `syncWithGoogleDrive()`, active Google Drive files (`trashed = false`) are reconciled against local books. If a book linked to Drive is no longer present or has been trashed in Drive, Folium automatically purges the local binary/SQLite entry and commits a tombstone to Cloudflare D1.
+4. **Client UI Deletion & Quick Management (`MetadataEditModal.tsx`, `BookCard.tsx`, `index.tsx`)**:
+   - Added a prominent "Xoá Sách" button to `MetadataEditModal` with confirmation dialogs tailored for each platform (`window.confirm` for web, `Alert.alert` for mobile).
+   - Added quick options button (`EditPencilIcon`) on `BookCard` cover for 1-click access to editing and deletion on desktop/web without relying solely on long-press.
+   - Connected UI deletion to the entire pipeline: local SQLite + local binary file removal + Google Drive Trash (`trashed: true`) + Cloudflare D1 tombstone outbox.

@@ -15,6 +15,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import type { Book } from '@folium/shared';
 import {
   getBooksWithProgress,
   importBookFromPicker,
@@ -108,7 +109,7 @@ export default function BookshelfScreen() {
     }
   };
 
-  const handleDelete = async (book: BookWithProgress) => {
+  const handleDelete = async (book: Book | BookWithProgress) => {
     try {
       await deleteBook(book.id);
       setBooks((prev) => prev.filter((b) => b.id !== book.id));
@@ -423,6 +424,7 @@ export default function BookshelfScreen() {
         book={editingBook}
         onClose={() => setEditingBook(null)}
         onSaved={() => loadBooks()}
+        onDelete={handleDelete}
       />
     </SafeAreaView>
   );
