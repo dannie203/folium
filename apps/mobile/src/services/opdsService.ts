@@ -2,19 +2,13 @@ import { Platform } from 'react-native';
 import type { OpdsBookEntry, CommunityCatalogSource, Book } from '@folium/shared';
 import { getDatabase } from '../db';
 import { saveWebBook, saveBookFile } from './storage';
+import { validateBookBytes } from './fileValidator';
 import { generateUUID } from './bookService';
 import { queueMutation, triggerDebouncedSync } from './syncService';
+import { getSyncServerUrl } from './syncService';
 
 // Official & Legal Public Domain Catalogs
 export const OFFICIAL_COMMUNITY_CATALOGS: CommunityCatalogSource[] = [
-  {
-    id: 'vietnamese_classics',
-    name: 'Văn Học Việt Nam Kinh Điển',
-    description: 'Tuyệt tác văn học hiện thực và cổ điển Việt Nam (Public Domain công quyền).',
-    url: 'internal://vietnamese_classics',
-    icon: '🇻🇳',
-    type: 'opds',
-  },
   {
     id: 'standard_ebooks',
     name: 'Standard Ebooks',
@@ -30,60 +24,6 @@ export const OFFICIAL_COMMUNITY_CATALOGS: CommunityCatalogSource[] = [
     url: 'https://m.gutenberg.org/ebooks.opds',
     icon: '🏛️',
     type: 'opds',
-  },
-];
-
-// Curated Vietnamese Public Domain Masterpieces
-export const VIETNAMESE_CLASSICS_CATALOG: OpdsBookEntry[] = [
-  {
-    id: 'vn_chi_pheo',
-    title: 'Chí Phèo',
-    author: 'Nam Cao',
-    summary: 'Tác phẩm hiện thực phê phán kinh điển của văn học Việt Nam về số phận người nông dân trước cách mạng.',
-    coverUrl: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=400&q=80',
-    downloadUrl: 'https://standardebooks.org/ebooks/sample/download', // Fallback or open link
-    format: 'epub',
-    source: 'vietnamese_classics',
-  },
-  {
-    id: 'vn_lao_hac',
-    title: 'Lão Hạc',
-    author: 'Nam Cao',
-    summary: 'Câu chuyện cảm động về nhân phẩm, tình cha con và tình thương giữa lão Hạc nghèo khổ và con chó Vàng.',
-    coverUrl: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&q=80',
-    downloadUrl: 'https://standardebooks.org/ebooks/sample/download',
-    format: 'epub',
-    source: 'vietnamese_classics',
-  },
-  {
-    id: 'vn_so_do',
-    title: 'Số Đỏ',
-    author: 'Vũ Trọng Phụng',
-    summary: 'Kiệt tác văn học trào phúng châm biếm sâu sắc xã hội thành thị nửa phong kiến nửa thực dân qua nhân vật Xuân Tóc Đỏ.',
-    coverUrl: 'https://images.unsplash.com/photo-1495640388908-05fa85288e61?w=400&q=80',
-    downloadUrl: 'https://standardebooks.org/ebooks/sample/download',
-    format: 'epub',
-    source: 'vietnamese_classics',
-  },
-  {
-    id: 'vn_truyen_kieu',
-    title: 'Truyện Kiều (Đoạn Trường Tân Thanh)',
-    author: 'Nguyễn Du',
-    summary: 'Đại thi phẩm bất hủ của nền văn học Việt Nam gồm 3.254 câu thơ lục bát mô tả cuộc đời mười lăm năm lưu lạc của Thúy Kiều.',
-    coverUrl: 'https://images.unsplash.com/photo-1476275466078-4007374efbbe?w=400&q=80',
-    downloadUrl: 'https://standardebooks.org/ebooks/sample/download',
-    format: 'epub',
-    source: 'vietnamese_classics',
-  },
-  {
-    id: 'vn_tat_den',
-    title: 'Tắt Đèn',
-    author: 'Ngô Tất Tố',
-    summary: 'Bức tranh tố cáo chế độ sưu thuế hà khắc đè nặng lên vai người nông dân nghèo qua hình tượng Chị Dậu.',
-    coverUrl: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=400&q=80',
-    downloadUrl: 'https://standardebooks.org/ebooks/sample/download',
-    format: 'epub',
-    source: 'vietnamese_classics',
   },
 ];
 
@@ -166,12 +106,12 @@ export function parseOpdsXml(xmlText: string, sourceName = 'custom_opds'): OpdsB
  * Fetch catalog entries from an OPDS URL or curated feed.
  */
 export async function fetchOpdsCatalog(source: CommunityCatalogSource): Promise<OpdsBookEntry[]> {
-  if (source.id === 'vietnamese_classics') {
-    return VIETNAMESE_CLASSICS_CATALOG;
-  }
-
   try {
-    const response = await fetch(source.url, {
+    const catalogUrl =
+      Platform.OS === 'web'
+        ? `${await getSyncServerUrl()}/api/community/opds?source=${encodeURIComponent(source.id)}`
+        : source.url;
+    const response = await fetch(catalogUrl, {
       headers: {
         Accept: 'application/atom+xml, application/xml, text/xml, */*',
       },
@@ -185,31 +125,6 @@ export async function fetchOpdsCatalog(source: CommunityCatalogSource): Promise<
     return parseOpdsXml(xmlText, source.id);
   } catch (err: any) {
     console.warn(`[OPDS] Failed to fetch feed from ${source.url}:`, err);
-    // If CORS or offline on web, return curated sample if available
-    if (source.id === 'standard_ebooks') {
-      return [
-        {
-          id: 'se_pride_and_prejudice',
-          title: 'Pride and Prejudice',
-          author: 'Jane Austen',
-          summary: 'The romantic clash between the opinionated Elizabeth and her proud beau, Mr. Darcy.',
-          coverUrl: 'https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice/downloads/cover-thumbnail.jpg',
-          downloadUrl: 'https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice/downloads/jane-austen_pride-and-prejudice.epub',
-          format: 'epub',
-          source: 'standard_ebooks',
-        },
-        {
-          id: 'se_frankenstein',
-          title: 'Frankenstein',
-          author: 'Mary Shelley',
-          summary: 'A young scientist creates a sapient creature in an unorthodox scientific experiment.',
-          coverUrl: 'https://standardebooks.org/ebooks/mary-shelley/frankenstein/downloads/cover-thumbnail.jpg',
-          downloadUrl: 'https://standardebooks.org/ebooks/mary-shelley/frankenstein/downloads/mary-shelley_frankenstein.epub',
-          format: 'epub',
-          source: 'standard_ebooks',
-        },
-      ];
-    }
     throw err;
   }
 }
@@ -230,6 +145,7 @@ export async function importOpdsBook(entry: OpdsBookEntry): Promise<Book> {
     if (!response.ok) throw new Error('Không thể tải file sách từ máy chủ công quyền.');
 
     const buffer = await response.arrayBuffer();
+    validateBookBytes(buffer, entry.format);
 
     if (Platform.OS === 'web') {
       await saveWebBook(bookId, buffer);
@@ -240,8 +156,8 @@ export async function importOpdsBook(entry: OpdsBookEntry): Promise<Book> {
       localPath = await saveBookFile(bookId, blobUrl, entry.format);
     }
   } catch (downloadErr) {
-    console.warn('[OPDS] Direct download failed, using mock placeholder for demonstration:', downloadErr);
-    localPath = `placeholder://${bookId}`;
+    console.warn('[OPDS] Direct download failed:', downloadErr);
+    throw downloadErr;
   }
 
   const newBook: Book = {

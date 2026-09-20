@@ -4,6 +4,7 @@ import { getCurrentUser } from './authService';
 import { getDatabase } from '../db';
 import { generateUUID } from './bookService';
 import { saveWebBook, saveBookFile } from './storage';
+import { validateBookBytes } from './fileValidator';
 import { queueMutation, triggerDebouncedSync } from './syncService';
 
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
@@ -50,34 +51,9 @@ export async function scanPublicFolderRecursive(
   const user = getCurrentUser();
   const token = customToken || user?.accessToken;
 
-  // If using demo mode or no token available, return mock nested subfolder books
+  // Community scans must use a real Google access token; never fabricate results.
   if (!token || token.startsWith('demo_')) {
-    return [
-      {
-        driveFileId: 'demo_file_vanhoc_01',
-        title: 'Tắt Đèn',
-        format: 'epub',
-        fileSize: 845200,
-        categoryPath: parentPath || 'Văn Học',
-        mimeType: 'application/epub+zip',
-      },
-      {
-        driveFileId: 'demo_file_vanhoc_02',
-        title: 'Lão Hạc',
-        format: 'epub',
-        fileSize: 412000,
-        categoryPath: parentPath || 'Văn Học / Nam Cao',
-        mimeType: 'application/epub+zip',
-      },
-      {
-        driveFileId: 'demo_file_kythuat_01',
-        title: 'Designing Data-Intensive Applications',
-        format: 'pdf',
-        fileSize: 15420000,
-        categoryPath: 'Kỹ Thuật',
-        mimeType: 'application/pdf',
-      },
-    ];
+    throw new Error('Cần đăng nhập Google thật để quét thư mục cộng đồng.');
   }
 
   const results: ScannedDriveBook[] = [];
@@ -155,6 +131,7 @@ export async function importScannedDriveBook(
       });
       if (resp.ok) {
         const buffer = await resp.arrayBuffer();
+        validateBookBytes(buffer, scanned.format);
         if (Platform.OS === 'web') {
           await saveWebBook(bookId, buffer);
           localPath = `indexeddb://${bookId}`;
