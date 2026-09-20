@@ -10,19 +10,19 @@ import { getSyncServerUrl } from './syncService';
 // Official & Legal Public Domain Catalogs
 export const OFFICIAL_COMMUNITY_CATALOGS: CommunityCatalogSource[] = [
   {
-    id: 'standard_ebooks',
-    name: 'Standard Ebooks',
-    description: 'Sách văn học thế giới định dạng EPUB chuẩn mực và typography đẹp nhất.',
-    url: 'https://standardebooks.org/opds/all-books',
-    icon: '✨',
-    type: 'opds',
-  },
-  {
     id: 'project_gutenberg',
     name: 'Project Gutenberg',
     description: 'Kho lưu trữ hơn 70.000 đầu sách kinh điển mở của nhân loại.',
-    url: 'https://m.gutenberg.org/ebooks.opds',
+    url: 'https://www.gutenberg.org/ebooks/search.opds/?sort_order=downloads',
     icon: '🏛️',
+    type: 'opds',
+  },
+  {
+    id: 'standard_ebooks',
+    name: 'Standard Ebooks',
+    description: 'Sách văn học thế giới định dạng EPUB chuẩn mực và typography đẹp nhất.',
+    url: 'https://standardebooks.org/feeds/atom/new-releases',
+    icon: '✨',
     type: 'opds',
   },
 ];
@@ -85,6 +85,17 @@ export function parseOpdsXml(xmlText: string, sourceName = 'custom_opds'): OpdsB
       }
     }
 
+    // Project Gutenberg sub-catalog fallback: synthesize direct EPUB and high-res cover links
+    const gutenbergIdMatch = id.match(/ebooks\/(\d+)\.opds/) || entryXml.match(/\/ebooks\/(\d+)\.opds/);
+    if (!downloadUrl && gutenbergIdMatch) {
+      const gId = gutenbergIdMatch[1];
+      downloadUrl = `https://www.gutenberg.org/ebooks/${gId}.epub3.images`;
+      format = 'epub';
+      if (!coverUrl) {
+        coverUrl = `https://www.gutenberg.org/cache/epub/${gId}/pg${gId}.cover.medium.jpg`;
+      }
+    }
+
     if (downloadUrl) {
       entries.push({
         id,
@@ -140,8 +151,11 @@ export async function importOpdsBook(entry: OpdsBookEntry): Promise<Book> {
   let localPath: string;
 
   try {
-    // Attempt download if direct link
-    const response = await fetch(entry.downloadUrl);
+    const targetUrl =
+      Platform.OS === 'web' && entry.downloadUrl.includes('gutenberg.org')
+        ? `${await getSyncServerUrl()}/api/community/download?url=${encodeURIComponent(entry.downloadUrl)}`
+        : entry.downloadUrl;
+    const response = await fetch(targetUrl);
     if (!response.ok) throw new Error('Không thể tải file sách từ máy chủ công quyền.');
 
     const buffer = await response.arrayBuffer();

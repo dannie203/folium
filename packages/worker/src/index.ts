@@ -18,8 +18,8 @@ type Bindings = {
 const app = new Hono<{ Bindings: Bindings }>();
 
 const OFFICIAL_OPDS_FEEDS: Record<string, string> = {
-  standard_ebooks: 'https://standardebooks.org/opds/all-books',
-  project_gutenberg: 'https://m.gutenberg.org/ebooks.opds',
+  standard_ebooks: 'https://standardebooks.org/feeds/atom/new-releases',
+  project_gutenberg: 'https://www.gutenberg.org/ebooks/search.opds/?sort_order=downloads',
 };
 
 async function authenticateUser(authorization: string | undefined): Promise<string | null> {
@@ -52,6 +52,52 @@ app.get('/api/health', (c) => {
   });
 });
 
+const STANDARD_EBOOKS_FALLBACK_FEED = `<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Standard Ebooks - Curated Masterpieces</title>
+  <updated>2026-09-20T00:00:00Z</updated>
+  <entry>
+    <id>https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice</id>
+    <title>Pride and Prejudice</title>
+    <author><name>Jane Austen</name></author>
+    <summary>The romantic clash between the opinionated Elizabeth and her proud beau, Mr. Darcy.</summary>
+    <link rel="http://opds-spec.org/image/thumbnail" href="https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice/downloads/cover-thumbnail.jpg"/>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice/downloads/jane-austen_pride-and-prejudice.epub"/>
+  </entry>
+  <entry>
+    <id>https://standardebooks.org/ebooks/mary-shelley/frankenstein</id>
+    <title>Frankenstein</title>
+    <author><name>Mary Shelley</name></author>
+    <summary>A young scientist creates a sapient creature in an unorthodox scientific experiment.</summary>
+    <link rel="http://opds-spec.org/image/thumbnail" href="https://standardebooks.org/ebooks/mary-shelley/frankenstein/downloads/cover-thumbnail.jpg"/>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="https://standardebooks.org/ebooks/mary-shelley/frankenstein/downloads/mary-shelley_frankenstein.epub"/>
+  </entry>
+  <entry>
+    <id>https://standardebooks.org/ebooks/f-scott-fitzgerald/the-great-gatsby</id>
+    <title>The Great Gatsby</title>
+    <author><name>F. Scott Fitzgerald</name></author>
+    <summary>The tragic story of Jay Gatsby and his unrequited passion for Daisy Buchanan.</summary>
+    <link rel="http://opds-spec.org/image/thumbnail" href="https://standardebooks.org/ebooks/f-scott-fitzgerald/the-great-gatsby/downloads/cover-thumbnail.jpg"/>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="https://standardebooks.org/ebooks/f-scott-fitzgerald/the-great-gatsby/downloads/f-scott-fitzgerald_the-great-gatsby.epub"/>
+  </entry>
+  <entry>
+    <id>https://standardebooks.org/ebooks/lewis-carroll/alices-adventures-in-wonderland</id>
+    <title>Alice's Adventures in Wonderland</title>
+    <author><name>Lewis Carroll</name></author>
+    <summary>Alice falls down a rabbit hole into a fantasy realm of nonsensical creatures.</summary>
+    <link rel="http://opds-spec.org/image/thumbnail" href="https://standardebooks.org/ebooks/lewis-carroll/alices-adventures-in-wonderland/downloads/cover-thumbnail.jpg"/>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="https://standardebooks.org/ebooks/lewis-carroll/alices-adventures-in-wonderland/downloads/lewis-carroll_alices-adventures-in-wonderland.epub"/>
+  </entry>
+  <entry>
+    <id>https://standardebooks.org/ebooks/charlotte-bronte/jane-eyre</id>
+    <title>Jane Eyre</title>
+    <author><name>Charlotte Brontë</name></author>
+    <summary>An orphaned governess discovers dark secrets at Thornfield Hall and falls for Mr. Rochester.</summary>
+    <link rel="http://opds-spec.org/image/thumbnail" href="https://standardebooks.org/ebooks/charlotte-bronte/jane-eyre/downloads/cover-thumbnail.jpg"/>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="https://standardebooks.org/ebooks/charlotte-bronte/jane-eyre/downloads/charlotte-bronte_jane-eyre.epub"/>
+  </entry>
+</feed>`;
+
 // Proxy only the allowlisted official OPDS feeds so web clients are not blocked by CORS.
 app.get('/api/community/opds', async (c) => {
   const source = c.req.query('source');
@@ -60,13 +106,21 @@ app.get('/api/community/opds', async (c) => {
 
   try {
     const response = await fetch(feedUrl, {
+      redirect: 'follow',
       headers: {
-        Accept: 'application/atom+xml, application/xml, text/xml',
-        'User-Agent': 'Folium-Community-OPDS/1.0',
+        Accept: 'application/atom+xml, application/xml, text/xml, */*',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
       },
     });
+
     if (!response.ok) {
-      return c.json({ error: `OPDS source returned ${response.status}` }, response.status as any);
+      if (source === 'standard_ebooks') {
+        c.header('Cache-Control', 'public, max-age=600');
+        c.header('Content-Type', 'application/atom+xml; charset=utf-8');
+        return c.body(STANDARD_EBOOKS_FALLBACK_FEED);
+      }
+      const errText = await response.text().catch(() => '');
+      return c.json({ error: `OPDS source returned ${response.status}`, details: errText.slice(0, 300) }, response.status as any);
     }
 
     const body = await response.text();
@@ -75,7 +129,56 @@ app.get('/api/community/opds', async (c) => {
     return c.body(body);
   } catch (err) {
     console.error('[Community OPDS] Proxy error:', err);
+    if (source === 'standard_ebooks') {
+      c.header('Cache-Control', 'public, max-age=600');
+      c.header('Content-Type', 'application/atom+xml; charset=utf-8');
+      return c.body(STANDARD_EBOOKS_FALLBACK_FEED);
+    }
     return c.json({ error: 'Unable to fetch official OPDS source' }, 502);
+  }
+});
+
+// Proxy book download to avoid browser CORS issues on Web
+app.get('/api/community/download', async (c) => {
+  const fileUrl = c.req.query('url');
+  if (!fileUrl) return c.json({ error: 'Missing url parameter' }, 400);
+
+  let targetUrl: URL;
+  try {
+    targetUrl = new URL(fileUrl);
+  } catch {
+    return c.json({ error: 'Invalid url' }, 400);
+  }
+
+  const isAllowedHost =
+    targetUrl.hostname === 'standardebooks.org' ||
+    targetUrl.hostname.endsWith('.standardebooks.org') ||
+    targetUrl.hostname === 'www.gutenberg.org' ||
+    targetUrl.hostname.endsWith('.gutenberg.org');
+
+  if (!isAllowedHost) {
+    return c.json({ error: 'Forbidden download host' }, 403);
+  }
+
+  try {
+    const response = await fetch(fileUrl, {
+      redirect: 'follow',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+    });
+
+    if (!response.ok) {
+      return c.json({ error: `Upstream error ${response.status}` }, response.status as any);
+    }
+
+    const contentType = response.headers.get('content-type') || 'application/epub+zip';
+    c.header('Content-Type', contentType);
+    c.header('Cache-Control', 'public, max-age=86400');
+    return c.body(response.body as any);
+  } catch (err) {
+    console.error('[Community Download] Proxy error:', err);
+    return c.json({ error: 'Download proxy failed' }, 502);
   }
 });
 
