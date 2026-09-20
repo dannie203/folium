@@ -18,6 +18,12 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   try {
     await db.execAsync("ALTER TABLE books ADD COLUMN tags TEXT;");
   } catch {}
+  try {
+    await db.execAsync("ALTER TABLE books ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0;");
+  } catch {}
+  try {
+    await db.execAsync("ALTER TABLE books ADD COLUMN deleted_at INTEGER;");
+  } catch {}
 
   dbInstance = db;
   return db;

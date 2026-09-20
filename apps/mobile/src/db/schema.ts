@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS books (
     locations_cache TEXT,
     shelf TEXT DEFAULT 'Inbox',
     tags TEXT,
+    is_deleted INTEGER NOT NULL DEFAULT 0,
+    deleted_at INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );

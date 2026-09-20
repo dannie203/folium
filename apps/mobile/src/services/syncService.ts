@@ -1,4 +1,5 @@
 import { Platform, AppState, type AppStateStatus } from 'react-native';
+import * as ExpoCrypto from 'expo-crypto';
 import type {
   SyncPushPayload,
   SyncPullResponse,
@@ -10,13 +11,10 @@ import type {
   Book,
 } from '@folium/shared';
 import { getDatabase } from '../db';
+import { getCurrentUser } from './authService';
 
 function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  return ExpoCrypto.randomUUID();
 }
 
 // ==============================================================================
@@ -52,8 +50,6 @@ const META_KEYS = {
 const DEFAULT_SERVER_URL =
   process.env.EXPO_PUBLIC_SYNC_WORKER_URL ||
   'https://folium-sync-worker.hung23012.workers.dev';
-const DEFAULT_USER_ID = 'dev-user-001';
-
 // Active state
 let currentStatus: SyncStatus = 'idle';
 let currentLastSyncedAt: number | null = null;
@@ -149,7 +145,7 @@ export async function setSyncServerUrl(url: string): Promise<void> {
 
 export async function getSyncUserId(): Promise<string> {
   const custom = await getSyncMeta(META_KEYS.USER_ID);
-  return custom || DEFAULT_USER_ID;
+  return custom || getCurrentUser()?.id || '';
 }
 
 export async function setSyncUserId(userId: string): Promise<void> {
@@ -184,6 +180,7 @@ export async function queueMutation(
     notifyListeners();
   } catch (err) {
     console.error('[SyncService] Failed to queue mutation:', err);
+    throw err;
   }
 }
 
@@ -357,7 +354,10 @@ export async function pushPendingMutations(): Promise<{
   }
 
   const serverUrl = await getSyncServerUrl();
-  const userId = await getSyncUserId();
+  const user = getCurrentUser();
+  if (!user || user.accessToken.startsWith('demo_')) {
+    throw new Error('Cần đăng nhập Google thật để đồng bộ dữ liệu.');
+  }
 
   console.log(
     `[SyncService] Pushing ${outboxIds.length} mutations (compacted) to ${serverUrl}/api/sync/push`
@@ -367,7 +367,7 @@ export async function pushPendingMutations(): Promise<{
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-user-id': userId,
+      Authorization: `Bearer ${user.accessToken}`,
     },
     body: JSON.stringify(payload),
   });
@@ -410,7 +410,10 @@ export async function pullRemoteChanges(): Promise<{
   serverSeq: number;
 }> {
   const serverUrl = await getSyncServerUrl();
-  const userId = await getSyncUserId();
+  const user = getCurrentUser();
+  if (!user || user.accessToken.startsWith('demo_')) {
+    throw new Error('Cần đăng nhập Google thật để đồng bộ dữ liệu.');
+  }
   const cursor = await getLastSyncedSeq();
 
   console.log(
@@ -420,7 +423,7 @@ export async function pullRemoteChanges(): Promise<{
   const res = await fetch(`${serverUrl}/api/sync/pull?since=${cursor}`, {
     method: 'GET',
     headers: {
-      'x-user-id': userId,
+      Authorization: `Bearer ${user.accessToken}`,
       'If-None-Match': `W/"${cursor}"`,
     },
   });
@@ -598,6 +601,14 @@ export async function pullRemoteChanges(): Promise<{
  * Execute push then pull in a single atomic synchronization cycle.
  */
 export async function performFullSync(): Promise<{ pushed: number; pulled: number }> {
+  const user = getCurrentUser();
+  if (!user || user.accessToken.startsWith('demo_')) {
+    currentStatus = 'idle';
+    currentErrorMessage = null;
+    notifyListeners();
+    return { pushed: 0, pulled: 0 };
+  }
+
   if (isSyncing) {
     console.log('[SyncService] Sync already in progress, skipping concurrent trigger');
     return { pushed: 0, pulled: 0 };

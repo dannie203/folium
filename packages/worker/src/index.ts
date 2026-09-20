@@ -17,6 +17,27 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
+const OFFICIAL_OPDS_FEEDS: Record<string, string> = {
+  standard_ebooks: 'https://standardebooks.org/opds/all-books',
+  project_gutenberg: 'https://m.gutenberg.org/ebooks.opds',
+};
+
+async function authenticateUser(authorization: string | undefined): Promise<string | null> {
+  if (!authorization?.startsWith('Bearer ')) return null;
+
+  try {
+    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: authorization },
+    });
+    if (!response.ok) return null;
+
+    const profile = (await response.json()) as { sub?: string };
+    return profile.sub || null;
+  } catch {
+    return null;
+  }
+}
+
 // Enable CORS for web clients & local dev
 app.use('*', cors());
 
@@ -31,14 +52,41 @@ app.get('/api/health', (c) => {
   });
 });
 
+// Proxy only the allowlisted official OPDS feeds so web clients are not blocked by CORS.
+app.get('/api/community/opds', async (c) => {
+  const source = c.req.query('source');
+  const feedUrl = source ? OFFICIAL_OPDS_FEEDS[source] : undefined;
+  if (!feedUrl) return c.json({ error: 'Unknown OPDS source' }, 400);
+
+  try {
+    const response = await fetch(feedUrl, {
+      headers: {
+        Accept: 'application/atom+xml, application/xml, text/xml',
+        'User-Agent': 'Folium-Community-OPDS/1.0',
+      },
+    });
+    if (!response.ok) {
+      return c.json({ error: `OPDS source returned ${response.status}` }, response.status as any);
+    }
+
+    const body = await response.text();
+    c.header('Cache-Control', 'public, max-age=300');
+    c.header('Content-Type', 'application/atom+xml; charset=utf-8');
+    return c.body(body);
+  } catch (err) {
+    console.error('[Community OPDS] Proxy error:', err);
+    return c.json({ error: 'Unable to fetch official OPDS source' }, 502);
+  }
+});
+
 // ------------------------------------------------------------------------------
 // Sync Push (Batch upsert pending mutations from client outbox)
 // ------------------------------------------------------------------------------
 app.post('/api/sync/push', async (c) => {
   try {
     const db = c.env.DB;
-    // TODO: Extract authenticated user_id from Google ID token header
-    const userId = c.req.header('x-user-id') || 'dev-user-001';
+    const userId = await authenticateUser(c.req.header('authorization'));
+    if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
     let body: SyncPushPayload;
     try {
@@ -96,7 +144,8 @@ app.post('/api/sync/push', async (c) => {
                  drive_file_id = CASE WHEN excluded.is_deleted = 0 THEN COALESCE(excluded.drive_file_id, books.drive_file_id) ELSE books.drive_file_id END,
                  is_deleted = excluded.is_deleted,
                  deleted_at = excluded.deleted_at,
-                 sync_seq = excluded.sync_seq`
+                 sync_seq = excluded.sync_seq
+               WHERE books.user_id = excluded.user_id`
             )
             .bind(
               b.id,
@@ -178,7 +227,8 @@ app.post('/api/sync/push', async (c) => {
                  cfi = CASE WHEN excluded.is_deleted = 0 AND excluded.cfi != '' THEN excluded.cfi ELSE bookmarks.cfi END,
                  is_deleted = excluded.is_deleted,
                  deleted_at = excluded.deleted_at,
-                 sync_seq = excluded.sync_seq`
+                 sync_seq = excluded.sync_seq
+               WHERE bookmarks.user_id = excluded.user_id`
             )
             .bind(
               b.id,
@@ -221,7 +271,8 @@ app.post('/api/sync/push', async (c) => {
                  note = CASE WHEN excluded.is_deleted = 0 THEN COALESCE(excluded.note, highlights.note) ELSE highlights.note END,
                  is_deleted = excluded.is_deleted,
                  deleted_at = excluded.deleted_at,
-                 sync_seq = excluded.sync_seq`
+                 sync_seq = excluded.sync_seq
+               WHERE highlights.user_id = excluded.user_id`
             )
             .bind(
               h.id,
@@ -262,7 +313,8 @@ app.post('/api/sync/push', async (c) => {
                  content = CASE WHEN excluded.is_deleted = 0 AND excluded.content != '' THEN excluded.content ELSE notes.content END,
                  is_deleted = excluded.is_deleted,
                  deleted_at = excluded.deleted_at,
-                 sync_seq = excluded.sync_seq`
+                 sync_seq = excluded.sync_seq
+               WHERE notes.user_id = excluded.user_id`
             )
             .bind(
               n.id,
@@ -314,6 +366,9 @@ app.post('/api/sync/push', async (c) => {
 // ------------------------------------------------------------------------------
 app.post('/api/sync/gc', async (c) => {
   try {
+    const userId = await authenticateUser(c.req.header('authorization'));
+    if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+
     const db = c.env.DB;
     const now = Date.now();
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -344,7 +399,8 @@ app.post('/api/sync/gc', async (c) => {
 app.get('/api/sync/pull', async (c) => {
   try {
     const db = c.env.DB;
-    const userId = c.req.header('x-user-id') || 'dev-user-001';
+    const userId = await authenticateUser(c.req.header('authorization'));
+    if (!userId) return c.json({ error: 'Unauthorized' }, 401);
     const since = parseInt(c.req.query('since') || '0', 10);
     const ifNoneMatch = c.req.header('if-none-match');
 

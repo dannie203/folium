@@ -284,63 +284,66 @@ export async function listDriveBooks(): Promise<DriveFileMetadata[]> {
   }
 
   const rootFolderId = await getOrCreateFoliumFolder();
-  const query = encodeURIComponent(`'${rootFolderId}' in parents and trashed = false`);
-  const resp = await fetch(
-    `${DRIVE_API_BASE}/files?q=${query}&fields=files(id, name, size, mimeType, modifiedTime, appProperties)`,
-    {
-      headers: { Authorization: `Bearer ${user.accessToken}` },
-    }
-  );
-
-  if (!resp.ok) {
-    throw new Error(`Lỗi duyệt danh sách file Drive: ${resp.statusText}`);
-  }
-
-  const data = await resp.json();
-  const items = data.files || [];
   const results: DriveFileMetadata[] = [];
+  const visitedFolders = new Set<string>();
+  const fields = 'nextPageToken,files(id,name,size,mimeType,modifiedTime,appProperties)';
 
-  for (const item of items) {
-    if (item.mimeType === 'application/vnd.google-apps.folder') {
-      // Nested subfolder represents a shelf
-      const subQuery = encodeURIComponent(`'${item.id}' in parents and trashed = false`);
-      const subResp = await fetch(
-        `${DRIVE_API_BASE}/files?q=${subQuery}&fields=files(id, name, size, mimeType, modifiedTime, appProperties)`,
-        {
-          headers: { Authorization: `Bearer ${user.accessToken}` },
-        }
-      );
-      if (subResp.ok) {
-        const subData = await subResp.json();
-        for (const subItem of subData.files || []) {
-          if (subItem.mimeType !== 'application/vnd.google-apps.folder') {
-            results.push({
-              id: subItem.id,
-              name: subItem.name,
-              size: parseInt(subItem.size || '0', 10),
-              mimeType: subItem.mimeType,
-              modifiedTime: subItem.modifiedTime,
-              foliumBookId: subItem.appProperties?.foliumBookId,
-              shelf: subItem.appProperties?.foliumShelf || item.name,
-              foliumTitle: subItem.appProperties?.foliumTitle,
-            });
-          }
-        }
-      }
-    } else {
-      // File dropped directly in root /Folium folder (Inbox)
-      results.push({
-        id: item.id,
-        name: item.name,
-        size: parseInt(item.size || '0', 10),
-        mimeType: item.mimeType,
-        modifiedTime: item.modifiedTime,
-        foliumBookId: item.appProperties?.foliumBookId,
-        shelf: item.appProperties?.foliumShelf || 'Inbox',
-        foliumTitle: item.appProperties?.foliumTitle,
+  const scanFolder = async (folderId: string, fallbackShelf: string): Promise<void> => {
+    if (visitedFolders.has(folderId)) return;
+    visitedFolders.add(folderId);
+
+    let pageToken: string | undefined;
+    do {
+      const params = new URLSearchParams({
+        q: `'${folderId}' in parents and trashed = false`,
+        fields,
+        pageSize: '1000',
       });
-    }
-  }
+      if (pageToken) params.set('pageToken', pageToken);
+
+      const response = await fetch(`${DRIVE_API_BASE}/files?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${user.accessToken}` },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Lỗi duyệt danh sách file Drive: ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as {
+        nextPageToken?: string;
+        files?: Array<{
+          id: string;
+          name: string;
+          size?: string;
+          mimeType: string;
+          modifiedTime?: string;
+          appProperties?: Record<string, string>;
+        }>;
+      };
+
+      for (const item of data.files || []) {
+        if (item.mimeType === 'application/vnd.google-apps.folder') {
+          await scanFolder(item.id, item.name);
+          continue;
+        }
+
+        results.push({
+          id: item.id,
+          name: item.name,
+          size: parseInt(item.size || '0', 10),
+          mimeType: item.mimeType,
+          modifiedTime: item.modifiedTime || '',
+          foliumBookId: item.appProperties?.foliumBookId,
+          shelf: item.appProperties?.foliumShelf || fallbackShelf,
+          foliumTitle: item.appProperties?.foliumTitle,
+        });
+      }
+
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+  };
+
+  await scanFolder(rootFolderId, 'Inbox');
 
   return results;
 }

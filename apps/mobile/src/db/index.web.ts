@@ -111,6 +111,8 @@ class WebSQLiteDatabase implements SQLiteDatabaseLike {
         locations_cache: locations_cache ?? null,
         shelf: shelf ?? 'Inbox',
         tags: tags ? (typeof tags === 'string' ? tags.split(',') : tags) : [],
+        is_deleted: false,
+        deleted_at: null,
         created_at: created_at ?? Date.now(),
         updated_at: updated_at ?? Date.now(),
       };
