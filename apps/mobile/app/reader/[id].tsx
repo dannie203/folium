@@ -38,7 +38,7 @@ import {
   flushSyncImmediately,
 } from '../../src/services/syncService';
 import { SyncStatusBadge } from '../../src/components/SyncStatusBadge';
-import { colors, readerThemes, typography, spacing, radius } from '../../src/theme/tokens';
+import { colors, typography, spacing, radius } from '../../src/theme/tokens';
 import {
   ArrowLeftIcon,
   ChevronLeftIcon,
@@ -443,7 +443,7 @@ export default function ReaderScreen() {
     );
   }
 
-  const currentThemeTokens = readerThemes[settings.theme] || readerThemes.dark;
+  const currentThemeTokens = colors.reader[settings.theme] || colors.reader.dark;
   const isDark = settings.theme === 'dark';
   const barBg = currentThemeTokens.surface;
   const barText = currentThemeTokens.text;
@@ -740,7 +740,7 @@ export default function ReaderScreen() {
               bookmarks.length === 0 ? (
                 <View style={styles.emptyContainer}>
                   <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Chưa có dấu trang nào</Text>
-                  <Text style={{ color: colors.textTertiary, fontSize: 12, marginTop: 4 }}>
+                  <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
                     Nhấn biểu tượng dấu trang trên thanh công cụ để đánh dấu trang hiện tại
                   </Text>
                 </View>
@@ -758,7 +758,7 @@ export default function ReaderScreen() {
                         }}
                       >
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                          <BookmarkIcon size={14} color={colors.accentAmber} filled />
+                          <BookmarkIcon size={14} color={colors.statusSyncing} filled />
                           <Text style={[styles.annotationTitle, { color: barText, marginBottom: 0 }]} numberOfLines={1}>
                             {item.title}
                           </Text>
@@ -1031,10 +1031,9 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   topBar: {
-    position: 'absolute',
-    top: Platform.OS === 'web' ? 14 : 44,
-    left: 16,
-    right: 16,
+    marginTop: Platform.OS === 'web' ? 14 : 0,
+    marginHorizontal: 16,
+    width: '90%',
     maxWidth: 860,
     alignSelf: 'center',
     flexDirection: 'row',
@@ -1044,8 +1043,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
-    zIndex: 50,
-  } as any,
+  },
   iconButton: {
     padding: 8,
   },
@@ -1067,11 +1065,11 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   bottomBar: {
-    position: 'absolute',
-    bottom: Platform.OS === 'web' ? 16 : 24,
-    left: 16,
-    right: 16,
+    marginTop: 12,
+    marginBottom: Platform.OS === 'web' ? 16 : 24,
+    marginHorizontal: 16,
     maxWidth: 480,
+    width: '90%',
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
@@ -1081,8 +1079,7 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     borderWidth: 1,
     boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
-    zIndex: 50,
-  } as any,
+  },
   pageButton: {
     flexDirection: 'row',
     alignItems: 'center',
