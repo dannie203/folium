@@ -7,6 +7,8 @@
     "dev:web": "pnpm --filter @folium/mobile start --web",
     "dev:worker": "pnpm --filter @folium/worker dev",
     "typecheck": "pnpm -r exec tsc --noEmit",
+    "test": "node --test tests/security/**/*.test.mjs",
+    "test:security": "node --test tests/security/**/*.test.mjs",
     "d1:migrate:local": "pnpm --filter @folium/worker d1:migrate:local"
   },
   "devDependencies": {

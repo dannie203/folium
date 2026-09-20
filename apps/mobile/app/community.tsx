@@ -32,6 +32,7 @@ import {
   FoliumLeafIcon,
   CheckIcon,
   FolderIcon,
+  ChevronLeftIcon,
 } from '../src/components/icons/Icons';
 
 type CommunityTab = 'opds' | 'drive' | 'custom';
@@ -141,14 +142,30 @@ export default function CommunityBookshelfScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: 'Tủ Sách Cộng Đồng & OPDS',
-          headerShown: true,
-          headerStyle: { backgroundColor: colors.bgBase },
-          headerTintColor: colors.textPrimary,
-        }}
-      />
+      <Stack.Screen options={{ headerShown: false }} />
+
+      {/* Top Navigation Bar */}
+      <View style={styles.navBar}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          activeOpacity={0.7}
+          onPress={() => router.back()}
+          accessibilityLabel="Quay lại"
+        >
+          <ChevronLeftIcon size={18} color={colors.textPrimary} />
+          <Text style={styles.backBtnText}>Tủ sách</Text>
+        </TouchableOpacity>
+
+        <View style={styles.navCenter}>
+          <Text style={styles.navTitle} numberOfLines={1}>
+            Cộng Đồng & Nguồn Sách OPDS
+          </Text>
+        </View>
+
+        <View style={styles.navRight}>
+          <FoliumLeafIcon size={20} color={colors.accentPrimary} />
+        </View>
+      </View>
 
       {/* Navigation Tab Bar */}
       <View style={styles.tabBarContainer}>
@@ -439,6 +456,42 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.bgBase,
+  },
+  navBar: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+    backgroundColor: colors.bgSurface,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingRight: 10,
+  },
+  backBtnText: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.body,
+    fontWeight: typography.fontWeight.medium,
+  },
+  navCenter: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  navTitle: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  navRight: {
+    width: 60,
+    alignItems: 'flex-end',
   },
   tabBarContainer: {
     backgroundColor: colors.bgSurface,

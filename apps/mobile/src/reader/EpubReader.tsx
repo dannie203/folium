@@ -196,6 +196,11 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
 
     const handleWebWindowMessage = (event: MessageEvent) => {
+      // Security: Authenticate sender to prevent spoofing from other frames/windows
+      if (webIframeRef.current && event.source !== webIframeRef.current.contentWindow) {
+        return;
+      }
+
       try {
         let data = event.data;
         if (typeof data === 'string') {
@@ -238,6 +243,7 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
         {React.createElement('iframe', {
           ref: webIframeRef,
           srcDoc: EPUB_VIEWER_HTML,
+          sandbox: 'allow-scripts allow-same-origin',
           onLoad: () => {
             console.log('[EpubReader] iframe onLoad fired');
             isViewerReadyRef.current = true;
@@ -266,9 +272,9 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
           style: styles.webview,
           javaScriptEnabled: true,
           domStorageEnabled: true,
-          allowFileAccess: true,
-          allowUniversalAccessFromFileURLs: true,
-          mixedContentMode: 'always',
+          allowFileAccess: false,
+          allowUniversalAccessFromFileURLs: false,
+          mixedContentMode: 'never',
           scrollEnabled: false,
           bounces: false,
           onMessage: handleMessage,

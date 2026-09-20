@@ -12,6 +12,8 @@ import {
 import { useRouter, Stack } from 'expo-router';
 import { verifyCryptoVault } from '../src/services/cryptoService';
 import { STANDALONE_AUDIT_SNIPPET } from '../src/services/securityProofSnippet';
+import { colors, typography, spacing, radius } from '../src/theme/tokens';
+import { ChevronLeftIcon, FoliumLeafIcon } from '../src/components/icons/Icons';
 
 export default function SecurityProofScreen() {
   const router = useRouter();
@@ -47,98 +49,160 @@ export default function SecurityProofScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ title: 'Kiểm Toán & Bảo Mật Zero-Knowledge', headerShown: true }} />
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.badge}>Mã Nguồn Mở • Nguyên Lý Kerckhoffs</Text>
-          <Text style={styles.title}>Kiến Trúc Bảo Mật & Chứng Minh Mật Mã</Text>
-          <Text style={styles.subtitle}>
-            Bảo mật thực sự không đến từ sự giấu giếm (Security through obscurity), mà đến từ toán học
-            và thiết kế mở. Folium công khai toàn bộ cơ chế mã hóa để cộng đồng kỹ sư kiểm toán độc lập.
-          </Text>
-        </View>
+      <Stack.Screen options={{ headerShown: false }} />
 
-        {/* Live Interactive Benchmark */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>1. Kiểm Tra Mật Mã Thời Gian Thực (Live Inspector)</Text>
-          <Text style={styles.paragraph}>
-            Bấm nút bên dưới để trình duyệt của bạn trực tiếp thực thi thuật toán dẫn xuất khóa PBKDF2
-            (100.000 vòng lặp SHA-256) và mã hóa AES-256-GCM qua WebCrypto SubtleCrypto API:
-          </Text>
-
-          <TouchableOpacity
-            style={[styles.benchmarkBtn, isRunningProof && styles.btnDisabled]}
-            onPress={handleRunLiveProof}
-            disabled={isRunningProof}
-          >
-            {isRunningProof ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text style={styles.benchmarkBtnText}>⚡ Chạy Kiểm Tra Mã Hóa Ngay</Text>
-            )}
-          </TouchableOpacity>
-
-          {proofResult && (
-            <View style={styles.proofCard}>
-              <View style={styles.proofHeaderRow}>
-                <Text style={styles.proofBadgePass}>✅ VERIFICATION PASSED</Text>
-                <Text style={styles.proofTime}>{proofResult.durationMs} ms</Text>
-              </View>
-              <Text style={styles.proofDesc}>
-                Dữ liệu truyền lên Cloudflare D1 là chuỗi Base64 mã hóa hoàn toàn mù (Blind Ciphertext):
-              </Text>
-              <Text style={styles.codeSnippet}>
-                {JSON.stringify(proofResult.samplePayload, null, 2)}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Threat Model Breakdown */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>2. Ma Trận Phòng Vệ Mối Đe Dọa (Threat Model)</Text>
-          
-          <View style={styles.threatRow}>
-            <Text style={styles.threatName}>Máy chủ Cloudflare bị tấn công</Text>
-            <Text style={styles.threatDefense}>
-              🛡️ Kẻ tấn công chỉ thu được các khối Ciphertext rác vô nghĩa. Không có khóa giải mã (Key chỉ nằm trên máy bạn).
-            </Text>
-          </View>
-
-          <View style={styles.threatRow}>
-            <Text style={styles.threatName}>Mã độc JS nhúng trong sách EPUB</Text>
-            <Text style={styles.threatDefense}>
-              🛡️ Reader WebView / Iframe được cô lập nghiêm ngặt với <Text style={styles.inlineCode}>sandbox=&quot;allow-same-origin&quot;</Text> và CSP chặn triệt để đọc IndexedDB hay token Google.
-            </Text>
-          </View>
-
-          <View style={styles.threatRow}>
-            <Text style={styles.threatName}>Trát lệnh pháp lý / Yêu cầu dữ liệu</Text>
-            <Text style={styles.threatDefense}>
-              🛡️ Không thể tuân thủ vì nhà phát triển không sở hữu khóa giải mã hay nội dung sách của người dùng (Zero-Knowledge).
-            </Text>
-          </View>
-        </View>
-
-        {/* Standalone Snippet */}
-        <View style={styles.section}>
-          <View style={styles.snippetHeaderRow}>
-            <Text style={styles.sectionTitle}>3. Đoạn Mã Kiểm Toán Độc Lập (Audit Snippet)</Text>
-            <TouchableOpacity style={styles.copyBtn} onPress={handleCopySnippet}>
-              <Text style={styles.copyBtnText}>{copied ? '✓ Đã sao chép' : 'Sao chép'}</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.paragraph}>
-            Bất kỳ kỹ sư nào cũng có thể mở DevTools Console (F12) trên Chrome/Firefox/Safari hoặc chạy trong Node.js để tự kiểm chứng:
-          </Text>
-          <View style={styles.codeBlock}>
-            <Text style={styles.codeText}>{STANDALONE_AUDIT_SNIPPET}</Text>
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backBtnText}>← Quay lại Thư viện</Text>
+      {/* Top Document Navigation Bar */}
+      <View style={styles.navBar}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          activeOpacity={0.7}
+          onPress={() => router.back()}
+          accessibilityLabel="Quay lại"
+        >
+          <ChevronLeftIcon size={18} color={colors.textPrimary} />
+          <Text style={styles.backBtnText}>Tủ sách</Text>
         </TouchableOpacity>
+
+        <View style={styles.navCenter}>
+          <Text style={styles.navTitle} numberOfLines={1}>
+            Kiểm Toán & Bảo Mật ZK
+          </Text>
+        </View>
+
+        <View style={styles.navRight}>
+          <FoliumLeafIcon size={20} color={colors.accentPrimary} />
+        </View>
+      </View>
+
+      {/* Main Document Body */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.article}>
+          {/* Header Section */}
+          <View style={styles.header}>
+            <View style={styles.badgeRow}>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>MÃ NGUỒN MỞ • NGUYÊN LÝ KERCKHOFFS</Text>
+              </View>
+              <Text style={styles.metaText}>Cập nhật: 19/09/2026</Text>
+            </View>
+            <Text style={styles.title}>Kiến Trúc Bảo Mật & Chứng Minh Mật Mã</Text>
+            <Text style={styles.subtitle}>
+              Bảo mật thực thụ không đến từ sự giấu giếm (Security through Obscurity), mà đến từ toán học
+              và thiết kế mở. Folium công khai toàn bộ thuật toán để cộng đồng kỹ sư kiểm toán độc lập.
+            </Text>
+          </View>
+
+          {/* Section 1: Live Benchmark */}
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionNumber}>
+                <Text style={styles.sectionNumberText}>01</Text>
+              </View>
+              <Text style={styles.sectionTitle}>Kiểm Tra Mật Mã Thời Gian Thực (Live Inspector)</Text>
+            </View>
+            <Text style={styles.paragraph}>
+              Bấm nút bên dưới để trình duyệt của bạn trực tiếp thực thi thuật toán dẫn xuất khoá PBKDF2
+              (100.000 vòng lặp SHA-256) và mã hoá AES-256-GCM qua WebCrypto SubtleCrypto API chuẩn W3C:
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.benchmarkBtn, isRunningProof && styles.btnDisabled]}
+              onPress={handleRunLiveProof}
+              disabled={isRunningProof}
+              activeOpacity={0.85}
+            >
+              {isRunningProof ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.benchmarkBtnText}>⚡ Chạy Kiểm Tra Mã Hoá Ngay</Text>
+              )}
+            </TouchableOpacity>
+
+            {proofResult && (
+              <View style={styles.proofCard}>
+                <View style={styles.proofHeaderRow}>
+                  <Text style={styles.proofBadgePass}>✓ XÁC THỰC THÀNH CÔNG (PASSED)</Text>
+                  <Text style={styles.proofTime}>{proofResult.durationMs} ms</Text>
+                </View>
+                <Text style={styles.proofDesc}>
+                  Dữ liệu truyền lên Cloudflare D1 là chuỗi Base64 mã hoá hoàn toàn mù (Blind Ciphertext):
+                </Text>
+                <Text style={styles.codeSnippet}>
+                  {JSON.stringify(proofResult.samplePayload, null, 2)}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Section 2: Threat Matrix */}
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionNumber}>
+                <Text style={styles.sectionNumberText}>02</Text>
+              </View>
+              <Text style={styles.sectionTitle}>Ma Trận Phòng Vệ Mối Đe Dọa (Threat Model)</Text>
+            </View>
+
+            <View style={styles.threatList}>
+              <View style={styles.threatItem}>
+                <Text style={styles.threatName}>Máy chủ Cloudflare bị thâm nhập</Text>
+                <Text style={styles.threatDefense}>
+                  Kẻ tấn công chỉ thu được các khối Ciphertext rác vô nghĩa. Không có khoá giải mã (Khoá mã hoá
+                  chỉ lưu cục bộ trên thiết bị của bạn).
+                </Text>
+              </View>
+
+              <View style={styles.threatItem}>
+                <Text style={styles.threatName}>Mã độc JS nhúng trong sách EPUB</Text>
+                <Text style={styles.threatDefense}>
+                  Reader WebView / Iframe được cô lập nghiêm ngặt với Content Security Policy (CSP) chặt chẽ, chặn
+                  triệt để việc đọc IndexedDB hay token Google.
+                </Text>
+              </View>
+
+              <View style={styles.threatItem}>
+                <Text style={styles.threatName}>Trát lệnh pháp lý / Yêu cầu dữ liệu</Text>
+                <Text style={styles.threatDefense}>
+                  Không thể tuân thủ vì nhà phát triển không sở hữu khoá giải mã hay bản rõ nội dung sách của người
+                  dùng (Zero-Knowledge tuyệt đối).
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Section 3: Audit Snippet */}
+          <View style={styles.sectionCard}>
+            <View style={styles.snippetHeaderRow}>
+              <View style={styles.sectionHeaderNoMargin}>
+                <View style={styles.sectionNumber}>
+                  <Text style={styles.sectionNumberText}>03</Text>
+                </View>
+                <Text style={styles.sectionTitle}>Đoạn Mã Kiểm Toán Độc Lập (Audit Snippet)</Text>
+              </View>
+
+              <TouchableOpacity style={styles.copyBtn} onPress={handleCopySnippet} activeOpacity={0.8}>
+                <Text style={styles.copyBtnText}>{copied ? '✓ Đã sao chép' : 'Sao chép mã'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.paragraph}>
+              Bất kỳ kỹ sư nào cũng có thể mở DevTools Console (F12) trên Chrome/Firefox hoặc chạy trong Node.js để tự kiểm chứng:
+            </Text>
+
+            <View style={styles.codeBlock}>
+              <Text style={styles.codeText}>{STANDALONE_AUDIT_SNIPPET}</Text>
+            </View>
+          </View>
+
+          {/* Bottom Back Button */}
+          <TouchableOpacity
+            style={styles.bottomBackBtn}
+            activeOpacity={0.8}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.bottomBackBtnText}>← Quay lại Thư viện</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -147,177 +211,266 @@ export default function SecurityProofScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090B',
+    backgroundColor: colors.bgBase,
   },
-  content: {
-    padding: 20,
-    maxWidth: 760,
-    alignSelf: 'center',
+  navBar: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+    backgroundColor: colors.bgSurface,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingRight: 10,
+  },
+  backBtnText: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.body,
+    fontWeight: typography.fontWeight.medium,
+  },
+  navCenter: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  navTitle: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  navRight: {
+    width: 60,
+    alignItems: 'flex-end',
+  },
+  scrollContent: {
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+  },
+  article: {
     width: '100%',
+    maxWidth: 760,
   },
   header: {
-    marginBottom: 28,
+    marginBottom: spacing.xxl,
+    paddingBottom: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
   },
   badge: {
-    color: '#38BDF8',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    backgroundColor: 'rgba(99, 102, 241, 0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.25)',
+  },
+  badgeText: {
+    color: '#A5B4FC',
+    fontSize: 10,
+    fontWeight: typography.fontWeight.bold,
     letterSpacing: 0.5,
-    marginBottom: 8,
+  },
+  metaText: {
+    color: colors.textTertiary,
+    fontSize: typography.fontSize.micro,
   },
   title: {
-    color: '#FAFAFA',
-    fontSize: 26,
-    fontWeight: '800',
-    marginBottom: 12,
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.display,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: -0.5,
+    marginBottom: spacing.sm,
+    lineHeight: typography.lineHeight.display,
   },
   subtitle: {
-    color: '#A1A1AA',
-    fontSize: 15,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.body,
     lineHeight: 22,
   },
-  section: {
-    marginBottom: 24,
-    backgroundColor: '#18181B',
-    borderRadius: 12,
-    padding: 18,
+  sectionCard: {
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#27272A',
+    borderColor: colors.borderSubtle,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: spacing.md,
+  },
+  sectionHeaderNoMargin: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  snippetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: spacing.md,
+  },
+  sectionNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(99, 102, 241, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.3)',
+  },
+  sectionNumberText: {
+    color: '#A5B4FC',
+    fontSize: 12,
+    fontWeight: typography.fontWeight.bold,
   },
   sectionTitle: {
-    color: '#FAFAFA',
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 10,
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.titleMd,
+    fontWeight: typography.fontWeight.bold,
   },
   paragraph: {
-    color: '#D4D4D8',
-    fontSize: 14,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.body,
     lineHeight: 22,
-    marginBottom: 14,
+    marginBottom: spacing.md,
   },
   benchmarkBtn: {
-    backgroundColor: '#4F46E5',
-    borderRadius: 8,
+    backgroundColor: colors.accentPrimary,
+    borderRadius: radius.md,
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   btnDisabled: {
     opacity: 0.6,
   },
   benchmarkBtnText: {
     color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: typography.fontSize.body,
+    fontWeight: typography.fontWeight.semibold,
   },
   proofCard: {
-    backgroundColor: '#09090B',
-    borderRadius: 8,
-    padding: 14,
+    backgroundColor: colors.bgElevated,
+    borderRadius: radius.md,
+    padding: spacing.md,
     borderWidth: 1,
-    borderColor: '#22C55E',
-    marginTop: 8,
+    borderColor: colors.borderMedium,
+    marginTop: spacing.sm,
   },
   proofHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
   },
   proofBadgePass: {
-    color: '#22C55E',
-    fontWeight: '700',
-    fontSize: 13,
+    color: colors.statusSuccess,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.bold,
   },
   proofTime: {
-    color: '#A1A1AA',
-    fontSize: 12,
-    fontFamily: 'monospace',
+    color: colors.textTertiary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
   },
   proofDesc: {
-    color: '#D4D4D8',
-    fontSize: 13,
-    marginBottom: 8,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
+    marginBottom: spacing.xs,
   },
   codeSnippet: {
-    fontFamily: 'monospace',
-    color: '#6EE7B7',
-    fontSize: 11,
-    lineHeight: 16,
-    backgroundColor: '#18181B',
-    padding: 10,
-    borderRadius: 6,
+    color: '#A5B4FC',
+    fontSize: typography.fontSize.micro,
+    fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
+    backgroundColor: colors.bgBase,
+    padding: spacing.sm,
+    borderRadius: radius.xs,
   },
-  threatRow: {
-    backgroundColor: '#27272A',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
+  threatList: {
+    gap: spacing.md,
+  },
+  threatItem: {
+    backgroundColor: colors.bgElevated,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accentPrimary,
   },
   threatName: {
-    color: '#FAFAFA',
-    fontSize: 14,
-    fontWeight: '600',
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.body,
+    fontWeight: typography.fontWeight.semibold,
     marginBottom: 4,
   },
   threatDefense: {
-    color: '#A1A1AA',
-    fontSize: 13,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
     lineHeight: 18,
   },
-  inlineCode: {
-    fontFamily: 'monospace',
-    color: '#F472B6',
-    backgroundColor: '#18181B',
-    paddingHorizontal: 4,
-    borderRadius: 4,
-  },
-  snippetHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
   copyBtn: {
-    backgroundColor: '#27272A',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 6,
+    backgroundColor: 'rgba(99, 102, 241, 0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.3)',
   },
   copyBtnText: {
-    color: '#A1A1AA',
-    fontSize: 12,
-    fontWeight: '500',
+    color: '#A5B4FC',
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
   },
   codeBlock: {
-    backgroundColor: '#09090B',
-    borderRadius: 8,
-    padding: 12,
-    maxHeight: 260,
+    backgroundColor: colors.bgBase,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#27272A',
+    borderColor: colors.borderSubtle,
+    padding: spacing.md,
+    maxHeight: 240,
+    overflow: 'hidden',
   },
   codeText: {
-    fontFamily: 'monospace',
-    color: '#93C5FD',
+    color: '#E4E4E7',
     fontSize: 11,
+    fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
     lineHeight: 16,
   },
-  backBtn: {
+  bottomBackBtn: {
     alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 32,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    backgroundColor: '#27272A',
-    borderRadius: 8,
+    marginTop: spacing.md,
+    marginBottom: spacing.xxl,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
   },
-  backBtnText: {
-    color: '#FAFAFA',
-    fontSize: 14,
-    fontWeight: '600',
+  bottomBackBtnText: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
   },
 });

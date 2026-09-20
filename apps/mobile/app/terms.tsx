@@ -6,83 +6,167 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
+import { colors, typography, spacing, radius } from '../src/theme/tokens';
+import { ChevronLeftIcon, FoliumLeafIcon } from '../src/components/icons/Icons';
 
 export default function TermsAndDMCAScreen() {
   const router = useRouter();
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ title: 'Điều Khoản & DMCA Safe Harbor', headerShown: true }} />
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.badge}>Pháp lý • Miễn trừ trách nhiệm DMCA § 512</Text>
-          <Text style={styles.title}>Điều Khoản Dịch Vụ & Bản Quyền</Text>
-          <Text style={styles.subtitle}>
-            Folium là công cụ phần mềm đọc sách mã nguồn mở độc lập. Chúng tôi tuân thủ nghiêm ngặt
-            các quy định quốc tế về bản quyền số và quyền sở hữu trí tuệ.
-          </Text>
-        </View>
+      <Stack.Screen options={{ headerShown: false }} />
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>1. Bản chất Phần mềm: Trình đọc Trung lập (Neutral Utility)</Text>
-          <Text style={styles.paragraph}>
-            Folium được thiết kế tương tự như một trình duyệt web (Google Chrome, Firefox) hoặc một
-            trình phát đa phương tiện (VLC Media Player). Ứng dụng cung cấp giao diện hiển thị tài
-            liệu cục bộ (EPUB, PDF) do người dùng tự nạp vào.
-          </Text>
-          <Text style={styles.paragraph}>
-            Đội ngũ phát triển Folium <Text style={styles.bold}>KHÔNG sở hữu, KHÔNG phân phối, KHÔNG tải lên và KHÔNG lưu trữ</Text> bất kỳ tác phẩm sách thương mại có bản quyền nào trên các máy chủ của chúng tôi.
-          </Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>2. Tuyên bố Miễn trừ Trách nhiệm DMCA (Safe Harbor Compliance)</Text>
-          <Text style={styles.paragraph}>
-            Theo Đạo luật Bản quyền Kỹ thuật số Thiên niên kỷ (Digital Millennium Copyright Act - 17 U.S.C. § 512)
-            và các điều ước quốc tế liên quan:
-          </Text>
-          <Text style={styles.paragraph}>
-            Folium được miễn trừ trách nhiệm pháp lý đối với nội dung mà người dùng tự lưu trữ trên
-            bộ nhớ thiết bị cá nhân hoặc tài khoản Google Drive cá nhân của họ. Chúng tôi áp dụng kiến
-            trúc Zero-Knowledge, do đó hoàn toàn không thể can thiệp, duyệt hay xem nội dung sách của
-            người dùng.
-          </Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>3. Quy trình Tiếp nhận Khiếu nại (Notice-and-Takedown)</Text>
-          <Text style={styles.paragraph}>
-            Nếu bạn là chủ sở hữu quyền tác giả hoặc đại diện pháp lý và nhận thấy có bất kỳ đường
-            dẫn nguồn mở hoặc mục lục công quyền nào trên trang cộng đồng vi phạm bản quyền của bạn,
-            vui lòng gửi văn bản thông báo gỡ bỏ (Takedown Notice) bao gồm:
-          </Text>
-          <Text style={styles.bullet}>1. Chữ ký vật lý hoặc điện tử của chủ sở hữu bản quyền.</Text>
-          <Text style={styles.bullet}>2. Mô tả rõ ràng về tác phẩm bị nghi ngờ xâm phạm.</Text>
-          <Text style={styles.bullet}>3. Đường dẫn URL cụ thể cần kiểm tra hoặc gỡ bỏ.</Text>
-          <Text style={styles.bullet}>4. Thông tin liên hệ (Email, số điện thoại, địa chỉ).</Text>
-          <View style={styles.contactBox}>
-            <Text style={styles.contactLabel}>Đầu mối Tiếp nhận Bản quyền (DMCA Designated Agent):</Text>
-            <Text style={styles.contactEmail}>dmca@aki.is-a.dev • hoặc qua GitHub Repository Issues</Text>
-          </View>
-          <Text style={styles.paragraph}>
-            Chúng tôi cam kết phản hồi và xử lý gỡ bỏ các liên kết vi phạm trong vòng 48–72 giờ làm việc.
-          </Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>4. Miễn trừ Bảo đảm (No Warranty)</Text>
-          <Text style={styles.paragraph}>
-            Phần mềm được phát hành theo giấy phép mã nguồn mở phi lợi nhuận "NGUYÊN TRẠNG" (AS IS).
-            Đội ngũ phát triển không chịu trách nhiệm về bất kỳ tổn thất dữ liệu cá nhân nào phát sinh
-            trong quá trình sử dụng.
-          </Text>
-        </View>
-
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backBtnText}>← Quay lại Thư viện</Text>
+      {/* Top Document Navigation Bar */}
+      <View style={styles.navBar}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          activeOpacity={0.7}
+          onPress={() => router.back()}
+          accessibilityLabel="Quay lại"
+        >
+          <ChevronLeftIcon size={18} color={colors.textPrimary} />
+          <Text style={styles.backBtnText}>Tủ sách</Text>
         </TouchableOpacity>
+
+        <View style={styles.navCenter}>
+          <Text style={styles.navTitle} numberOfLines={1}>
+            Điều Khoản Dịch Vụ & DMCA
+          </Text>
+        </View>
+
+        <View style={styles.navRight}>
+          <FoliumLeafIcon size={20} color={colors.accentPrimary} />
+        </View>
+      </View>
+
+      {/* Main Document Body */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.article}>
+          {/* Header Section */}
+          <View style={styles.header}>
+            <View style={styles.badgeRow}>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>PHÁP LÝ • DMCA § 512</Text>
+              </View>
+              <Text style={styles.metaText}>Cập nhật: 19/09/2026</Text>
+            </View>
+            <Text style={styles.title}>Điều Khoản Dịch Vụ & Bản Quyền</Text>
+            <Text style={styles.subtitle}>
+              Folium là công cụ đọc sách điện tử mã nguồn mở, hoạt động theo mô hình Local-First và Zero-Knowledge.
+              Chúng tôi tôn trọng quyền tác giả và tuân thủ các quy chuẩn bảo vệ bản quyền quốc tế.
+            </Text>
+          </View>
+
+          {/* Section 1 */}
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionNumber}>
+                <Text style={styles.sectionNumberText}>01</Text>
+              </View>
+              <Text style={styles.sectionTitle}>Bản chất Phần mềm: Trình Đọc Trung Lập</Text>
+            </View>
+            <Text style={styles.paragraph}>
+              Folium hoạt động tương tự như một trình duyệt web (Chrome, Firefox) hoặc trình phát đa phương tiện
+              (VLC Media Player). Ứng dụng cung cấp giao diện hiển thị tài liệu cục bộ (EPUB, PDF) do người dùng
+              tự chọn nạp vào từ thiết bị cá nhân.
+            </Text>
+            <View style={styles.calloutBox}>
+              <Text style={styles.calloutText}>
+                Đội ngũ Folium <Text style={styles.boldWhite}>KHÔNG sở hữu, KHÔNG phân phối, KHÔNG tải lên và KHÔNG lưu trữ</Text> bất
+                kỳ tác phẩm sách thương mại có bản quyền nào trên máy chủ của chúng tôi.
+              </Text>
+            </View>
+          </View>
+
+          {/* Section 2 */}
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionNumber}>
+                <Text style={styles.sectionNumberText}>02</Text>
+              </View>
+              <Text style={styles.sectionTitle}>Miễn Trừ Trách Nhiệm DMCA (Safe Harbor)</Text>
+            </View>
+            <Text style={styles.paragraph}>
+              Căn cứ theo Đạo luật Bản quyền Kỹ thuật số Thiên niên kỷ (DMCA - 17 U.S.C. § 512) và các điều ước quốc tế liên quan:
+            </Text>
+            <Text style={styles.paragraph}>
+              Folium được miễn trừ trách nhiệm pháp lý đối với dữ liệu người dùng tự lưu trữ trên bộ nhớ máy hoặc
+              tài khoản Google Drive cá nhân của họ. Với kiến trúc Zero-Knowledge, toàn bộ dữ liệu đồng bộ được mã hoá
+              đầu cuối (E2EE), chúng tôi hoàn toàn không thể xem hoặc can thiệp vào nội dung sách của người dùng.
+            </Text>
+          </View>
+
+          {/* Section 3 */}
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionNumber}>
+                <Text style={styles.sectionNumberText}>03</Text>
+              </View>
+              <Text style={styles.sectionTitle}>Quy Trình Tiếp Nhận Khiếu Nại (Notice & Takedown)</Text>
+            </View>
+            <Text style={styles.paragraph}>
+              Nếu bạn là chủ sở hữu quyền tác giả hoặc đại diện pháp lý và phát hiện đường dẫn feed OPDS công khai
+              nào vi phạm bản quyền trên trang cộng đồng, vui lòng gửi văn bản yêu cầu gỡ bỏ bao gồm:
+            </Text>
+
+            <View style={styles.bulletList}>
+              <View style={styles.bulletItem}>
+                <View style={styles.bulletDot} />
+                <Text style={styles.bulletText}>Chữ ký điện tử hoặc chữ ký vật lý của người đại diện có thẩm quyền.</Text>
+              </View>
+              <View style={styles.bulletItem}>
+                <View style={styles.bulletDot} />
+                <Text style={styles.bulletText}>Mô tả chi tiết tác phẩm có bản quyền bị nghi ngờ xâm phạm.</Text>
+              </View>
+              <View style={styles.bulletItem}>
+                <View style={styles.bulletDot} />
+                <Text style={styles.bulletText}>Đường dẫn liên kết (URL / feed feed) cụ thể cần gỡ bỏ.</Text>
+              </View>
+              <View style={styles.bulletItem}>
+                <View style={styles.bulletDot} />
+                <Text style={styles.bulletText}>Thông tin liên hệ xác thực (Email, điện thoại, địa chỉ pháp lý).</Text>
+              </View>
+            </View>
+
+            <View style={styles.contactCard}>
+              <Text style={styles.contactTitle}>Đầu mối tiếp nhận khiếu nại bản quyền:</Text>
+              <Text style={styles.contactEmail}>dmca@aki.is-a.dev</Text>
+              <Text style={styles.contactNote}>
+                Hoặc tạo Issue trực tiếp tại kho mã nguồn GitHub: github.com/dannie203/folium
+              </Text>
+            </View>
+            <Text style={styles.paragraphFootnote}>
+              Chúng tôi cam kết rà soát và xử lý gỡ bỏ các liên kết vi phạm trong vòng 24–48 giờ làm việc.
+            </Text>
+          </View>
+
+          {/* Section 4 */}
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionNumber}>
+                <Text style={styles.sectionNumberText}>04</Text>
+              </View>
+              <Text style={styles.sectionTitle}>Miễn Trừ Bảo Đảm (No Warranty)</Text>
+            </View>
+            <Text style={styles.paragraph}>
+              Phần mềm được phát hành theo giấy phép mã nguồn mở phi thương mại "NGUYÊN TRẠNG" (AS IS). Đội ngũ phát
+              triển không chịu trách nhiệm đối với bất kỳ sự cố mất mát dữ liệu hoặc tranh chấp quyền tác giả nào phát
+              sinh do phía người dùng tự cấu hình.
+            </Text>
+          </View>
+
+          {/* Bottom Back Button */}
+          <TouchableOpacity
+            style={styles.bottomBackBtn}
+            activeOpacity={0.8}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.bottomBackBtnText}>← Quay lại Thư viện</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -91,99 +175,224 @@ export default function TermsAndDMCAScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#09090B',
+    backgroundColor: colors.bgBase,
   },
-  content: {
-    padding: 20,
-    maxWidth: 720,
-    alignSelf: 'center',
+  navBar: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+    backgroundColor: colors.bgSurface,
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingRight: 10,
+  },
+  backBtnText: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.body,
+    fontWeight: typography.fontWeight.medium,
+  },
+  navCenter: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  navTitle: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  navRight: {
+    width: 60,
+    alignItems: 'flex-end',
+  },
+  scrollContent: {
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+  },
+  article: {
     width: '100%',
+    maxWidth: 720,
   },
   header: {
-    marginBottom: 28,
+    marginBottom: spacing.xxl,
+    paddingBottom: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
   },
   badge: {
-    color: '#34D399',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    backgroundColor: 'rgba(99, 102, 241, 0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.25)',
+  },
+  badgeText: {
+    color: '#A5B4FC',
+    fontSize: 10,
+    fontWeight: typography.fontWeight.bold,
     letterSpacing: 0.5,
-    marginBottom: 8,
+  },
+  metaText: {
+    color: colors.textTertiary,
+    fontSize: typography.fontSize.micro,
   },
   title: {
-    color: '#FAFAFA',
-    fontSize: 26,
-    fontWeight: '800',
-    marginBottom: 12,
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.display,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: -0.5,
+    marginBottom: spacing.sm,
+    lineHeight: typography.lineHeight.display,
   },
   subtitle: {
-    color: '#A1A1AA',
-    fontSize: 15,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.body,
     lineHeight: 22,
   },
-  section: {
-    marginBottom: 24,
-    backgroundColor: '#18181B',
-    borderRadius: 12,
-    padding: 18,
+  sectionCard: {
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#27272A',
+    borderColor: colors.borderSubtle,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: spacing.md,
+  },
+  sectionNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.full,
+    backgroundColor: 'rgba(99, 102, 241, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.3)',
+  },
+  sectionNumberText: {
+    color: '#A5B4FC',
+    fontSize: 12,
+    fontWeight: typography.fontWeight.bold,
   },
   sectionTitle: {
-    color: '#FAFAFA',
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 10,
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.titleMd,
+    fontWeight: typography.fontWeight.bold,
   },
   paragraph: {
-    color: '#D4D4D8',
-    fontSize: 14,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.body,
     lineHeight: 22,
-    marginBottom: 10,
+    marginBottom: spacing.md,
   },
-  bullet: {
-    color: '#D4D4D8',
-    fontSize: 14,
-    lineHeight: 22,
-    marginLeft: 8,
-    marginBottom: 4,
+  paragraphFootnote: {
+    color: colors.textTertiary,
+    fontSize: typography.fontSize.caption,
+    lineHeight: 18,
+    marginTop: spacing.sm,
   },
-  bold: {
-    fontWeight: '700',
+  calloutBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.statusError,
+    padding: spacing.md,
+    marginTop: 4,
+  },
+  calloutText: {
+    color: '#FECACA',
+    fontSize: typography.fontSize.body,
+    lineHeight: 21,
+  },
+  boldWhite: {
+    fontWeight: typography.fontWeight.bold,
     color: '#FFFFFF',
   },
-  contactBox: {
-    backgroundColor: '#27272A',
-    borderRadius: 8,
-    padding: 12,
-    marginVertical: 10,
-    borderLeftWidth: 4,
-    borderLeftColor: '#34D399',
+  bulletList: {
+    gap: 8,
+    marginVertical: spacing.sm,
   },
-  contactLabel: {
-    color: '#A1A1AA',
-    fontSize: 12,
-    fontWeight: '600',
+  bulletItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  bulletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.accentPrimary,
+    marginTop: 8,
+  },
+  bulletText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.body,
+    lineHeight: 22,
+  },
+  contactCard: {
+    backgroundColor: colors.bgElevated,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderMedium,
+    padding: spacing.lg,
+    marginVertical: spacing.md,
+  },
+  contactTitle: {
+    color: colors.textTertiary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.medium,
     marginBottom: 4,
   },
   contactEmail: {
-    color: '#FAFAFA',
-    fontSize: 14,
-    fontFamily: 'monospace',
-    fontWeight: '700',
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.body,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0.5,
+    fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
+    marginBottom: 6,
   },
-  backBtn: {
+  contactNote: {
+    color: colors.textMuted,
+    fontSize: typography.fontSize.micro,
+  },
+  bottomBackBtn: {
     alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 32,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    backgroundColor: '#27272A',
-    borderRadius: 8,
+    marginTop: spacing.md,
+    marginBottom: spacing.xxl,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
   },
-  backBtnText: {
-    color: '#FAFAFA',
-    fontSize: 14,
-    fontWeight: '600',
+  bottomBackBtnText: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
   },
 });
