@@ -1,9 +1,11 @@
 import * as DocumentPicker from 'expo-document-picker';
+import * as ExpoCrypto from 'expo-crypto';
 import type { Book, BookFormat } from '@folium/shared';
 import { getDatabase } from '../db';
 import { saveBookFile, deleteBookFile } from './storage';
 import { queueMutation, triggerDebouncedSync } from './syncService';
 import { trashDriveBook } from './googleDriveService';
+import { validateBookUri } from './fileValidator';
 
 export interface BookWithProgress extends Book {
   progress_percentage: number;
@@ -14,11 +16,7 @@ export interface BookWithProgress extends Book {
  * Generate a random v4 UUID without external dependencies.
  */
 export function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  return ExpoCrypto.randomUUID();
 }
 
 /**
@@ -74,6 +72,8 @@ export async function importBookFromPicker(): Promise<BookWithProgress | null> {
   const { title, author, format } = parseBookMetadata(filename);
   const bookId = generateUUID();
   const now = Date.now();
+
+  await validateBookUri(asset.uri, format);
 
   // Save book file into app's persistent storage
   const localPath = await saveBookFile(bookId, asset.uri, format);
@@ -237,6 +237,23 @@ export async function deleteBook(
     drive_file_id?: string | null;
   }>('SELECT local_path, title, author, file_type, file_size, drive_file_id FROM books WHERE id = ?', [bookId]);
 
+  const progressRows = await db.getAllAsync<{ id: string; book_id: string }>(
+    'SELECT id, book_id FROM reading_progress WHERE book_id = ?',
+    [bookId]
+  );
+  const bookmarkRows = await db.getAllAsync<{ id: string; book_id: string }>(
+    'SELECT id, book_id FROM bookmarks WHERE book_id = ?',
+    [bookId]
+  );
+  const highlightRows = await db.getAllAsync<{ id: string; book_id: string }>(
+    'SELECT id, book_id FROM highlights WHERE book_id = ?',
+    [bookId]
+  );
+  const noteRows = await db.getAllAsync<{ id: string; book_id: string }>(
+    'SELECT id, book_id FROM notes WHERE book_id = ?',
+    [bookId]
+  );
+
   if (book && book.local_path) {
     await deleteBookFile(book.local_path, bookId);
   }
@@ -264,5 +281,33 @@ export async function deleteBook(
     file_size: book?.file_size || 0,
     is_deleted: true,
   });
+  for (const row of progressRows) {
+    await queueMutation('progress', row.id, {
+      id: row.id,
+      book_id: row.book_id,
+      is_deleted: true,
+    });
+  }
+  for (const row of bookmarkRows) {
+    await queueMutation('bookmark', row.id, {
+      id: row.id,
+      book_id: row.book_id,
+      is_deleted: true,
+    });
+  }
+  for (const row of highlightRows) {
+    await queueMutation('highlight', row.id, {
+      id: row.id,
+      book_id: row.book_id,
+      is_deleted: true,
+    });
+  }
+  for (const row of noteRows) {
+    await queueMutation('note', row.id, {
+      id: row.id,
+      book_id: row.book_id,
+      is_deleted: true,
+    });
+  }
   triggerDebouncedSync(30000);
 }

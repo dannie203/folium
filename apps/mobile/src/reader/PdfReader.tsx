@@ -43,7 +43,7 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
     if (Platform.OS === 'web') {
       const iframe = webIframeRef.current;
       if (iframe?.contentWindow) {
-        iframe.contentWindow.postMessage(message, '*');
+        iframe.contentWindow.postMessage(message, window.location.origin);
       }
     } else {
       nativeWebViewRef.current?.postMessage(JSON.stringify(message));
@@ -170,6 +170,10 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
 
     const handleWebWindowMessage = (event: MessageEvent) => {
+      if (webIframeRef.current && event.source !== webIframeRef.current.contentWindow) {
+        return;
+      }
+
       try {
         let data = event.data;
         if (typeof data === 'string') {
@@ -230,9 +234,9 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
           style: styles.webview,
           javaScriptEnabled: true,
           domStorageEnabled: true,
-          allowFileAccess: true,
-          allowUniversalAccessFromFileURLs: true,
-          mixedContentMode: 'always',
+          allowFileAccess: false,
+          allowUniversalAccessFromFileURLs: false,
+          mixedContentMode: 'never',
           scrollEnabled: false,
           bounces: false,
           onMessage: handleMessage,

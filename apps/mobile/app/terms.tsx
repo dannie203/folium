@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   metaText: {
-    color: colors.textTertiary,
+    color: colors.textMuted,
     fontSize: typography.fontSize.micro,
   },
   title: {
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   paragraphFootnote: {
-    color: colors.textTertiary,
+    color: colors.textMuted,
     fontSize: typography.fontSize.caption,
     lineHeight: 18,
     marginTop: spacing.sm,
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     marginVertical: spacing.md,
   },
   contactTitle: {
-    color: colors.textTertiary,
+    color: colors.textMuted,
     fontSize: typography.fontSize.caption,
     fontWeight: typography.fontWeight.medium,
     marginBottom: 4,

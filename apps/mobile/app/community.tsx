@@ -47,6 +47,7 @@ export default function CommunityBookshelfScreen() {
   );
   const [catalogBooks, setCatalogBooks] = useState<OpdsBookEntry[]>([]);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [importingBookId, setImportingBookId] = useState<string | null>(null);
   const [importedBookIds, setImportedBookIds] = useState<Set<string>>(new Set());
 
@@ -70,10 +71,13 @@ export default function CommunityBookshelfScreen() {
   const loadCatalog = async (source: CommunityCatalogSource) => {
     try {
       setIsLoadingCatalog(true);
+      setCatalogError(null);
       const books = await fetchOpdsCatalog(source);
       setCatalogBooks(books);
     } catch (err: any) {
       console.warn('Failed to load OPDS catalog:', err);
+      setCatalogBooks([]);
+      setCatalogError(err?.message || 'Không thể tải nguồn OPDS chính thức.');
     } finally {
       setIsLoadingCatalog(false);
     }
@@ -243,6 +247,16 @@ export default function CommunityBookshelfScreen() {
               <View style={styles.centerLoading}>
                 <ActivityIndicator size="large" color={colors.accentPrimary} />
                 <Text style={styles.loadingText}>Đang tải danh mục sách công quyền...</Text>
+              </View>
+            ) : catalogError ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateTitle}>Không thể tải catalog</Text>
+                <Text style={styles.emptyStateText}>{catalogError}</Text>
+              </View>
+            ) : catalogBooks.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateTitle}>Catalog chưa có sách</Text>
+                <Text style={styles.emptyStateText}>Nguồn chính thức hiện không trả về mục sách nào.</Text>
               </View>
             ) : (
               <View style={styles.bookList}>
@@ -573,6 +587,28 @@ const styles = StyleSheet.create({
   loadingText: {
     color: colors.textSecondary,
     fontSize: typography.fontSize.body,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: spacing.xl,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  emptyStateTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.titleMd,
+    fontWeight: typography.fontWeight.semibold,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  emptyStateText: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.body,
+    lineHeight: typography.lineHeight.body,
+    textAlign: 'center',
   },
   bookList: {
     gap: 12,

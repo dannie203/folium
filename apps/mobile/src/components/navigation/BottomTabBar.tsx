@@ -2,20 +2,22 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { colors, typography } from '../../theme/tokens';
 import { BookLibraryIcon, CommunityGlobeIcon, SettingsIcon } from '../icons/Icons';
+import { useI18n } from '../../i18n';
 
 interface BottomTabBarProps {
   activeTab?: 'shelf' | 'community' | 'sync';
   onOpenShelf?: () => void;
   onOpenCommunity: () => void;
-  onOpenSync: () => void;
+  onOpenSettings: () => void;
 }
 
 export function BottomTabBar({
   activeTab = 'shelf',
   onOpenShelf,
   onOpenCommunity,
-  onOpenSync,
+  onOpenSettings,
 }: BottomTabBarProps) {
+  const { t } = useI18n();
   return (
     <View style={styles.bottomTabBar}>
       <TouchableOpacity
@@ -33,7 +35,7 @@ export function BottomTabBar({
             activeTab === 'shelf' && styles.tabLabelActive,
           ]}
         >
-          Tủ sách
+          {t('bottom.shelf')}
         </Text>
       </TouchableOpacity>
 
@@ -52,14 +54,14 @@ export function BottomTabBar({
             activeTab === 'community' && styles.tabLabelActive,
           ]}
         >
-          Cộng đồng
+          {t('bottom.community')}
         </Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.tabItem}
         activeOpacity={0.8}
-        onPress={onOpenSync}
+        onPress={onOpenSettings}
       >
         <SettingsIcon
           size={20}
@@ -71,7 +73,7 @@ export function BottomTabBar({
             activeTab === 'sync' && styles.tabLabelActive,
           ]}
         >
-          Đồng bộ
+          {t('bottom.settings')}
         </Text>
       </TouchableOpacity>
     </View>

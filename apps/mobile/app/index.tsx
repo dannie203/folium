@@ -158,8 +158,6 @@ export default function BookshelfScreen() {
         isDesktop={isDesktop}
         isImporting={isImporting}
         onImport={handleImport}
-        onOpenDriveModal={() => setIsDriveModalOpen(true)}
-        onOpenCommunity={() => router.push('/community' as any)}
       />
 
       <ShelfFilterChips
@@ -209,7 +207,7 @@ export default function BookshelfScreen() {
         <BottomTabBar
           activeTab="shelf"
           onOpenCommunity={() => router.push('/community' as any)}
-          onOpenSync={() => setIsDriveModalOpen(true)}
+          onOpenSettings={() => router.push('/settings' as any)}
         />
       )}
     </View>
@@ -233,6 +231,7 @@ export default function BookshelfScreen() {
             onOpenTerms={() => router.push('/terms' as any)}
             onOpenSecurity={() => router.push('/security' as any)}
             onOpenPrivacy={() => router.push('/privacy' as any)}
+            onOpenSettings={() => router.push('/settings' as any)}
           />
           {mainBookshelfView}
         </View>
