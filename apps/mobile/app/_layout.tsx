@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { getDatabase } from '../src/db';
+import { I18nProvider } from '../src/i18n';
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
@@ -22,7 +23,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <I18nProvider>
       <StatusBar style="light" />
       <Stack
         screenOptions={{
@@ -45,7 +46,7 @@ export default function RootLayout() {
           }}
         />
       </Stack>
-    </>
+    </I18nProvider>
   );
 }
 

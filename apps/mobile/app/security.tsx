@@ -189,9 +189,13 @@ export default function SecurityProofScreen() {
               Bất kỳ kỹ sư nào cũng có thể mở DevTools Console (F12) trên Chrome/Firefox hoặc chạy trong Node.js để tự kiểm chứng:
             </Text>
 
-            <View style={styles.codeBlock}>
+            <ScrollView
+              style={styles.codeBlock}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+            >
               <Text style={styles.codeText}>{STANDALONE_AUDIT_SNIPPET}</Text>
-            </View>
+            </ScrollView>
           </View>
 
           {/* Bottom Back Button */}
@@ -285,7 +289,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   metaText: {
-    color: colors.textTertiary,
+    color: colors.textMuted,
     fontSize: typography.fontSize.micro,
   },
   title: {
@@ -391,7 +395,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
   },
   proofTime: {
-    color: colors.textTertiary,
+    color: colors.textMuted,
     fontSize: typography.fontSize.caption,
     fontWeight: typography.fontWeight.semibold,
   },
@@ -448,8 +452,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     padding: spacing.md,
-    maxHeight: 240,
-    overflow: 'hidden',
+    maxHeight: 360,
   },
   codeText: {
     color: '#E4E4E7',

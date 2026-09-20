@@ -19,6 +19,7 @@ import {
   signOut,
 } from '../services/authService';
 import { syncWithGoogleDrive } from '../services/googleDriveService';
+import { colors, typography, spacing, radius } from '../theme/tokens';
 
 interface DriveSyncModalProps {
   visible: boolean;
@@ -130,7 +131,7 @@ export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncMo
                   disabled={isAuthenticating}
                 >
                   {isAuthenticating ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <ActivityIndicator size="small" color={colors.textPrimary} />
                   ) : (
                     <Text style={styles.primaryBtnText}>Đăng nhập với Google</Text>
                   )}
@@ -155,7 +156,7 @@ export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncMo
                 >
                   {isSyncing ? (
                     <View style={styles.syncingRow}>
-                      <ActivityIndicator size="small" color="#FFFFFF" />
+                      <ActivityIndicator size="small" color={colors.textPrimary} />
                       <Text style={styles.syncBtnText}>Đang đồng bộ file sách...</Text>
                     </View>
                   ) : (
@@ -223,51 +224,51 @@ export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncMo
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: colors.bgOverlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    padding: spacing.lg,
   },
   modalCard: {
-    backgroundColor: '#18181B',
-    borderRadius: 16,
+    backgroundColor: colors.bgElevated,
+    borderRadius: radius.xl,
     width: '100%',
     maxWidth: 480,
     maxHeight: '90%',
     borderWidth: 1,
-    borderColor: '#27272A',
+    borderColor: colors.borderSubtle,
     overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#27272A',
+    borderBottomColor: colors.borderSubtle,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FAFAFA',
+    fontSize: typography.fontSize.titleLg,
+    fontWeight: typography.fontWeight.bold,
+    color: colors.textPrimary,
   },
   closeBtn: {
     padding: 4,
   },
   closeBtnText: {
-    color: '#A1A1AA',
-    fontSize: 18,
-    fontWeight: '600',
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.titleLg,
+    fontWeight: typography.fontWeight.semibold,
   },
   body: {
-    padding: 20,
+    padding: spacing.xl,
   },
   userCard: {
-    backgroundColor: '#27272A',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
   },
   userInfoRow: {
     flexDirection: 'row',
@@ -277,35 +278,35 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    marginRight: 14,
+    marginRight: spacing.md,
   },
   avatarPlaceholder: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.accentPrimary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '700',
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.titleLg,
+    fontWeight: typography.fontWeight.bold,
   },
   userMeta: {
     flex: 1,
   },
   userName: {
-    color: '#FAFAFA',
-    fontSize: 16,
-    fontWeight: '600',
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.titleMd,
+    fontWeight: typography.fontWeight.semibold,
   },
   userEmail: {
-    color: '#A1A1AA',
-    fontSize: 13,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
     marginTop: 2,
   },
   badgeDrive: {
-    color: '#34D399',
-    fontSize: 12,
-    fontWeight: '500',
+    color: colors.statusSuccess,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.medium,
     marginTop: 4,
   },
   signOutBtn: {
@@ -315,46 +316,46 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   signOutBtnText: {
-    color: '#F87171',
-    fontSize: 13,
-    fontWeight: '500',
+    color: colors.statusError,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.medium,
   },
   signInCard: {
-    backgroundColor: '#27272A',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
   },
   signInDesc: {
-    color: '#D4D4D8',
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 16,
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.body,
+    lineHeight: typography.lineHeight.body,
+    marginBottom: spacing.lg,
   },
   primaryBtn: {
-    backgroundColor: '#4F46E5',
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: colors.accentPrimary,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.titleMd,
+    fontWeight: typography.fontWeight.semibold,
   },
   sandboxBtn: {
-    marginTop: 10,
-    paddingVertical: 10,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#3F3F46',
+    borderColor: colors.borderMedium,
   },
   sandboxBtnText: {
-    color: '#A1A1AA',
-    fontSize: 13,
-    fontWeight: '500',
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.medium,
   },
   btnDisabled: {
     opacity: 0.6,
@@ -363,9 +364,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   syncBtn: {
-    backgroundColor: '#10B981',
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: colors.statusSuccess,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -375,9 +376,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   syncBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.titleMd,
+    fontWeight: typography.fontWeight.semibold,
   },
   resultBox: {
     backgroundColor: '#09090B',

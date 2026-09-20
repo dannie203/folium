@@ -12,10 +12,9 @@ import {
   FoliumLeafIcon,
   SearchIcon,
   PlusIcon,
-  CloudDriveIcon,
-  CommunityGlobeIcon,
 } from '../icons/Icons';
 import { SyncStatusBadge } from '../SyncStatusBadge';
+import { useI18n } from '../../i18n';
 
 interface BookshelfHeaderProps {
   searchQuery: string;
@@ -23,8 +22,6 @@ interface BookshelfHeaderProps {
   isDesktop: boolean;
   isImporting: boolean;
   onImport: () => void;
-  onOpenDriveModal: () => void;
-  onOpenCommunity: () => void;
 }
 
 export function BookshelfHeader({
@@ -33,23 +30,24 @@ export function BookshelfHeader({
   isDesktop,
   isImporting,
   onImport,
-  onOpenDriveModal,
-  onOpenCommunity,
 }: BookshelfHeaderProps) {
+  const { t } = useI18n();
   return (
     <View style={styles.headerBar}>
       <View style={styles.headerTopRow}>
-        <View style={styles.brandContainer}>
-          <FoliumLeafIcon size={24} color={colors.accentPrimary} />
-          <Text style={styles.brandTitle}>Folium</Text>
-        </View>
+        {!isDesktop && (
+          <View style={styles.brandContainer}>
+            <FoliumLeafIcon size={24} color={colors.accentPrimary} />
+            <Text style={styles.brandTitle}>Folium</Text>
+          </View>
+        )}
 
         {isDesktop && (
           <View style={styles.searchBox}>
             <SearchIcon size={16} color={colors.textSecondary} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Tìm theo tên sách, tác giả..."
+              placeholder={t('header.search')}
               placeholderTextColor={colors.textMuted}
               value={searchQuery}
               onChangeText={onSearchChange}
@@ -60,31 +58,7 @@ export function BookshelfHeader({
 
         {/* Action Controls */}
         <View style={styles.actionsGroup}>
-          <SyncStatusBadge theme="dark" compact={!isDesktop} />
-
-          {isDesktop && (
-            <>
-              <TouchableOpacity
-                style={styles.actionBtn}
-                activeOpacity={0.8}
-                onPress={onOpenDriveModal}
-                accessibilityLabel="Đồng bộ Google Drive"
-              >
-                <CloudDriveIcon size={16} color={colors.textSecondary} />
-                <Text style={styles.actionBtnText}>Drive</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.communityBtn}
-                activeOpacity={0.8}
-                onPress={onOpenCommunity}
-                accessibilityLabel="Tủ sách cộng đồng"
-              >
-                <CommunityGlobeIcon size={16} color="#A5B4FC" />
-                <Text style={styles.communityBtnText}>Cộng đồng</Text>
-              </TouchableOpacity>
-            </>
-          )}
+          {!isDesktop && <SyncStatusBadge theme="dark" compact />}
 
           <TouchableOpacity
             style={styles.importButton}
@@ -98,7 +72,7 @@ export function BookshelfHeader({
             ) : (
               <>
                 <PlusIcon size={14} color="#FFFFFF" />
-                {isDesktop && <Text style={styles.importButtonText}>Thêm sách</Text>}
+                {isDesktop && <Text style={styles.importButtonText}>{t('header.addBook')}</Text>}
               </>
             )}
           </TouchableOpacity>
@@ -110,7 +84,7 @@ export function BookshelfHeader({
           <SearchIcon size={16} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Tìm theo tên sách, tác giả..."
+            placeholder={t('header.search')}
             placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={onSearchChange}

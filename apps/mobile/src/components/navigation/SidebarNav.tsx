@@ -8,8 +8,10 @@ import {
   InboxTrayIcon,
   CommunityGlobeIcon,
   CloudDriveIcon,
+  SettingsIcon,
 } from '../icons/Icons';
 import { SyncStatusBadge } from '../SyncStatusBadge';
+import { useI18n } from '../../i18n';
 
 interface SidebarNavProps {
   selectedShelf: string;
@@ -25,6 +27,7 @@ interface SidebarNavProps {
   onOpenTerms: () => void;
   onOpenSecurity: () => void;
   onOpenPrivacy: () => void;
+  onOpenSettings: () => void;
 }
 
 export function SidebarNav({
@@ -41,7 +44,9 @@ export function SidebarNav({
   onOpenTerms,
   onOpenSecurity,
   onOpenPrivacy,
+  onOpenSettings,
 }: SidebarNavProps) {
+  const { t } = useI18n();
   return (
     <View style={styles.sidebar}>
       {/* Brand Header */}
@@ -56,7 +61,7 @@ export function SidebarNav({
       <ScrollView style={styles.navScroll} showsVerticalScrollIndicator={false}>
         {/* Main Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionHeading}>THƯ VIỆN</Text>
+          <Text style={styles.sectionHeading}>{t('nav.library')}</Text>
 
           <TouchableOpacity
             style={[
@@ -83,7 +88,7 @@ export function SidebarNav({
                 activeRoute === 'bookshelf' && selectedShelf === 'all' && styles.navLabelActive,
               ]}
             >
-              Tất cả sách
+              {t('nav.allBooks')}
             </Text>
             <View style={styles.countBadge}>
               <Text style={styles.countText}>{totalBooksCount}</Text>
@@ -108,14 +113,14 @@ export function SidebarNav({
                 activeRoute === 'community' && styles.navLabelActive,
               ]}
             >
-              Cộng đồng OPDS
+              {t('nav.community')}
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Shelves Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionHeading}>KỆ SÁCH</Text>
+          <Text style={styles.sectionHeading}>{t('nav.shelves')}</Text>
 
           <TouchableOpacity
             style={[
@@ -142,7 +147,7 @@ export function SidebarNav({
                 activeRoute === 'bookshelf' && selectedShelf === 'Inbox' && styles.navLabelActive,
               ]}
             >
-              Hộp thư đến
+              {t('nav.inbox')}
             </Text>
             <View style={styles.countBadge}>
               <Text style={styles.countText}>{inboxCount}</Text>
@@ -184,7 +189,7 @@ export function SidebarNav({
 
         {/* Sync & Cloud Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionHeading}>ĐỒNG BỘ & ĐÁM MÂY</Text>
+          <Text style={styles.sectionHeading}>{t('nav.syncCloud')}</Text>
 
           <TouchableOpacity
             style={styles.navItem}
@@ -192,12 +197,17 @@ export function SidebarNav({
             activeOpacity={0.75}
           >
             <CloudDriveIcon size={18} color={colors.textSecondary} />
-            <Text style={styles.navLabel}>Google Drive</Text>
+            <Text style={styles.navLabel}>{t('nav.googleDrive')}</Text>
           </TouchableOpacity>
 
           <View style={styles.syncStatusWrapper}>
             <SyncStatusBadge theme="dark" compact={false} />
           </View>
+
+          <TouchableOpacity style={styles.navItem} onPress={onOpenSettings} activeOpacity={0.75}>
+            <SettingsIcon size={18} color={colors.textSecondary} />
+            <Text style={styles.navLabel}>{t('nav.settings')}</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -250,7 +260,7 @@ const styles = StyleSheet.create({
   },
   brandSubtitle: {
     fontSize: 10,
-    color: colors.textTertiary,
+    color: colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     fontWeight: typography.fontWeight.medium,
@@ -266,7 +276,7 @@ const styles = StyleSheet.create({
   sectionHeading: {
     fontSize: 10,
     fontWeight: typography.fontWeight.bold,
-    color: colors.textTertiary,
+    color: colors.textMuted,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     paddingHorizontal: spacing.sm,
@@ -331,7 +341,7 @@ const styles = StyleSheet.create({
   },
   copyrightText: {
     fontSize: 10,
-    color: colors.textTertiary,
+    color: colors.textMuted,
     textAlign: 'center',
   },
 });
