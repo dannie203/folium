@@ -11,6 +11,8 @@ build/
 .DS_Store
 *.tsbuildinfo
 notes*
+review.md
+post-fix-review.md
 
 # Agent Rules & Directives (Local)
 AGENTS.md

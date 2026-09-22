@@ -1,10 +1,44 @@
 import React from 'react';
-import { Platform, View, Text, StyleSheet } from 'react-native';
+import { Platform } from 'react-native';
+import Svg, { Path, Circle, Line, Rect, Polyline, G } from 'react-native-svg';
 
 interface IconProps {
   size?: number;
   color?: string;
   strokeWidth?: number;
+}
+
+const TAG_MAP: Record<string, any> = {
+  path: Path,
+  circle: Circle,
+  line: Line,
+  rect: Rect,
+  polyline: Polyline,
+  g: G,
+};
+
+function convertNodeToNativeSvg(node: React.ReactNode): React.ReactNode {
+  if (!node || typeof node !== 'object') return node;
+  if (Array.isArray(node)) {
+    return node.map((child, idx) => {
+      const converted = convertNodeToNativeSvg(child);
+      return React.isValidElement(converted) ? React.cloneElement(converted, { key: idx }) : converted;
+    });
+  }
+  if (React.isValidElement(node)) {
+    const type = node.type;
+    if (type === React.Fragment) {
+      return React.Children.map(node.props.children, convertNodeToNativeSvg);
+    }
+    const NativeComponent = typeof type === 'string' ? TAG_MAP[type] : type;
+    if (NativeComponent) {
+      const convertedChildren = node.props.children
+        ? React.Children.map(node.props.children, convertNodeToNativeSvg)
+        : undefined;
+      return React.createElement(NativeComponent, node.props, convertedChildren);
+    }
+  }
+  return node;
 }
 
 function renderSvg(
@@ -33,11 +67,21 @@ function renderSvg(
     );
   }
 
-  // Native fallback container
+  // Native SVG rendering via react-native-svg
+  const nativeChildren = convertNodeToNativeSvg(paths);
   return (
-    <View style={[styles.fallbackContainer, { width: size, height: size }]}>
-      <Text style={{ color, fontSize: size * 0.7 }}>•</Text>
-    </View>
+    <Svg
+      width={size}
+      height={size}
+      viewBox={viewBox}
+      fill={fillRule === 'fill' ? color : 'none'}
+      stroke={fillRule === 'stroke' ? color : 'none'}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {nativeChildren}
+    </Svg>
   );
 }
 
@@ -345,11 +389,4 @@ export const TextAaIcon: React.FC<IconProps> = ({ size = 18, color = '#A1A1AA', 
     )
   );
 };
-
-const styles = StyleSheet.create({
-  fallbackContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
 

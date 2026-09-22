@@ -140,6 +140,7 @@ export interface AuthUser {
   name: string;
   picture?: string;
   accessToken: string;
+  idToken?: string;
   expiresAt: number; // UTC ms
 }
 

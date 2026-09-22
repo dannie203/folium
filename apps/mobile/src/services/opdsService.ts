@@ -27,44 +27,82 @@ export const OFFICIAL_COMMUNITY_CATALOGS: CommunityCatalogSource[] = [
   },
 ];
 
-/**
- * Lightweight XML string extractor without heavy external dependencies.
- */
-function extractXmlTag(xml: string, tag: string): string {
-  const regex = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i');
-  const match = xml.match(regex);
-  return match ? match[1].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').trim() : '';
+import { XMLParser } from 'fast-xml-parser';
+
+const xmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '@_',
+  textNodeName: '#text',
+  trimValues: true,
+  parseTagValue: false,
+});
+
+function getTextValue(node: any): string {
+  if (node == null) return '';
+  if (typeof node === 'string') return node.trim();
+  if (typeof node === 'number') return String(node);
+  if (typeof node === 'object' && '#text' in node) {
+    return String(node['#text']).trim();
+  }
+  return '';
 }
 
 /**
- * Parse an OPDS Atom XML feed into an array of OpdsBookEntry.
+ * Parse an OPDS Atom XML feed into an array of OpdsBookEntry using fast-xml-parser.
  */
 export function parseOpdsXml(xmlText: string, sourceName = 'custom_opds'): OpdsBookEntry[] {
   const entries: OpdsBookEntry[] = [];
-  const entryRegex = /<entry[\s\S]*?<\/entry>/gi;
-  const matches = xmlText.match(entryRegex) || [];
+  let parsed: any;
+  try {
+    parsed = xmlParser.parse(xmlText);
+  } catch (err) {
+    console.warn('[OPDS] Failed to parse XML:', err);
+    return [];
+  }
 
-  for (const entryXml of matches) {
-    const title = extractXmlTag(entryXml, 'title') || 'Không tiêu đề';
-    let author = extractXmlTag(entryXml, 'name');
-    if (!author) {
-      author = extractXmlTag(entryXml, 'author') || 'Tác giả công quyền';
+  const feed = parsed?.feed || parsed;
+  if (!feed) return [];
+
+  const rawEntries = Array.isArray(feed.entry)
+    ? feed.entry
+    : feed.entry
+    ? [feed.entry]
+    : [];
+
+  for (const entry of rawEntries) {
+    if (!entry) continue;
+
+    const title = getTextValue(entry.title) || 'Không tiêu đề';
+    let author = '';
+    if (entry.author) {
+      if (typeof entry.author === 'object') {
+        author = getTextValue(entry.author.name) || getTextValue(entry.author);
+      } else {
+        author = getTextValue(entry.author);
+      }
     }
-    const summary = extractXmlTag(entryXml, 'summary') || extractXmlTag(entryXml, 'content') || '';
-    const id = extractXmlTag(entryXml, 'id') || generateUUID();
+    if (!author) author = 'Tác giả công quyền';
 
-    // Extract acquisition link (EPUB or PDF)
+    const rawSummary = getTextValue(entry.summary) || getTextValue(entry.content) || '';
+    const summary = rawSummary.replace(/<[^>]+>/g, '').slice(0, 300);
+    const id = getTextValue(entry.id) || generateUUID();
+
+    // Extract acquisition link and cover
     let downloadUrl = '';
     let format: 'epub' | 'pdf' = 'epub';
-    const linkRegex = /<link\s+([^>]+?)\/?>/gi;
-    let linkMatch;
     let coverUrl: string | undefined;
 
-    while ((linkMatch = linkRegex.exec(entryXml)) !== null) {
-      const attrs = linkMatch[1];
-      const href = (attrs.match(/href=["']([^"']+)["']/i) || [])[1];
-      const type = (attrs.match(/type=["']([^"']+)["']/i) || [])[1] || '';
-      const rel = (attrs.match(/rel=["']([^"']+)["']/i) || [])[1] || '';
+    const rawLinks = Array.isArray(entry.link)
+      ? entry.link
+      : entry.link
+      ? [entry.link]
+      : [];
+
+    for (const link of rawLinks) {
+      if (!link) continue;
+      const href = String(link['@_href'] || '').trim();
+      const type = String(link['@_type'] || '').toLowerCase();
+      const rel = String(link['@_rel'] || '').toLowerCase();
 
       if (rel.includes('image') || rel.includes('thumbnail')) {
         coverUrl = href;
@@ -74,9 +112,10 @@ export function parseOpdsXml(xmlText: string, sourceName = 'custom_opds'): OpdsB
         rel.includes('acquisition') ||
         type.includes('epub') ||
         type.includes('pdf') ||
-        (href && (href.endsWith('.epub') || href.endsWith('.pdf')))
+        href.endsWith('.epub') ||
+        href.endsWith('.pdf')
       ) {
-        if (type.includes('pdf') || (href && href.endsWith('.pdf'))) {
+        if (type.includes('pdf') || href.endsWith('.pdf')) {
           format = 'pdf';
         } else {
           format = 'epub';
@@ -86,7 +125,7 @@ export function parseOpdsXml(xmlText: string, sourceName = 'custom_opds'): OpdsB
     }
 
     // Project Gutenberg sub-catalog fallback: synthesize direct EPUB and high-res cover links
-    const gutenbergIdMatch = id.match(/ebooks\/(\d+)\.opds/) || entryXml.match(/\/ebooks\/(\d+)\.opds/);
+    const gutenbergIdMatch = id.match(/ebooks\/(\d+)/);
     if (!downloadUrl && gutenbergIdMatch) {
       const gId = gutenbergIdMatch[1];
       downloadUrl = `https://www.gutenberg.org/ebooks/${gId}.epub3.images`;
@@ -101,7 +140,7 @@ export function parseOpdsXml(xmlText: string, sourceName = 'custom_opds'): OpdsB
         id,
         title,
         author,
-        summary: summary.replace(/<[^>]+>/g, '').slice(0, 300),
+        summary,
         coverUrl,
         downloadUrl,
         format,

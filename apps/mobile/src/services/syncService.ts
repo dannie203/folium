@@ -212,7 +212,7 @@ export async function drainAndCompactOutbox(): Promise<{
 }> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<OutboxRow>(
-    'SELECT * FROM sync_outbox ORDER BY created_at ASC'
+    'SELECT * FROM sync_outbox ORDER BY created_at ASC LIMIT 50'
   );
 
   if (rows.length === 0) {
@@ -367,9 +367,10 @@ export async function pushPendingMutations(): Promise<{
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${user.accessToken}`,
+      Authorization: `Bearer ${user.idToken || user.accessToken}`,
     },
     body: JSON.stringify(payload),
+    ...(Platform.OS === 'web' ? { keepalive: true } : {}),
   });
 
   if (!res.ok) {
@@ -386,10 +387,14 @@ export async function pushPendingMutations(): Promise<{
   const data = (await res.json()) as SyncPushResponse;
   const committedSeq = data.committed_sync_seq;
 
-  // Drain confirmed rows from outbox
+  // Drain confirmed rows from outbox in a single batch
   const db = await getDatabase();
-  for (const id of outboxIds) {
-    await db.runAsync('DELETE FROM sync_outbox WHERE id = ?', [id]);
+  if (outboxIds.length > 0) {
+    const placeholders = outboxIds.map(() => '?').join(',');
+    await db.runAsync(
+      `DELETE FROM sync_outbox WHERE id IN (${placeholders})`,
+      outboxIds
+    );
   }
 
   // Advance local cursor if server sequence is higher
@@ -399,6 +404,12 @@ export async function pushPendingMutations(): Promise<{
   }
 
   await refreshPendingCount();
+
+  // If we processed a full chunk of 50 items, trigger next debounced push to drain remaining
+  if (outboxIds.length >= 50) {
+    triggerDebouncedSync();
+  }
+
   return { pushedCount: data.accepted_count, committedSeq };
 }
 
@@ -423,7 +434,7 @@ export async function pullRemoteChanges(): Promise<{
   const res = await fetch(`${serverUrl}/api/sync/pull?since=${cursor}`, {
     method: 'GET',
     headers: {
-      Authorization: `Bearer ${user.accessToken}`,
+      Authorization: `Bearer ${user.idToken || user.accessToken}`,
       'If-None-Match': `W/"${cursor}"`,
     },
   });
