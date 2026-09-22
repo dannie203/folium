@@ -244,3 +244,72 @@ In a distributed local-first system, server rows cannot simply be purged immedia
    - Added a prominent "Xoá Sách" button to `MetadataEditModal` with confirmation dialogs tailored for each platform (`window.confirm` for web, `Alert.alert` for mobile).
    - Added quick options button (`EditPencilIcon`) on `BookCard` cover for 1-click access to editing and deletion on desktop/web without relying solely on long-press.
    - Connected UI deletion to the entire pipeline: local SQLite + local binary file removal + Google Drive Trash (`trashed: true`) + Cloudflare D1 tombstone outbox.
+
+---
+
+### Entry #11 (2026-09-22): Codebase Audit, P0/P1/P2 Remediation, Security Hardening & Zero-Knowledge Architecture Upgrades
+
+#### Summary & Motivation
+Following a comprehensive architectural and security review across the entire monorepo (`apps/mobile`, `packages/worker`, `packages/shared`), we identified and remediated critical risks spanning edge authentication, sync atomicity, SSRF defenses on the download proxy, and web platform storage stability.
+
+#### 1. Edge Authentication & Performance (P0)
+- **Migrated from Google UserInfo to ID Token (RS256 JWT)**:
+  - Replaced per-request `fetch('https://www.googleapis.com/oauth2/v3/userinfo')` calls with local WebCrypto JWT verification (`crypto.subtle.verify`) using Google's public JWKS.
+  - Eliminated high latency overhead and rate-limit bottlenecks on the edge worker.
+  - Cached JWKS in-memory with automatic cache invalidation based on upstream `Cache-Control: max-age` and on-demand refresh on unknown `kid`.
+  - Enforced strict validations: RS256 algorithm check, issuer (`accounts.google.com`), expiration with 60s skew tolerance, `nbf` claim, non-empty subject, and mandatory `expectedAudience` matching `GOOGLE_CLIENT_ID` to prevent confused deputy token reuse.
+- **Sandbox Auth Gating**:
+  - Gated `demo_` token bypass so it is only accepted when `ALLOW_DEMO_AUTH === 'true'` or `ENVIRONMENT === 'development'`, eliminating sandbox backdoors in production.
+
+#### 2. Sync Engine Atomicity & Multi-Tenant Data Isolation (P0/P1)
+- **Coupled Sequence Increment into Atomic Batch**:
+  - Moved the `user_sync_sequence` increment inside the primary `statements[]` array for `db.batch()`. If any mutation fails, the sequence does not advance, eliminating torn sequence desynchronization.
+  - Added monotonic sequence guard: `current_seq = CASE WHEN excluded.current_seq > user_sync_sequence.current_seq THEN excluded.current_seq ELSE user_sync_sequence.current_seq + 1 END`.
+- **Multi-Tenant Tombstone GC**:
+  - Scoped all 5 tombstone garbage collection `DELETE` statements (`books`, `reading_progress`, `bookmarks`, `highlights`, `notes`) with `WHERE user_id = ?` in both push and maintenance GC endpoints, preventing cross-tenant data corruption for offline clients.
+- **D1 Quota & Statement Batching Defense**:
+  - Implemented automatic batch chunking (≤ 100 statements per `db.batch()`) on the worker to respect Cloudflare D1's 128-statement limit.
+  - Chunked outbox reading on client to `LIMIT 50` rows per push and converted outbox row deletion to a single batch `DELETE ... WHERE id IN (...)`.
+
+#### 3. Web Platform & Offline Engine Upgrades (P1)
+- **SQLite Web Engine Migration (IndexedDB SQL Parser Replacement)**:
+  - Replaced the fragile 713-line regex/string-matching IndexedDB SQL parser (`index.web.ts`) with real WebAssembly SQLite (`sql.js`).
+  - Web now executes identical SQLite queries, triggers, and migrations as native platforms.
+  - Binary database persisted to IndexedDB (`folium_sqlite_persistence`) with debounced auto-save.
+  - Added `flushImmediately()` hooked into `beforeunload` and `visibilitychange` to eliminate the 150ms data loss window on tab close or window switch.
+- **Client Sync Resilience on Web**:
+  - Added `keepalive: true` on web push requests to survive page navigation and browser tab closures.
+
+#### 4. SSRF Defense & OPDS Catalog Hardening (P1/P2)
+- **SSRF Defense on Download Proxy**:
+  - Replaced automatic redirect following (`redirect: 'follow'`) with manual redirect resolution (`redirect: 'manual'`, up to 5 hops).
+  - Every redirect hop is validated against: strict HTTPS protocol, port 443 only, official domain allowlist (`standardebooks.org`, `gutenberg.org`), and private/internal IP blocking (RFC 1918, loopback, link-local / cloud metadata `169.254.169.254`, IPv6, and raw IPs).
+- **OPDS XML Parser Upgrade**:
+  - Replaced fragile hand-rolled regex parser with `fast-xml-parser` (`XMLParser`), supporting attributes, nested tags, and CDATA across OPDS Atom catalogs.
+
+#### 5. Architectural Decomposition & Code Cleanup (P2)
+- **Reader Hook Extraction**:
+  - Decomposed the 1426 LOC `reader/[id].tsx` into 4 focused hooks: `useBookLoader`, `useReaderAnnotations`, `useReaderSettings`, and `useReaderKeyboard`.
+  - Added settings persistence to SQLite `sync_meta` so typography, font size, and themes persist across sessions.
+- **DriveSyncModal Separation**:
+  - Extracted business logic into `useDriveSync` hook, decoupling UI rendering from OAuth and sync orchestration.
+- **Native Icons & UI Reliability**:
+  - Implemented `react-native-svg` rendering bridge in `Icons.tsx` replacing text fallbacks.
+  - Hardened avatar initials in `DriveSyncModal` against empty name strings.
+  - Cleaned up unused imports and dead styles across reader, modal, and icon components.
+
+#### 6. Verification Suite
+- **Expanded Security & Regression Test Suites**:
+  - Created and expanded `tests/security/` with 21 automated tests run via `node --test` covering:
+    - RS256 Google ID Token verification, JWKS public key resolution, aud mismatch, expired tokens, bit-flip tampered signatures, sandbox demo token gating.
+    - Cloudflare D1 atomic batch rollback and sequence monotonicity under failure.
+    - Multi-tenant tombstone GC isolation.
+    - Statement chunking for D1 statement quotas.
+    - SSRF proxy defense (domain allowlist, IP blocking, port rules).
+    - Real `sql.js` WASM engine execution against production SQLite schema.
+    - Zero-Knowledge AES-256-GCM encryption roundtrip and adversary tests.
+- **Test Metrics**:
+  - `pnpm typecheck`: 0 errors across 3 packages.
+  - `pnpm test`: 21/21 passing (0 failing).
+  - `npx expo export --platform web`: 9/9 static routes cleanly bundled.
+

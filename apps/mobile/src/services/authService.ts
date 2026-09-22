@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import * as AuthSession from 'expo-auth-session';
+import * as SecureStore from 'expo-secure-store';
 import type { AuthUser } from '@folium/shared';
 
 const STORAGE_KEY = 'folium_auth_user';
@@ -40,15 +41,27 @@ export function initAuthSession(): AuthUser | null {
   if (cachedUser) return cachedUser;
 
   try {
-    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed: AuthUser = JSON.parse(stored);
-        if (parsed.expiresAt > Date.now()) {
-          cachedUser = parsed;
-          return cachedUser;
+    let stored: string | null = null;
+    if (Platform.OS === 'web') {
+      if (typeof localStorage !== 'undefined') {
+        stored = localStorage.getItem(STORAGE_KEY);
+      }
+    } else {
+      stored = SecureStore.getItem(STORAGE_KEY);
+    }
+
+    if (stored) {
+      const parsed: AuthUser = JSON.parse(stored);
+      if (parsed.expiresAt > Date.now()) {
+        cachedUser = parsed;
+        return cachedUser;
+      } else {
+        if (Platform.OS === 'web') {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem(STORAGE_KEY);
+          }
         } else {
-          localStorage.removeItem(STORAGE_KEY);
+          SecureStore.deleteItemAsync(STORAGE_KEY).catch(() => {});
         }
       }
     }
@@ -65,11 +78,19 @@ export function initAuthSession(): AuthUser | null {
 function persistUser(user: AuthUser | null) {
   cachedUser = user;
   try {
-    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+    if (Platform.OS === 'web') {
+      if (typeof localStorage !== 'undefined') {
+        if (user) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+    } else {
       if (user) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+        SecureStore.setItem(STORAGE_KEY, JSON.stringify(user));
       } else {
-        localStorage.removeItem(STORAGE_KEY);
+        SecureStore.deleteItemAsync(STORAGE_KEY).catch(() => {});
       }
     }
   } catch (err) {
@@ -140,7 +161,10 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
     clientId,
     scopes: SCOPES,
     redirectUri,
-    responseType: AuthSession.ResponseType.Token,
+    responseType: 'token id_token',
+    extraParams: {
+      nonce: Math.random().toString(36).substring(2, 15) + Date.now().toString(36),
+    },
   });
 
   const result = await request.promptAsync(discovery);
@@ -154,6 +178,7 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
   }
 
   const accessToken = result.params.access_token;
+  const idToken = result.params.id_token;
   const expiresIn = parseInt(result.params.expires_in || '3600', 10);
 
   // Fetch Google User Profile
@@ -173,6 +198,7 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
     name: profile.name || profile.email.split('@')[0],
     picture: profile.picture,
     accessToken,
+    idToken: idToken || undefined,
     expiresAt: Date.now() + expiresIn * 1000,
   };
 

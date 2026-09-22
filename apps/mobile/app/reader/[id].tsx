@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,26 +12,11 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as FileSystem from 'expo-file-system';
-import type { Book, Bookmark, Highlight, Note, ReaderSettings, ReaderTheme } from '@folium/shared';
+import type { ReaderTheme } from '@folium/shared';
 import { getDatabase } from '../../src/db';
 import { EpubReader } from '../../src/reader/EpubReader';
 import { PdfReader } from '../../src/reader/PdfReader';
 import { generateUUID } from '../../src/services/bookService';
-import { getWebBook } from '../../src/services/storage';
-import {
-  addBookmark,
-  getBookmarks,
-  deleteBookmark,
-  addHighlight,
-  getHighlights,
-  deleteHighlight,
-  addNote,
-  getNotes,
-  deleteNote,
-  searchAnnotations,
-  SearchResultItem,
-} from '../../src/services/annotationService';
 import {
   queueMutation,
   triggerDebouncedSync,
@@ -45,234 +30,102 @@ import {
   ChevronRightIcon,
   BookmarkIcon,
   ListTocIcon,
-  SettingsIcon,
   CloseIcon,
   TrashIcon,
   SearchIcon,
-  CheckIcon,
   TextAaIcon,
 } from '../../src/components/icons/Icons';
+
+import { useBookLoader } from '../../src/hooks/useBookLoader';
+import { useReaderAnnotations } from '../../src/hooks/useReaderAnnotations';
+import { useReaderSettings } from '../../src/hooks/useReaderSettings';
+import { useReaderKeyboard } from '../../src/hooks/useReaderKeyboard';
 
 export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const readerRef = useRef<any>(null);
 
-  const [book, setBook] = useState<Book | null>(null);
-  const [bookBase64, setBookBase64] = useState<string | undefined>(undefined);
-  const [bookDataUrl, setBookDataUrl] = useState<string | undefined>(undefined);
-  const [bookArrayBuffer, setBookArrayBuffer] = useState<ArrayBuffer | undefined>(undefined);
-  const [initialCfi, setInitialCfi] = useState<string | null>(null);
-  const [locationsCache, setLocationsCache] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // 1. Book file & metadata loader hook
+  const {
+    book,
+    setBook,
+    bookBase64,
+    bookDataUrl,
+    bookArrayBuffer,
+    initialCfi,
+    locationsCache,
+    setLocationsCache,
+    isLoading,
+    errorMessage,
+    setErrorMessage,
+    currentProgress,
+    setCurrentProgress,
+  } = useBookLoader(id);
 
-  // UI state
+  // 2. Reader UI state
   const [showUI, setShowUI] = useState(true);
   const [currentCfi, setCurrentCfi] = useState<string>('');
-  const [currentProgress, setCurrentProgress] = useState<number>(0);
   const [pageInfo, setPageInfo] = useState<{ page?: number; totalPages?: number }>({});
   const [toc, setToc] = useState<Array<{ label: string; href: string }>>([]);
   const [showDrawerModal, setShowDrawerModal] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'toc' | 'bookmarks' | 'highlights' | 'search'>('toc');
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-
-  // Annotations state
-  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
-  const [highlights, setHighlights] = useState<Highlight[]>([]);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [selectionData, setSelectionData] = useState<{ cfiRange: string; text: string } | null>(null);
-  const [highlightColor, setHighlightColor] = useState<'yellow' | 'green' | 'blue' | 'pink'>('yellow');
-  const [noteInput, setNoteInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Reader settings
-  const [settings, setSettings] = useState<ReaderSettings>({
-    theme: 'dark',
-    fontSize: 100,
-    fontFamily: 'system-ui',
-    lineHeight: 1.5,
-    spread: 'none',
-  });
-
-  // Load book details and file from local database
-  useEffect(() => {
-    async function initBook() {
-      if (!id) return;
-      try {
-        setIsLoading(true);
-        const db = await getDatabase();
-        const bookRow = await db.getFirstAsync<Book>(
-          'SELECT * FROM books WHERE id = ?',
-          [id]
-        );
-
-        if (!bookRow) {
-          setErrorMessage('Không tìm thấy sách trong thư viện');
-          setIsLoading(false);
-          return;
-        }
-
-        setBook(bookRow);
-        setLocationsCache(bookRow.locations_cache || null);
-
-        // Fetch last progress
-        const progressRow = await db.getFirstAsync<{ cfi: string; percentage: number }>(
-          'SELECT cfi, percentage FROM reading_progress WHERE book_id = ? AND is_deleted = 0',
-          [id]
-        );
-        if (progressRow) {
-          setInitialCfi(progressRow.cfi);
-          setCurrentProgress(progressRow.percentage);
-        }
-
-        // Read book file into base64 or pass buffer/url directly on web
-        if (bookRow.local_path) {
-          if (Platform.OS === 'web') {
-            const buffer = await getWebBook(bookRow.id);
-            if (buffer && buffer.byteLength > 0) {
-              setBookArrayBuffer(buffer);
-            } else if (bookRow.local_path && !bookRow.local_path.startsWith('indexeddb://')) {
-              setBookDataUrl(bookRow.local_path);
-            } else {
-              setErrorMessage('Không tìm thấy tệp sách trong bộ nhớ cục bộ. Bạn vui lòng xoá và thêm lại sách nhé.');
-            }
-          } else {
-            const base64 = await FileSystem.readAsStringAsync(bookRow.local_path, {
-              encoding: 'base64',
-            });
-            setBookBase64(base64);
-          }
-        }
-        // Load annotations (bookmarks, highlights, notes)
-        const [bms, hls, nts] = await Promise.all([
-          getBookmarks(id),
-          getHighlights(id),
-          getNotes(id),
-        ]);
-        setBookmarks(bms);
-        setHighlights(hls);
-        setNotes(nts);
-      } catch (err: any) {
-        console.error('Failed to load book file:', err);
-        setErrorMessage(err.message || 'Lỗi nạp file sách');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    initBook();
-    return () => {
-      // Reader unmount / exit: flush any pending progress immediately
-      flushSyncImmediately();
-    };
-  }, [id]);
 
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
   }, []);
 
-  const isCurrentBookmarked = bookmarks.some(
-    (b) => b.cfi === currentCfi || (pageInfo.page && b.cfi === String(pageInfo.page))
-  );
+  // 3. Reader typography & theme settings hook
+  const { settings, setSettings, selectTheme, changeFontSize } = useReaderSettings();
 
-  const toggleBookmark = async () => {
-    if (!book) return;
-    try {
-      const existing = bookmarks.find(
-        (b) => b.cfi === currentCfi || (pageInfo.page && b.cfi === String(pageInfo.page))
-      );
-      if (existing) {
-        await deleteBookmark(existing.id);
-        setBookmarks((prev) => prev.filter((b) => b.id !== existing.id));
-        showToast('Đã xóa dấu trang');
-      } else {
-        const targetCfi = currentCfi || String(pageInfo.page || 1);
-        const pageLabel = pageInfo.page ? `Trang ${pageInfo.page}` : `${currentProgress.toFixed(1)}%`;
-        const newBm = await addBookmark(book.id, targetCfi, `${book.title} (${pageLabel})`);
-        setBookmarks((prev) => [newBm, ...prev]);
-        showToast('Đã thêm dấu trang 🔖');
-      }
-    } catch (e) {
-      console.error('Failed to toggle bookmark:', e);
-    }
-  };
+  // 4. Reader annotations & search hook
+  const {
+    bookmarks,
+    setBookmarks,
+    highlights,
+    setHighlights,
+    notes,
+    setNotes,
+    selectionData,
+    setSelectionData,
+    highlightColor,
+    setHighlightColor,
+    noteInput,
+    setNoteInput,
+    searchQuery,
+    setSearchQuery,
+    searchResults,
+    isCurrentBookmarked,
+    toggleBookmark,
+    handleSaveHighlight,
+    handleDeleteBookmark,
+    handleDeleteHighlight,
+    handleDeleteNote,
+    handleSearch,
+  } = useReaderAnnotations({
+    book,
+    currentCfi,
+    pageInfo,
+    currentProgress,
+    readerRef,
+    showToast,
+  });
 
-  const handleSaveHighlight = async () => {
-    if (!book || !selectionData) return;
-    try {
-      const newHl = await addHighlight(
-        book.id,
-        selectionData.cfiRange,
-        selectionData.text,
-        highlightColor,
-        noteInput.trim() || undefined
-      );
-
-      if (noteInput.trim()) {
-        const newNote = await addNote(book.id, noteInput.trim(), newHl.id);
-        setNotes((prev) => [newNote, ...prev]);
-      }
-
-      readerRef.current?.addHighlight(newHl.id, selectionData.cfiRange, highlightColor);
-      setHighlights((prev) => [newHl, ...prev]);
-      setSelectionData(null);
-      setNoteInput('');
-      showToast('Đã lưu tô sáng ✨');
-    } catch (e) {
-      console.error('Failed to save highlight:', e);
-    }
-  };
-
-  const handleDeleteBookmark = async (bookmarkId: string) => {
-    try {
-      await deleteBookmark(bookmarkId);
-      setBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
-      showToast('Đã xóa dấu trang');
-    } catch (e) {
-      console.error('Failed to delete bookmark:', e);
-    }
-  };
-
-  const handleDeleteHighlight = async (highlightId: string, cfiRange: string) => {
-    try {
-      await deleteHighlight(highlightId);
-      readerRef.current?.removeHighlight(cfiRange);
-      setHighlights((prev) => prev.filter((h) => h.id !== highlightId));
-      setNotes((prev) => prev.filter((n) => n.highlight_id !== highlightId));
-      showToast('Đã xóa tô sáng');
-    } catch (e) {
-      console.error('Failed to delete highlight:', e);
-    }
-  };
-
-  const handleDeleteNote = async (noteId: string) => {
-    try {
-      await deleteNote(noteId);
-      setNotes((prev) => prev.filter((n) => n.id !== noteId));
-      showToast('Đã xóa ghi chú');
-    } catch (e) {
-      console.error('Failed to delete note:', e);
-    }
-  };
-
-  const handleSearch = async (text: string) => {
-    setSearchQuery(text);
-    if (!text.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    if (!book) return;
-    try {
-      const res = await searchAnnotations(text, book.id);
-      setSearchResults(res);
-    } catch (e) {
-      console.error('Failed to search annotations:', e);
-    }
-  };
+  // 5. Desktop keyboard shortcuts hook
+  const { handleEscape } = useReaderKeyboard({
+    readerRef,
+    setShowUI,
+    changeFontSize,
+    selectionData,
+    setSelectionData,
+    showSettingsModal,
+    setShowSettingsModal,
+    showDrawerModal,
+    setShowDrawerModal,
+  });
 
   // Debounced progress saver
   const saveProgressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -346,81 +199,6 @@ export default function ReaderScreen() {
       console.warn('Failed to cache locations in SQLite:', e);
     }
   };
-
-  const selectTheme = (theme: ReaderTheme) => {
-    setSettings((prev) => ({ ...prev, theme }));
-  };
-
-  const changeFontSize = useCallback((delta: number) => {
-    setSettings((prev) => ({
-      ...prev,
-      fontSize: Math.min(200, Math.max(70, prev.fontSize + delta)),
-    }));
-  }, []);
-
-  const handleEscape = useCallback(() => {
-    if (selectionData) {
-      setSelectionData(null);
-    } else if (showSettingsModal) {
-      setShowSettingsModal(false);
-    } else if (showDrawerModal) {
-      setShowDrawerModal(false);
-    } else {
-      setShowUI((prev) => !prev);
-    }
-  }, [selectionData, showSettingsModal, showDrawerModal]);
-
-  // Global keyboard shortcuts for web (desktop navigation)
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-
-    const handleWindowKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-
-      if (
-        e.key === 'ArrowRight' ||
-        e.key === 'PageDown' ||
-        (e.key === ' ' && !e.shiftKey) ||
-        e.key === 'j'
-      ) {
-        e.preventDefault();
-        readerRef.current?.nextPage();
-      } else if (
-        e.key === 'ArrowLeft' ||
-        e.key === 'PageUp' ||
-        (e.key === ' ' && e.shiftKey) ||
-        e.key === 'k'
-      ) {
-        e.preventDefault();
-        readerRef.current?.prevPage();
-      } else if (e.key === 't' || e.key === 'T') {
-        e.preventDefault();
-        setShowUI((prev) => !prev);
-      } else if (e.key === '+' || e.key === '=') {
-        e.preventDefault();
-        changeFontSize(10);
-      } else if (e.key === '-' || e.key === '_') {
-        e.preventDefault();
-        changeFontSize(-10);
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        handleEscape();
-      }
-    };
-
-    window.addEventListener('keydown', handleWindowKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleWindowKeyDown);
-    };
-  }, [handleEscape, changeFontSize]);
 
   if (isLoading) {
     return (
@@ -1047,10 +825,6 @@ const styles = StyleSheet.create({
   iconButton: {
     padding: 8,
   },
-  iconButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
   titleContainer: {
     flex: 1,
     marginHorizontal: 8,
@@ -1119,16 +893,6 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 17,
     fontWeight: '700',
-  },
-  modalCloseText: {
-    fontSize: 18,
-    fontWeight: '600',
-    padding: 4,
-  },
-  emptyToc: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   tocItem: {
     paddingVertical: 14,
@@ -1260,10 +1024,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-  selectionCloseBtn: {
-    fontSize: 16,
-    padding: 4,
-  },
   selectionQuote: {
     fontSize: 13,
     fontStyle: 'italic',
@@ -1378,9 +1138,6 @@ const styles = StyleSheet.create({
   },
   deleteBtn: {
     padding: 8,
-  },
-  deleteBtnText: {
-    fontSize: 16,
   },
   badgeRow: {
     flexDirection: 'row',

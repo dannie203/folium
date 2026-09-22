@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -8,17 +8,9 @@ import {
   ActivityIndicator,
   Image,
   ScrollView,
-  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import type { AuthUser, DriveSyncResult } from '@folium/shared';
-import {
-  getCurrentUser,
-  onAuthStateChanged,
-  signInWithGoogle,
-  signOut,
-} from '../services/authService';
-import { syncWithGoogleDrive } from '../services/googleDriveService';
+import { useDriveSync } from '../hooks/useDriveSync';
 import { colors, typography, spacing, radius } from '../theme/tokens';
 
 interface DriveSyncModalProps {
@@ -29,55 +21,16 @@ interface DriveSyncModalProps {
 
 export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncModalProps) {
   const router = useRouter();
-  const [user, setUser] = useState<AuthUser | null>(getCurrentUser());
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<DriveSyncResult | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    return onAuthStateChanged((newUser) => {
-      setUser(newUser);
-      setErrorMessage(null);
-    });
-  }, []);
-
-  const handleSignIn = async (demo = false) => {
-    try {
-      setIsAuthenticating(true);
-      setErrorMessage(null);
-      await signInWithGoogle(demo);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Đăng nhập Google thất bại.');
-    } finally {
-      setIsAuthenticating(false);
-    }
-  };
-
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      setSyncResult(null);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Đăng xuất thất bại.');
-    }
-  };
-
-  const handleSyncNow = async () => {
-    try {
-      setIsSyncing(true);
-      setErrorMessage(null);
-      const res = await syncWithGoogleDrive();
-      setSyncResult(res);
-      if (onSyncComplete) {
-        onSyncComplete();
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Lỗi đồng bộ Google Drive.');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
+  const {
+    user,
+    isAuthenticating,
+    isSyncing,
+    syncResult,
+    errorMessage,
+    handleSignIn,
+    handleSignOut,
+    handleSyncNow,
+  } = useDriveSync({ onSyncComplete });
 
   const navigateTo = (path: string) => {
     onClose();
@@ -105,7 +58,9 @@ export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncMo
                     <Image source={{ uri: user.picture }} style={styles.avatar} />
                   ) : (
                     <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                      <Text style={styles.avatarText}>{user.name.charAt(0)}</Text>
+                      <Text style={styles.avatarText}>
+                        {(user.name || user.email || '?').charAt(0).toUpperCase()}
+                      </Text>
                     </View>
                   )}
                   <View style={styles.userMeta}>

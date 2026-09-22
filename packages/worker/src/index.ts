@@ -13,6 +13,9 @@ import type {
 
 type Bindings = {
   DB: D1Database;
+  GOOGLE_CLIENT_ID?: string;
+  ENVIRONMENT?: string;
+  ALLOW_DEMO_AUTH?: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -22,20 +25,207 @@ const OFFICIAL_OPDS_FEEDS: Record<string, string> = {
   project_gutenberg: 'https://www.gutenberg.org/ebooks/search.opds/?sort_order=downloads',
 };
 
-async function authenticateUser(authorization: string | undefined): Promise<string | null> {
-  if (!authorization?.startsWith('Bearer ')) return null;
+// ------------------------------------------------------------------------------
+// Google ID Token & JWKS Verification (Zero-Latency Local Verification)
+// ------------------------------------------------------------------------------
 
+interface GoogleJwk {
+  kty: string;
+  alg: string;
+  use: string;
+  kid: string;
+  n: string;
+  e: string;
+}
+
+interface JwksCache {
+  keys: Map<string, GoogleJwk>;
+  cryptoKeys: Map<string, CryptoKey>;
+  expiresAt: number;
+}
+
+const jwksCache: JwksCache = {
+  keys: new Map(),
+  cryptoKeys: new Map(),
+  expiresAt: 0,
+};
+
+function base64UrlToUint8Array(base64Url: string): Uint8Array {
+  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = base64.length % 4;
+  const padded = pad ? base64 + '='.repeat(4 - pad) : base64;
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function decodeJwtPart<T>(part: string): T | null {
   try {
-    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: authorization },
-    });
-    if (!response.ok) return null;
-
-    const profile = (await response.json()) as { sub?: string };
-    return profile.sub || null;
+    const bytes = base64UrlToUint8Array(part);
+    const text = new TextDecoder().decode(bytes);
+    return JSON.parse(text);
   } catch {
     return null;
   }
+}
+
+interface GoogleJwtHeader {
+  alg?: string;
+  kid?: string;
+  typ?: string;
+}
+
+interface GoogleJwtPayload {
+  iss?: string;
+  aud?: string;
+  sub?: string;
+  exp?: number;
+  [key: string]: any;
+}
+
+async function getGooglePublicCryptoKey(kid: string, forceRefresh = false): Promise<CryptoKey | null> {
+  const now = Date.now();
+  if (forceRefresh || now > jwksCache.expiresAt || !jwksCache.keys.has(kid)) {
+    try {
+      const resp = await fetch('https://www.googleapis.com/oauth2/v3/certs');
+      if (!resp.ok) return null;
+
+      const cacheControl = resp.headers.get('cache-control');
+      let maxAge = 3600;
+      if (cacheControl) {
+        const match = cacheControl.match(/max-age=(\d+)/);
+        if (match) maxAge = parseInt(match[1], 10);
+      }
+
+      const data = (await resp.json()) as { keys?: GoogleJwk[] };
+      if (Array.isArray(data.keys)) {
+        const newKeys = new Map<string, GoogleJwk>();
+        for (const k of data.keys) {
+          if (k.kid && k.kty === 'RSA') {
+            newKeys.set(k.kid, k);
+          }
+        }
+        jwksCache.keys = newKeys;
+        jwksCache.cryptoKeys.clear();
+        jwksCache.expiresAt = now + maxAge * 1000;
+      }
+    } catch (err) {
+      console.error('[Auth] Failed to fetch Google JWKS:', err);
+      if (jwksCache.keys.size === 0) return null;
+    }
+  }
+
+  if (jwksCache.cryptoKeys.has(kid)) {
+    return jwksCache.cryptoKeys.get(kid)!;
+  }
+
+  const jwk = jwksCache.keys.get(kid);
+  if (!jwk) return null;
+
+  try {
+    const cryptoKey = await crypto.subtle.importKey(
+      'jwk',
+      jwk,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+    jwksCache.cryptoKeys.set(kid, cryptoKey);
+    return cryptoKey;
+  } catch (err) {
+    console.error('[Auth] Failed to import JWK:', err);
+    return null;
+  }
+}
+
+export async function verifyGoogleIdToken(
+  token: string,
+  expectedAudience?: string
+): Promise<string | null> {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+
+  const [rawHeader, rawPayload, rawSig] = parts;
+  const header = decodeJwtPart<GoogleJwtHeader>(rawHeader);
+  const payload = decodeJwtPart<GoogleJwtPayload>(rawPayload);
+
+  if (!header || !payload) return null;
+  if (header.alg !== 'RS256' || !header.kid) return null;
+
+  // 1. Verify issuer
+  if (payload.iss !== 'https://accounts.google.com' && payload.iss !== 'accounts.google.com') {
+    return null;
+  }
+
+  // 2. Verify expiration (with 60s skew tolerance)
+  const now = Math.floor(Date.now() / 1000);
+  if (typeof payload.exp !== 'number' || payload.exp < now - 60) {
+    return null;
+  }
+
+  // 2b. Verify not-before (with 60s skew tolerance if present)
+  if (typeof payload.nbf === 'number' && payload.nbf > now + 60) {
+    return null;
+  }
+
+  // 3. Verify audience (strictly required to prevent cross-app token reuse)
+  if (!expectedAudience || payload.aud !== expectedAudience) {
+    return null;
+  }
+
+  // 4. Verify subject
+  if (!payload.sub || typeof payload.sub !== 'string') {
+    return null;
+  }
+
+  // 5. Verify cryptographic signature via cached JWKS
+  let cryptoKey = await getGooglePublicCryptoKey(header.kid);
+  if (!cryptoKey) {
+    cryptoKey = await getGooglePublicCryptoKey(header.kid, true);
+  }
+  if (!cryptoKey) return null;
+
+  try {
+    const data = new TextEncoder().encode(`${rawHeader}.${rawPayload}`);
+    const sigBytes = base64UrlToUint8Array(rawSig);
+    const isValid = await crypto.subtle.verify(
+      'RSASSA-PKCS1-v1_5',
+      cryptoKey,
+      sigBytes as unknown as BufferSource,
+      data as unknown as BufferSource
+    );
+    return isValid ? payload.sub : null;
+  } catch (err) {
+    console.error('[Auth] Signature verification error:', err);
+    return null;
+  }
+}
+
+async function authenticateUser(
+  authorization: string | undefined,
+  env?: Bindings
+): Promise<string | null> {
+  if (!authorization?.startsWith('Bearer ')) return null;
+  const token = authorization.slice(7).trim();
+  if (!token) return null;
+
+  // Developer sandbox token: only permitted when explicitly enabled in non-production
+  if (token.startsWith('demo_')) {
+    if (env?.ALLOW_DEMO_AUTH === 'true' || env?.ENVIRONMENT === 'development') {
+      return 'demo-google-user-001';
+    }
+    return null;
+  }
+
+  // Google ID Token (JWT) local verification
+  if (token.split('.').length === 3) {
+    return await verifyGoogleIdToken(token, env?.GOOGLE_CLIENT_ID);
+  }
+
+  return null;
 }
 
 // Enable CORS for web clients & local dev
@@ -138,35 +328,131 @@ app.get('/api/community/opds', async (c) => {
   }
 });
 
-// Proxy book download to avoid browser CORS issues on Web
+function isPrivateOrInternalHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase().trim();
+  if (lower === 'localhost' || lower.endsWith('.localhost') || lower.endsWith('.local') || lower.endsWith('.internal')) {
+    return true;
+  }
+
+  // IPv4 check
+  const ipv4Match = lower.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    const octets = [
+      parseInt(ipv4Match[1], 10),
+      parseInt(ipv4Match[2], 10),
+      parseInt(ipv4Match[3], 10),
+      parseInt(ipv4Match[4], 10),
+    ];
+    if (octets.some((o) => o > 255)) return true;
+    if (octets[0] === 127) return true; // Loopback
+    if (octets[0] === 10) return true; // Private 10.x.x.x
+    if (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) return true; // Private 172.16-31.x.x
+    if (octets[0] === 192 && octets[1] === 168) return true; // Private 192.168.x.x
+    if (octets[0] === 169 && octets[1] === 254) return true; // Link-local / Cloud metadata
+    if (octets[0] === 0) return true;
+    if (octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127) return true;
+    if (octets[0] >= 224) return true;
+    // Reject any raw IPv4 as target host
+    return true;
+  }
+
+  // IPv6 check
+  if (lower.startsWith('[') || lower.includes(':')) {
+    return true;
+  }
+
+  return false;
+}
+
+export function validateDownloadTargetUrl(rawUrl: string): { valid: boolean; url?: URL; error?: string } {
+  let targetUrl: URL;
+  try {
+    targetUrl = new URL(rawUrl);
+  } catch {
+    return { valid: false, error: 'Invalid URL format' };
+  }
+
+  // Enforce strict HTTPS
+  if (targetUrl.protocol !== 'https:') {
+    return { valid: false, error: 'Only HTTPS protocol is permitted' };
+  }
+
+  // Check for non-standard port
+  if (targetUrl.port && targetUrl.port !== '443') {
+    return { valid: false, error: 'Non-standard port is forbidden' };
+  }
+
+  const hostname = targetUrl.hostname.toLowerCase();
+
+  // Block private and internal network targets
+  if (isPrivateOrInternalHost(hostname)) {
+    return { valid: false, error: 'Access to private or internal network targets is prohibited' };
+  }
+
+  // Strict domain allowlist
+  const isAllowedDomain =
+    hostname === 'standardebooks.org' ||
+    hostname.endsWith('.standardebooks.org') ||
+    hostname === 'gutenberg.org' ||
+    hostname === 'www.gutenberg.org' ||
+    hostname.endsWith('.gutenberg.org');
+
+  if (!isAllowedDomain) {
+    return { valid: false, error: 'Forbidden download host (not on allowlist)' };
+  }
+
+  return { valid: true, url: targetUrl };
+}
+
+// Proxy book download with SSRF defense & manual redirect validation
 app.get('/api/community/download', async (c) => {
   const fileUrl = c.req.query('url');
   if (!fileUrl) return c.json({ error: 'Missing url parameter' }, 400);
 
-  let targetUrl: URL;
-  try {
-    targetUrl = new URL(fileUrl);
-  } catch {
-    return c.json({ error: 'Invalid url' }, 400);
+  const initialValidation = validateDownloadTargetUrl(fileUrl);
+  if (!initialValidation.valid || !initialValidation.url) {
+    return c.json({ error: initialValidation.error }, 403);
   }
 
-  const isAllowedHost =
-    targetUrl.hostname === 'standardebooks.org' ||
-    targetUrl.hostname.endsWith('.standardebooks.org') ||
-    targetUrl.hostname === 'www.gutenberg.org' ||
-    targetUrl.hostname.endsWith('.gutenberg.org');
-
-  if (!isAllowedHost) {
-    return c.json({ error: 'Forbidden download host' }, 403);
-  }
+  let currentUrl = initialValidation.url.toString();
+  let response: Response | null = null;
+  const MAX_REDIRECTS = 5;
 
   try {
-    const response = await fetch(fileUrl, {
-      redirect: 'follow',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    });
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      // Validate every hop against strict HTTPS, domain allowlist, and IP restrictions
+      const validation = validateDownloadTargetUrl(currentUrl);
+      if (!validation.valid || !validation.url) {
+        return c.json({ error: `Redirect rejected: ${validation.error}` }, 403);
+      }
+
+      response = await fetch(currentUrl, {
+        redirect: 'manual',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      });
+
+      // Handle redirects manually
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location');
+        if (!location) {
+          return c.json({ error: 'Redirect location header missing' }, 502);
+        }
+        // Resolve relative or absolute redirect URL
+        currentUrl = new URL(location, currentUrl).toString();
+        if (hop === MAX_REDIRECTS) {
+          return c.json({ error: 'Too many redirects' }, 508);
+        }
+        continue;
+      }
+
+      break;
+    }
+
+    if (!response) {
+      return c.json({ error: 'No response from upstream server' }, 502);
+    }
 
     if (!response.ok) {
       return c.json({ error: `Upstream error ${response.status}` }, response.status as any);
@@ -188,7 +474,7 @@ app.get('/api/community/download', async (c) => {
 app.post('/api/sync/push', async (c) => {
   try {
     const db = c.env.DB;
-    const userId = await authenticateUser(c.req.header('authorization'));
+    const userId = await authenticateUser(c.req.header('authorization'), c.env);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
     let body: SyncPushPayload;
@@ -200,27 +486,29 @@ app.post('/api/sync/push', async (c) => {
 
     const now = Date.now();
 
-    // 1. Advance monotonic sequence atomically for this user
-    await db
-      .prepare(
-        `INSERT INTO user_sync_sequence (user_id, current_seq, updated_at)
-         VALUES (?, 1, ?)
-         ON CONFLICT(user_id) DO UPDATE SET
-           current_seq = current_seq + 1,
-           updated_at = ?`
-      )
-      .bind(userId, now, now)
-      .run();
-
+    // 1. Calculate next monotonic sequence for this user
     const seqRow = await db
       .prepare('SELECT current_seq FROM user_sync_sequence WHERE user_id = ?')
       .bind(userId)
       .first<{ current_seq: number }>();
 
-    const newSeq = seqRow?.current_seq ?? 1;
+    const newSeq = (seqRow?.current_seq ?? 0) + 1;
 
     const statements: D1PreparedStatement[] = [];
     let acceptedCount = 0;
+
+    // Advance user sequence atomically inside the same batch
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO user_sync_sequence (user_id, current_seq, updated_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(user_id) DO UPDATE SET
+             current_seq = CASE WHEN excluded.current_seq > user_sync_sequence.current_seq THEN excluded.current_seq ELSE user_sync_sequence.current_seq + 1 END,
+             updated_at = excluded.updated_at`
+        )
+        .bind(userId, newSeq, now)
+    );
 
     // Batch upsert books metadata
     if (body.books && body.books.length > 0) {
@@ -441,15 +729,19 @@ app.post('/api/sync/push', async (c) => {
     const gcThreshold = now - THIRTY_DAYS_MS;
 
     statements.push(
-      db.prepare('DELETE FROM books WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
-      db.prepare('DELETE FROM reading_progress WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
-      db.prepare('DELETE FROM bookmarks WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
-      db.prepare('DELETE FROM highlights WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
-      db.prepare('DELETE FROM notes WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold)
+      db.prepare('DELETE FROM books WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
+      db.prepare('DELETE FROM reading_progress WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
+      db.prepare('DELETE FROM bookmarks WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
+      db.prepare('DELETE FROM highlights WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
+      db.prepare('DELETE FROM notes WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold)
     );
 
-    if (statements.length > 0) {
-      await db.batch(statements);
+    const D1_BATCH_LIMIT = 100;
+    for (let i = 0; i < statements.length; i += D1_BATCH_LIMIT) {
+      const chunk = statements.slice(i, i + D1_BATCH_LIMIT);
+      if (chunk.length > 0) {
+        await db.batch(chunk);
+      }
     }
 
     const response: SyncPushResponse = {
@@ -469,7 +761,7 @@ app.post('/api/sync/push', async (c) => {
 // ------------------------------------------------------------------------------
 app.post('/api/sync/gc', async (c) => {
   try {
-    const userId = await authenticateUser(c.req.header('authorization'));
+    const userId = await authenticateUser(c.req.header('authorization'), c.env);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
     const db = c.env.DB;
@@ -478,11 +770,11 @@ app.post('/api/sync/gc', async (c) => {
     const gcThreshold = now - THIRTY_DAYS_MS;
 
     await db.batch([
-      db.prepare('DELETE FROM books WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
-      db.prepare('DELETE FROM reading_progress WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
-      db.prepare('DELETE FROM bookmarks WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
-      db.prepare('DELETE FROM highlights WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
-      db.prepare('DELETE FROM notes WHERE is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(gcThreshold),
+      db.prepare('DELETE FROM books WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
+      db.prepare('DELETE FROM reading_progress WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
+      db.prepare('DELETE FROM bookmarks WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
+      db.prepare('DELETE FROM highlights WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
+      db.prepare('DELETE FROM notes WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
     ]);
 
     return c.json({
@@ -502,7 +794,7 @@ app.post('/api/sync/gc', async (c) => {
 app.get('/api/sync/pull', async (c) => {
   try {
     const db = c.env.DB;
-    const userId = await authenticateUser(c.req.header('authorization'));
+    const userId = await authenticateUser(c.req.header('authorization'), c.env);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
     const since = parseInt(c.req.query('since') || '0', 10);
     const ifNoneMatch = c.req.header('if-none-match');
