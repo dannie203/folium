@@ -13,6 +13,7 @@ import {
   searchAnnotations,
   SearchResultItem,
 } from '../services/annotationService';
+import { useI18n } from '../i18n';
 
 export interface UseReaderAnnotationsParams {
   book: Book | null;
@@ -31,6 +32,7 @@ export function useReaderAnnotations({
   readerRef,
   showToast,
 }: UseReaderAnnotationsParams) {
+  const { t } = useI18n();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -72,13 +74,13 @@ export function useReaderAnnotations({
       if (existing) {
         await deleteBookmark(existing.id);
         setBookmarks((prev) => prev.filter((b) => b.id !== existing.id));
-        showToast('Đã xóa dấu trang');
+        showToast(t('reader.bookmarkRemoved'));
       } else {
         const targetCfi = currentCfi || String(pageInfo.page || 1);
         const pageLabel = pageInfo.page ? `Trang ${pageInfo.page}` : `${currentProgress.toFixed(1)}%`;
         const newBm = await addBookmark(book.id, targetCfi, `${book.title} (${pageLabel})`);
         setBookmarks((prev) => [newBm, ...prev]);
-        showToast('Đã thêm dấu trang 🔖');
+        showToast(`${t('reader.bookmarkAdded')} 🔖`);
       }
     } catch (e) {
       console.error('Failed to toggle bookmark:', e);
@@ -105,7 +107,7 @@ export function useReaderAnnotations({
       setHighlights((prev) => [newHl, ...prev]);
       setSelectionData(null);
       setNoteInput('');
-      showToast('Đã lưu tô sáng ✨');
+      showToast(`${t('reader.highlightSaved')} ✨`);
     } catch (e) {
       console.error('Failed to save highlight:', e);
     }
@@ -115,7 +117,7 @@ export function useReaderAnnotations({
     try {
       await deleteBookmark(bookmarkId);
       setBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
-      showToast('Đã xóa dấu trang');
+      showToast(t('reader.bookmarkRemoved'));
     } catch (e) {
       console.error('Failed to delete bookmark:', e);
     }
@@ -127,7 +129,7 @@ export function useReaderAnnotations({
       readerRef.current?.removeHighlight(cfiRange);
       setHighlights((prev) => prev.filter((h) => h.id !== highlightId));
       setNotes((prev) => prev.filter((n) => n.highlight_id !== highlightId));
-      showToast('Đã xóa tô sáng');
+      showToast(t('reader.highlightDeleted'));
     } catch (e) {
       console.error('Failed to delete highlight:', e);
     }
@@ -137,7 +139,7 @@ export function useReaderAnnotations({
     try {
       await deleteNote(noteId);
       setNotes((prev) => prev.filter((n) => n.id !== noteId));
-      showToast('Đã xóa ghi chú');
+      showToast(t('reader.noteDeleted'));
     } catch (e) {
       console.error('Failed to delete note:', e);
     }

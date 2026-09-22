@@ -215,15 +215,15 @@ export function SidebarNav({
       <View style={styles.sidebarFooter}>
         <View style={styles.legalLinksRow}>
           <TouchableOpacity onPress={onOpenPrivacy}>
-            <Text style={styles.footerLink}>Bảo mật</Text>
+            <Text style={styles.footerLink}>{t('settings.privacy')}</Text>
           </TouchableOpacity>
           <Text style={styles.footerDivider}>•</Text>
           <TouchableOpacity onPress={onOpenTerms}>
-            <Text style={styles.footerLink}>DMCA</Text>
+            <Text style={styles.footerLink}>{t('settings.terms')}</Text>
           </TouchableOpacity>
           <Text style={styles.footerDivider}>•</Text>
           <TouchableOpacity onPress={onOpenSecurity}>
-            <Text style={styles.footerLink}>ZK Audit</Text>
+            <Text style={styles.footerLink}>{t('settings.security')}</Text>
           </TouchableOpacity>
         </View>
         <Text style={styles.copyrightText}>Folium v1.0 • Zero-Knowledge</Text>

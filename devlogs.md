@@ -313,3 +313,56 @@ Following a comprehensive architectural and security review across the entire mo
   - `pnpm test`: 21/21 passing (0 failing).
   - `npx expo export --platform web`: 9/9 static routes cleanly bundled.
 
+### Entry #12 (2026-09-22): Full Codebase Localization (i18n) Supporting 7 Languages
+
+#### Summary & Motivation
+Completed full internationalization (i18n) across the entire Folium client codebase, removing hardcoded UI strings in favor of a lightweight, strongly typed, zero-runtime-overhead React Context architecture. Added complete translations for 7 languages: Vietnamese (`vi`), English (`en`), Japanese (`ja`), Simplified Chinese (`zh`), French (`fr`), Spanish (`es`), and German (`de`).
+
+#### 1. Architecture & Type Safety
+- **Typed Keys & Fallbacks (`apps/mobile/src/i18n/types.ts`)**:
+  - Comprehensive `TranslationKey` union covering all navigation, bookshelf, reader, drive sync, metadata editor, community OPDS, and sync badge strings.
+  - TypeScript strictly enforces key existence at compile-time via `pnpm typecheck`.
+- **Dynamic Parameter Interpolation (`apps/mobile/src/i18n/index.tsx`)**:
+  - Built-in parameter substitution: `t('reader.pageOf', { page: 12, total: 150, percent: 8.0 })`.
+  - Cascading fallback: `target locale` -> `en` -> `vi` -> raw key string.
+  - Persistent language selection in SQLite (`sync_meta` key `app_locale`).
+- **Complete Language Dictionaries (`apps/mobile/src/i18n/locales/`)**:
+  - `vi.ts` (Tiếng Việt - default)
+  - `en.ts` (English)
+  - `ja.ts` (日本語)
+  - `zh.ts` (简体中文)
+  - `fr.ts` (Français)
+  - `es.ts` (Español)
+  - `de.ts` (Deutsch)
+
+#### 2. Localized Views & Components
+- **Settings Screen (`apps/mobile/app/settings.tsx`)**:
+  - Converted the legacy 2-language toggle into an extensible `languageGrid` displaying all 7 supported languages with their native names and instant locale switching.
+- **Bookshelf & Navigation**:
+  - `BookshelfScreen` & `BookshelfHeader`: Search placeholders, file picker errors, and action tooltips.
+  - `EmptyBookshelf`: Localized empty state titles, descriptions, and file selection CTA.
+  - `ShelfFilterChips`: Localized "All" and "Inbox" filters.
+  - `BookCard`: Reading progress (`{percent}%`), unread badges, and delete confirmation dialogues.
+  - `BookshelfFooter` & `SidebarNav`: Localized library navigation, shelves list, cloud status, and legal links.
+  - `BottomTabBar`: Localized mobile navigation labels.
+- **Reader Experience (`apps/mobile/app/reader/[id].tsx` & `useReaderAnnotations.ts`)**:
+  - Localized drawer tabs: Table of Contents, Bookmarks, Highlights & Notes, Search.
+  - Search placeholder, empty query prompt, and "no results found" messaging.
+  - Floating text selection card: "Highlight & Note", color palette, and note input.
+  - Reader appearance modal: Theme options (Dark, Sepia, Light), font size adjustments, and keyboard shortcut cheatsheet.
+  - Page navigation controls, progress indicators, and toast notifications.
+- **Modals & Badges**:
+  - `DriveSyncModal`: OAuth login cards, Google Drive status, sync result breakdowns, and Zero-Knowledge security notices.
+  - `MetadataEditModal`: Book title, author, shelf category, cover URL, and delete confirmations.
+  - `SyncStatusBadge`: Real-time status indicators (Synced, Syncing, Offline, Error), pending count, and modal info dialogs.
+- **Community & OPDS (`apps/mobile/app/community.tsx`)**:
+  - OPDS catalog tabs, loading spinners, download status buttons ("Download to Library", "In Library").
+  - Google Drive folder scanner inputs, recursive scan feedback, and import buttons.
+  - Custom OPDS catalog feed inputs and validation alerts.
+
+#### 3. Verification & Build
+- `pnpm typecheck`: 0 errors across monorepo.
+- `pnpm test`: 21/21 security and regression tests passing.
+- `npx expo export --platform web`: All 9 static routes cleanly bundled with zero asset errors.
+
+

@@ -40,10 +40,12 @@ import { useBookLoader } from '../../src/hooks/useBookLoader';
 import { useReaderAnnotations } from '../../src/hooks/useReaderAnnotations';
 import { useReaderSettings } from '../../src/hooks/useReaderSettings';
 import { useReaderKeyboard } from '../../src/hooks/useReaderKeyboard';
+import { useI18n } from '../../src/i18n';
 
 export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { t, locale } = useI18n();
   const readerRef = useRef<any>(null);
 
   // 1. Book file & metadata loader hook
@@ -204,7 +206,7 @@ export default function ReaderScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#6366F1" />
-        <Text style={styles.loadingText}>Đang nạp sách...</Text>
+        <Text style={styles.loadingText}>{t('common.loading')}</Text>
       </View>
     );
   }
@@ -213,9 +215,9 @@ export default function ReaderScreen() {
     return (
       <View style={styles.centerContainer}>
         <Text style={styles.errorIcon}>⚠️</Text>
-        <Text style={styles.errorText}>{errorMessage || 'Không thể mở sách'}</Text>
+        <Text style={styles.errorText}>{errorMessage || t('reader.errorLoadingBook')}</Text>
         <TouchableOpacity style={styles.backButtonCta} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>Quay lại thư viện</Text>
+          <Text style={styles.backButtonText}>{t('community.backToLibrary')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -239,7 +241,7 @@ export default function ReaderScreen() {
               router.back();
             }}
             activeOpacity={0.7}
-            accessibilityLabel="Quay lại tủ sách"
+            accessibilityLabel={t('settings.back')}
           >
             <ArrowLeftIcon size={18} color={barText} />
           </TouchableOpacity>
@@ -257,7 +259,7 @@ export default function ReaderScreen() {
               style={styles.iconButton}
               onPress={toggleBookmark}
               activeOpacity={0.7}
-              accessibilityLabel="Đánh dấu trang"
+              accessibilityLabel={t('reader.bookmarks')}
             >
               <BookmarkIcon
                 size={18}
@@ -273,7 +275,7 @@ export default function ReaderScreen() {
                 setShowDrawerModal(true);
               }}
               activeOpacity={0.7}
-              accessibilityLabel="Mục lục và Dấu trang"
+              accessibilityLabel={t('reader.toc')}
             >
               <ListTocIcon size={18} color={barText} />
             </TouchableOpacity>
@@ -282,7 +284,7 @@ export default function ReaderScreen() {
               style={styles.iconButton}
               onPress={() => setShowSettingsModal(true)}
               activeOpacity={0.7}
-              accessibilityLabel="Cài đặt giao diện"
+              accessibilityLabel={t('reader.appearanceTitle')}
             >
               <TextAaIcon size={18} color={barText} />
             </TouchableOpacity>
@@ -338,16 +340,16 @@ export default function ReaderScreen() {
             style={styles.pageButton}
             onPress={() => readerRef.current?.prevPage()}
             activeOpacity={0.7}
-            accessibilityLabel="Trang trước"
+            accessibilityLabel={t('reader.prevPage')}
           >
             <ChevronLeftIcon size={16} color={barText} />
-            <Text style={[styles.pageButtonText, { color: barText, marginLeft: 4 }]}>Trước</Text>
+            <Text style={[styles.pageButtonText, { color: barText, marginLeft: 4 }]}>{t('reader.prevPage')}</Text>
           </TouchableOpacity>
 
           <View style={styles.progressInfo}>
             <Text style={[styles.progressPercentage, { color: barText }]}>
               {book.file_type === 'pdf' && pageInfo.page && pageInfo.totalPages
-                ? `Trang ${pageInfo.page} / ${pageInfo.totalPages} (${currentProgress.toFixed(1)}%)`
+                ? t('reader.pageOf', { page: pageInfo.page, total: pageInfo.totalPages, percent: currentProgress.toFixed(1) })
                 : `${currentProgress.toFixed(1)}%`}
             </Text>
           </View>
@@ -356,9 +358,9 @@ export default function ReaderScreen() {
             style={styles.pageButton}
             onPress={() => readerRef.current?.nextPage()}
             activeOpacity={0.7}
-            accessibilityLabel="Trang sau"
+            accessibilityLabel={t('reader.nextPage')}
           >
-            <Text style={[styles.pageButtonText, { color: barText, marginRight: 4 }]}>Sau</Text>
+            <Text style={[styles.pageButtonText, { color: barText, marginRight: 4 }]}>{t('reader.nextPage')}</Text>
             <ChevronRightIcon size={16} color={barText} />
           </TouchableOpacity>
         </View>
@@ -375,7 +377,7 @@ export default function ReaderScreen() {
       {selectionData && (
         <View style={[styles.selectionPopup, { backgroundColor: barBg, borderColor: barBorder }]}>
           <View style={styles.selectionHeader}>
-            <Text style={[styles.selectionHeaderTitle, { color: barText }]}>Tô sáng & Ghi chú</Text>
+            <Text style={[styles.selectionHeaderTitle, { color: barText }]}>{t('reader.selectionTitle')}</Text>
             <TouchableOpacity onPress={() => { setSelectionData(null); setNoteInput(''); }}>
               <CloseIcon size={16} color={barText} />
             </TouchableOpacity>
@@ -415,7 +417,7 @@ export default function ReaderScreen() {
                 backgroundColor: isDark ? '#27272A' : '#F4F4F5',
               },
             ]}
-            placeholder="Viết ghi chú ngắn (tùy chọn)..."
+            placeholder={t('reader.addNotePlaceholder')}
             placeholderTextColor="#A1A1AA"
             value={noteInput}
             onChangeText={setNoteInput}
@@ -426,13 +428,13 @@ export default function ReaderScreen() {
               style={[styles.btnCancel, { borderColor: barBorder }]}
               onPress={() => { setSelectionData(null); setNoteInput(''); }}
             >
-              <Text style={{ color: barText, fontSize: 13 }}>Hủy</Text>
+              <Text style={{ color: barText, fontSize: 13 }}>{t('common.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.btnSaveHighlight}
               onPress={handleSaveHighlight}
             >
-              <Text style={styles.btnSaveHighlightText}>Lưu tô sáng</Text>
+              <Text style={styles.btnSaveHighlightText}>{t('reader.saveHighlight')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -444,8 +446,8 @@ export default function ReaderScreen() {
           <View style={[styles.modalContent, { backgroundColor: barBg }]}>
             {/* Modal Header */}
             <View style={[styles.modalHeader, { borderBottomColor: barBorder }]}>
-              <Text style={[styles.modalTitle, { color: barText }]}>Tủ đọc & Ghi chú</Text>
-              <TouchableOpacity onPress={() => setShowDrawerModal(false)} accessibilityLabel="Đóng">
+              <Text style={[styles.modalTitle, { color: barText }]}>{t('reader.shelfDrawerTitle')}</Text>
+              <TouchableOpacity onPress={() => setShowDrawerModal(false)} accessibilityLabel={t('common.close')}>
                 <CloseIcon size={18} color={barText} />
               </TouchableOpacity>
             </View>
@@ -457,7 +459,7 @@ export default function ReaderScreen() {
                 onPress={() => setDrawerTab('toc')}
               >
                 <Text style={[styles.drawerTabText, { color: drawerTab === 'toc' ? colors.accentPrimary : colors.textSecondary }]}>
-                  Mục lục
+                  {t('reader.toc')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -465,7 +467,7 @@ export default function ReaderScreen() {
                 onPress={() => setDrawerTab('bookmarks')}
               >
                 <Text style={[styles.drawerTabText, { color: drawerTab === 'bookmarks' ? colors.accentPrimary : colors.textSecondary }]}>
-                  Dấu trang ({bookmarks.length})
+                  {t('reader.bookmarks')} ({bookmarks.length})
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -473,7 +475,7 @@ export default function ReaderScreen() {
                 onPress={() => setDrawerTab('highlights')}
               >
                 <Text style={[styles.drawerTabText, { color: drawerTab === 'highlights' ? colors.accentPrimary : colors.textSecondary }]}>
-                  Ghi chú ({highlights.length + notes.length})
+                  {t('reader.highlights')} ({highlights.length + notes.length})
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -481,7 +483,7 @@ export default function ReaderScreen() {
                 onPress={() => setDrawerTab('search')}
               >
                 <Text style={[styles.drawerTabText, { color: drawerTab === 'search' ? colors.accentPrimary : colors.textSecondary }]}>
-                  Tìm kiếm
+                  {t('reader.search')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -490,7 +492,7 @@ export default function ReaderScreen() {
             {drawerTab === 'toc' && (
               toc.length === 0 ? (
                 <View style={styles.emptyContainer}>
-                  <Text style={{ color: colors.textSecondary }}>Không có mục lục</Text>
+                  <Text style={{ color: colors.textSecondary }}>{t('reader.emptyToc')}</Text>
                 </View>
               ) : (
                 <FlatList
@@ -517,9 +519,9 @@ export default function ReaderScreen() {
             {drawerTab === 'bookmarks' && (
               bookmarks.length === 0 ? (
                 <View style={styles.emptyContainer}>
-                  <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Chưa có dấu trang nào</Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 14 }}>{t('reader.emptyBookmarks')}</Text>
                   <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 4 }}>
-                    Nhấn biểu tượng dấu trang trên thanh công cụ để đánh dấu trang hiện tại
+                    {t('reader.emptyBookmarksHint')}
                   </Text>
                 </View>
               ) : (
@@ -542,13 +544,13 @@ export default function ReaderScreen() {
                           </Text>
                         </View>
                         <Text style={styles.annotationMeta}>
-                          {new Date(item.client_created_at).toLocaleString('vi-VN')}
+                          {new Date(item.client_created_at).toLocaleString(locale)}
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.deleteBtn}
                         onPress={() => handleDeleteBookmark(item.id)}
-                        accessibilityLabel="Xóa dấu trang"
+                        accessibilityLabel={t('reader.deleteBookmark')}
                       >
                         <TrashIcon size={14} color={colors.statusError} />
                       </TouchableOpacity>
@@ -562,9 +564,9 @@ export default function ReaderScreen() {
             {drawerTab === 'highlights' && (
               highlights.length === 0 && notes.length === 0 ? (
                 <View style={styles.emptyContainer}>
-                  <Text style={{ color: '#A1A1AA', fontSize: 14 }}>Chưa có tô sáng hoặc ghi chú nào</Text>
+                  <Text style={{ color: '#A1A1AA', fontSize: 14 }}>{t('reader.emptyHighlights')}</Text>
                   <Text style={{ color: '#71717A', fontSize: 12, marginTop: 4 }}>
-                    Bôi đen đoạn văn bản trong sách để tô sáng và ghi chép
+                    {t('reader.emptyHighlightsHint')}
                   </Text>
                 </View>
               ) : (
@@ -589,7 +591,7 @@ export default function ReaderScreen() {
                           <View style={styles.badgeRow}>
                             <View style={[styles.colorDot, { backgroundColor: colorBadge }]} />
                             <Text style={styles.annotationMeta}>
-                              {new Date(item.client_created_at).toLocaleString('vi-VN')}
+                              {new Date(item.client_created_at).toLocaleString(locale)}
                             </Text>
                           </View>
                           <Text style={[styles.annotationQuote, { color: barText }]} numberOfLines={2}>
@@ -604,7 +606,7 @@ export default function ReaderScreen() {
                         <TouchableOpacity
                           style={styles.deleteBtn}
                           onPress={() => handleDeleteHighlight(item.id, item.cfi_range)}
-                          accessibilityLabel="Xóa tô sáng"
+                          accessibilityLabel={t('reader.deleteHighlight')}
                         >
                           <TrashIcon size={14} color={colors.statusError} />
                         </TouchableOpacity>
@@ -627,7 +629,7 @@ export default function ReaderScreen() {
                       backgroundColor: isDark ? '#27272A' : '#F4F4F5',
                     },
                   ]}
-                  placeholder="Tìm kiếm trong dấu trang, ghi chú, đoạn trích..."
+                  placeholder={t('reader.searchPlaceholder')}
                   placeholderTextColor="#A1A1AA"
                   value={searchQuery}
                   onChangeText={handleSearch}
@@ -636,13 +638,13 @@ export default function ReaderScreen() {
                 {searchQuery.trim().length === 0 ? (
                   <View style={styles.emptyContainer}>
                     <Text style={{ color: '#A1A1AA', fontSize: 13 }}>
-                      Nhập từ khóa để tìm kiếm nhanh tức thì trong sách
+                      {t('reader.searchEmptyPrompt')}
                     </Text>
                   </View>
                 ) : searchResults.length === 0 ? (
                   <View style={styles.emptyContainer}>
                     <Text style={{ color: '#A1A1AA', fontSize: 13 }}>
-                      Không tìm thấy kết quả phù hợp cho "{searchQuery}"
+                      {t('reader.noResults', { query: searchQuery })}
                     </Text>
                   </View>
                 ) : (
@@ -661,10 +663,10 @@ export default function ReaderScreen() {
                       >
                         <View style={styles.searchResultHeader}>
                           <Text style={styles.searchResultBadge}>
-                            {item.type === 'bookmark' ? 'Dấu trang' : item.type === 'highlight' ? 'Tô sáng' : 'Ghi chú'}
+                            {item.type === 'bookmark' ? t('reader.bookmarks') : item.type === 'highlight' ? t('reader.highlights') : t('reader.notes')}
                           </Text>
                           <Text style={styles.annotationMeta}>
-                            {new Date(item.created_at).toLocaleDateString('vi-VN')}
+                            {new Date(item.created_at).toLocaleDateString(locale)}
                           </Text>
                         </View>
                         <Text style={[styles.searchResultSnippet, { color: barText }]} numberOfLines={2}>
@@ -688,34 +690,34 @@ export default function ReaderScreen() {
           onPress={() => setShowSettingsModal(false)}
         >
           <View style={[styles.settingsCard, { backgroundColor: barBg, borderColor: barBorder }]}>
-            <Text style={[styles.settingsSectionTitle, { color: barText }]}>GIAO DIỆN ĐỌC</Text>
+            <Text style={[styles.settingsSectionTitle, { color: barText }]}>{t('reader.appearanceTitle')}</Text>
             <View style={styles.themeRow}>
-              {(['dark', 'sepia', 'light'] as ReaderTheme[]).map((t) => (
+              {(['dark', 'sepia', 'light'] as ReaderTheme[]).map((themeKey) => (
                 <TouchableOpacity
-                  key={t}
+                  key={themeKey}
                   style={[
                     styles.themeButton,
-                    t === 'dark' && { backgroundColor: '#121214' },
-                    t === 'sepia' && { backgroundColor: '#F4ECD8' },
-                    t === 'light' && { backgroundColor: '#FFFFFF' },
-                    settings.theme === t && styles.themeButtonActive,
+                    themeKey === 'dark' && { backgroundColor: '#121214' },
+                    themeKey === 'sepia' && { backgroundColor: '#F4ECD8' },
+                    themeKey === 'light' && { backgroundColor: '#FFFFFF' },
+                    settings.theme === themeKey && styles.themeButtonActive,
                   ]}
-                  onPress={() => selectTheme(t)}
+                  onPress={() => selectTheme(themeKey)}
                 >
                   <Text
                     style={[
                       styles.themeButtonLabel,
-                      { color: t === 'dark' ? '#E4E4E7' : '#18181B' },
+                      { color: themeKey === 'dark' ? '#E4E4E7' : '#18181B' },
                     ]}
                   >
-                    {t === 'dark' ? 'Tối' : t === 'sepia' ? 'Sepia' : 'Sáng'}
+                    {themeKey === 'dark' ? t('reader.themeDark') : themeKey === 'sepia' ? t('reader.themeSepia') : t('reader.themeLight')}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
             <Text style={[styles.settingsSectionTitle, { color: barText, marginTop: 18 }]}>
-              CỠ CHỮ ({settings.fontSize}%)
+              {t('reader.fontSize').toUpperCase()} ({settings.fontSize}%)
             </Text>
             <View style={styles.fontRow}>
               <TouchableOpacity
@@ -735,19 +737,11 @@ export default function ReaderScreen() {
 
             {Platform.OS === 'web' && (
               <View style={[styles.shortcutBox, { borderTopColor: barBorder }]}>
-                <Text style={[styles.shortcutTitle, { color: barText }]}>PHÍM TẮT BÀN PHÍM</Text>
-                <Text style={styles.shortcutRow}>
-                  <Text style={styles.shortcutKey}>← / → hoặc Space</Text>: Lật trang
-                </Text>
-                <Text style={styles.shortcutRow}>
-                  <Text style={styles.shortcutKey}>+ / -</Text>: Chỉnh cỡ chữ (70% - 200%)
-                </Text>
-                <Text style={styles.shortcutRow}>
-                  <Text style={styles.shortcutKey}>T</Text>: Ẩn / Hiện thanh công cụ
-                </Text>
-                <Text style={styles.shortcutRow}>
-                  <Text style={styles.shortcutKey}>Esc</Text>: Đóng bảng / Menu
-                </Text>
+                <Text style={[styles.shortcutTitle, { color: barText }]}>{t('reader.keyboardShortcuts')}</Text>
+                <Text style={styles.shortcutRow}>{t('reader.shortcutTurnPage')}</Text>
+                <Text style={styles.shortcutRow}>{t('reader.shortcutFontSize')}</Text>
+                <Text style={styles.shortcutRow}>{t('reader.shortcutToggleUI')}</Text>
+                <Text style={styles.shortcutRow}>{t('reader.shortcutClose')}</Text>
               </View>
             )}
           </View>

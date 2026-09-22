@@ -16,6 +16,7 @@ import {
 } from '../services/syncService';
 import { colors, typography, radius } from '../theme/tokens';
 import { SyncIcon } from './icons/Icons';
+import { useI18n } from '../i18n';
 
 interface Props {
   compact?: boolean;
@@ -23,6 +24,7 @@ interface Props {
 }
 
 export function SyncStatusBadge({ compact = false, theme = 'dark' }: Props) {
+  const { t, locale } = useI18n();
   const [syncState, setSyncState] = useState<SyncState>({
     status: 'idle',
     lastSyncedAt: null,
@@ -41,11 +43,11 @@ export function SyncStatusBadge({ compact = false, theme = 'dark' }: Props) {
     try {
       const serverUrl = await getSyncServerUrl();
       const lastSyncStr = syncState.lastSyncedAt
-        ? new Date(syncState.lastSyncedAt).toLocaleTimeString('vi-VN', {
+        ? new Date(syncState.lastSyncedAt).toLocaleTimeString(locale, {
             hour: '2-digit',
             minute: '2-digit',
           })
-        : 'Chưa từng';
+        : t('sync.dialogNever');
 
       if (compact) {
         performFullSync();
@@ -54,22 +56,22 @@ export function SyncStatusBadge({ compact = false, theme = 'dark' }: Props) {
 
       const statusLabel =
         syncState.status === 'offline'
-          ? 'Ngoại tuyến'
+          ? t('sync.statusOffline')
           : syncState.status === 'error'
-          ? syncState.errorMessage || 'Lỗi kết nối'
-          : 'Đã sẵn sàng';
+          ? syncState.errorMessage || t('sync.statusError')
+          : t('sync.statusReady');
 
-      const infoMsg = `Trạng thái: ${statusLabel}\nLần cuối: ${lastSyncStr}\nThay đổi chờ: ${syncState.pendingCount}\nMáy chủ: ${serverUrl}`;
+      const infoMsg = `${t('sync.dialogStatus', { status: statusLabel })}\n${t('sync.dialogLastSync', { time: lastSyncStr })}\n${t('sync.pendingChanges', { count: syncState.pendingCount })}\n${t('sync.dialogServer', { server: serverUrl })}`;
 
       if (Platform.OS === 'web') {
-        const confirmSync = window.confirm(`${infoMsg}\n\nNhấn OK để đồng bộ ngay.`);
+        const confirmSync = window.confirm(`${infoMsg}\n\n${t('sync.dialogPrompt')}`);
         if (confirmSync) {
           performFullSync();
         }
       } else {
-        Alert.alert('Đồng bộ Cloudflare D1', infoMsg, [
-          { text: 'Đóng', style: 'cancel' },
-          { text: 'Đồng bộ ngay', onPress: () => performFullSync() },
+        Alert.alert(t('sync.dialogTitle'), infoMsg, [
+          { text: t('sync.close'), style: 'cancel' },
+          { text: t('sync.dialogSyncNow'), onPress: () => performFullSync() },
         ]);
       }
     } catch {
@@ -82,19 +84,19 @@ export function SyncStatusBadge({ compact = false, theme = 'dark' }: Props) {
   const textColor = isDark ? colors.textSecondary : isSepia ? '#6D5B46' : colors.textMuted;
 
   let dotColor: string = colors.statusSuccess;
-  let label = 'Đã đồng bộ';
+  let label = t('sync.statusSynced');
 
   if (syncState.status === 'syncing') {
-    label = 'Đang đồng bộ...';
+    label = t('sync.statusSyncing');
     dotColor = colors.statusSyncing;
   } else if (syncState.status === 'offline') {
-    label = 'Ngoại tuyến';
+    label = t('sync.statusOffline');
     dotColor = colors.statusOffline;
   } else if (syncState.status === 'error') {
-    label = 'Lỗi đồng bộ';
+    label = t('sync.statusError');
     dotColor = colors.statusError;
   } else if (syncState.pendingCount > 0) {
-    label = `${syncState.pendingCount} chờ sync`;
+    label = t('sync.pendingChanges', { count: syncState.pendingCount });
     dotColor = colors.statusSyncing;
   }
 

@@ -30,9 +30,11 @@ import { EmptyBookshelf } from '../src/components/bookshelf/EmptyBookshelf';
 import { BookshelfFooter } from '../src/components/bookshelf/BookshelfFooter';
 import { BottomTabBar } from '../src/components/navigation/BottomTabBar';
 import { SidebarNav } from '../src/components/navigation/SidebarNav';
+import { useI18n } from '../src/i18n';
 
 export default function BookshelfScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
   const [books, setBooks] = useState<BookWithProgress[]>([]);
@@ -86,11 +88,11 @@ export default function BookshelfScreen() {
         setBooks((prev) => [newBook, ...prev]);
       }
     } catch (err: any) {
-      const msg = err.message || 'Không thể nhập file sách này.';
+      const msg = err.message || t('bookshelf.importFailed');
       if (Platform.OS === 'web') {
         alert(msg);
       } else {
-        Alert.alert('Lỗi nhập sách', msg);
+        Alert.alert(t('bookshelf.importFailedTitle'), msg);
       }
     } finally {
       setIsImporting(false);

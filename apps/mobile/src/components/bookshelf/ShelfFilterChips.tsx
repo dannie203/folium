@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import type { BookWithProgress } from '../../services/bookService';
 import { colors, typography, spacing, radius } from '../../theme/tokens';
 import { FolderIcon, InboxTrayIcon } from '../icons/Icons';
+import { useI18n } from '../../i18n';
 
 export type FilterType = 'all' | 'epub' | 'pdf';
 
@@ -23,6 +24,8 @@ export function ShelfFilterChips({
   onSelectShelf,
   onSelectFilter,
 }: ShelfFilterChipsProps) {
+  const { t } = useI18n();
+
   return (
     <View style={styles.filterWrapper}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
@@ -42,7 +45,7 @@ export function ShelfFilterChips({
               selectedShelf === 'all' && activeFilter === 'all' && styles.filterTextActive,
             ]}
           >
-            Tất cả ({books.length})
+            {t('bookshelf.all')} ({books.length})
           </Text>
         </TouchableOpacity>
 
@@ -55,7 +58,7 @@ export function ShelfFilterChips({
             color={selectedShelf === 'Inbox' ? '#FFFFFF' : colors.textSecondary}
           />
           <Text style={[styles.filterText, selectedShelf === 'Inbox' && styles.filterTextActive]}>
-            Hộp thư đến ({books.filter((b) => !b.shelf || b.shelf === 'Inbox').length})
+            {t('bookshelf.inbox')} ({books.filter((b) => !b.shelf || b.shelf === 'Inbox').length})
           </Text>
         </TouchableOpacity>
 

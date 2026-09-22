@@ -12,6 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useDriveSync } from '../hooks/useDriveSync';
 import { colors, typography, spacing, radius } from '../theme/tokens';
+import { useI18n } from '../i18n';
 
 interface DriveSyncModalProps {
   visible: boolean;
@@ -21,6 +22,7 @@ interface DriveSyncModalProps {
 
 export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncModalProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const {
     user,
     isAuthenticating,
@@ -43,8 +45,8 @@ export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncMo
         <View style={styles.modalCard}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>☁️ Google Drive Sync</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <Text style={styles.title}>☁️ {t('drive.title')}</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityLabel={t('drive.close')}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -66,18 +68,17 @@ export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncMo
                   <View style={styles.userMeta}>
                     <Text style={styles.userName}>{user.name}</Text>
                     <Text style={styles.userEmail}>{user.email}</Text>
-                    <Text style={styles.badgeDrive}>📁 /Folium folder active</Text>
+                    <Text style={styles.badgeDrive}>{t('drive.activeFolder')}</Text>
                   </View>
                 </View>
                 <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
-                  <Text style={styles.signOutBtnText}>Đăng xuất</Text>
+                  <Text style={styles.signOutBtnText}>{t('drive.signOut')}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <View style={styles.signInCard}>
                 <Text style={styles.signInDesc}>
-                  Đăng nhập tài khoản Google để tự động sao lưu file sách (.epub, .pdf) vào thư mục
-                  riêng tư trên Google Drive của bạn mà không tốn chi phí máy chủ.
+                  {t('drive.signInDesc')}
                 </Text>
 
                 <TouchableOpacity
@@ -88,7 +89,7 @@ export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncMo
                   {isAuthenticating ? (
                     <ActivityIndicator size="small" color={colors.textPrimary} />
                   ) : (
-                    <Text style={styles.primaryBtnText}>Đăng nhập với Google</Text>
+                    <Text style={styles.primaryBtnText}>{t('drive.signInWithGoogle')}</Text>
                   )}
                 </TouchableOpacity>
 
@@ -96,7 +97,7 @@ export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncMo
                   style={styles.sandboxBtn}
                   onPress={() => handleSignIn(true)}
                 >
-                  <Text style={styles.sandboxBtnText}>🛠️ Kết nối Sandbox (Chế độ Nhà phát triển)</Text>
+                  <Text style={styles.sandboxBtnText}>{t('drive.sandboxBtn')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -112,19 +113,19 @@ export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncMo
                   {isSyncing ? (
                     <View style={styles.syncingRow}>
                       <ActivityIndicator size="small" color={colors.textPrimary} />
-                      <Text style={styles.syncBtnText}>Đang đồng bộ file sách...</Text>
+                      <Text style={styles.syncBtnText}>{t('drive.syncing')}</Text>
                     </View>
                   ) : (
-                    <Text style={styles.syncBtnText}>🔄 Đồng bộ Thư viện Ngay</Text>
+                    <Text style={styles.syncBtnText}>{t('drive.syncNow')}</Text>
                   )}
                 </TouchableOpacity>
 
                 {syncResult && (
                   <View style={styles.resultBox}>
-                    <Text style={styles.resultTitle}>Kết quả đồng bộ:</Text>
-                    <Text style={styles.resultItem}>• Tải lên Drive: {syncResult.uploadedCount} cuốn</Text>
-                    <Text style={styles.resultItem}>• Tải về máy: {syncResult.downloadedCount} cuốn</Text>
-                    <Text style={styles.resultItem}>• Đã khớp sẵn: {syncResult.syncedCount} cuốn</Text>
+                    <Text style={styles.resultTitle}>{t('drive.results')}</Text>
+                    <Text style={styles.resultItem}>{t('drive.uploaded', { count: syncResult.uploadedCount })}</Text>
+                    <Text style={styles.resultItem}>{t('drive.downloaded', { count: syncResult.downloadedCount })}</Text>
+                    <Text style={styles.resultItem}>{t('drive.matched', { count: syncResult.syncedCount })}</Text>
                     {syncResult.errors.length > 0 && (
                       <View style={styles.errorBox}>
                         {syncResult.errors.map((err, i) => (
@@ -147,26 +148,24 @@ export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncMo
 
             {/* Zero-Knowledge Security Callout */}
             <View style={styles.securityCallout}>
-              <Text style={styles.securityTitle}>🛡️ Cơ Chế Khóa Thông Tin (Zero-Knowledge)</Text>
+              <Text style={styles.securityTitle}>{t('drive.zeroKnowledgeVault')}</Text>
               <Text style={styles.securityDesc}>
-                Toàn bộ tiến độ đọc, bookmark và ghi chú được mã hóa AES-256-GCM tại máy client.
-                Server Cloudflare hoàn toàn mù (Blind Vault), không giữ khóa giải mã và không thể
-                đọc lén sách của bạn.
+                {t('drive.zeroKnowledgeDesc')}
               </Text>
             </View>
 
             {/* Legal & Public Portal Links */}
             <View style={styles.footerLinks}>
               <TouchableOpacity onPress={() => navigateTo('/privacy')}>
-                <Text style={styles.footerLinkText}>Quyền riêng tư</Text>
+                <Text style={styles.footerLinkText}>{t('settings.privacy')}</Text>
               </TouchableOpacity>
               <Text style={styles.footerDivider}>•</Text>
               <TouchableOpacity onPress={() => navigateTo('/terms')}>
-                <Text style={styles.footerLinkText}>Điều khoản & DMCA</Text>
+                <Text style={styles.footerLinkText}>{t('settings.terms')}</Text>
               </TouchableOpacity>
               <Text style={styles.footerDivider}>•</Text>
               <TouchableOpacity onPress={() => navigateTo('/security')}>
-                <Text style={styles.footerLinkText}>Kiểm toán Bảo mật</Text>
+                <Text style={styles.footerLinkText}>{t('settings.security')}</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>

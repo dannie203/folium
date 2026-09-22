@@ -34,11 +34,13 @@ import {
   FolderIcon,
   ChevronLeftIcon,
 } from '../src/components/icons/Icons';
+import { useI18n } from '../src/i18n';
 
 type CommunityTab = 'opds' | 'drive' | 'custom';
 
 export default function CommunityBookshelfScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<CommunityTab>('opds');
 
   // OPDS State
@@ -77,7 +79,7 @@ export default function CommunityBookshelfScreen() {
     } catch (err: any) {
       console.warn('Failed to load OPDS catalog:', err);
       setCatalogBooks([]);
-      setCatalogError(err?.message || 'Không thể tải nguồn OPDS chính thức.');
+      setCatalogError(err?.message || t('community.errorLoadingCatalog'));
     } finally {
       setIsLoadingCatalog(false);
     }
@@ -89,7 +91,7 @@ export default function CommunityBookshelfScreen() {
       await importOpdsBook(entry);
       setImportedBookIds((prev) => new Set(prev).add(entry.id));
     } catch (err: any) {
-      alert(`Lỗi tải sách: ${err.message}`);
+      alert(`${t('community.failedDownload')}: ${err.message}`);
     } finally {
       setImportingBookId(null);
     }
@@ -98,7 +100,7 @@ export default function CommunityBookshelfScreen() {
   const handleScanDriveFolder = async () => {
     const folderId = extractDriveFolderId(driveFolderInput);
     if (!folderId) {
-      alert('Vui lòng nhập đường dẫn thư mục Google Drive hợp lệ (hoặc Folder ID).');
+      alert(t('community.driveInvalidUrl'));
       return;
     }
 
@@ -107,9 +109,9 @@ export default function CommunityBookshelfScreen() {
       setDriveScanMessage(null);
       const books = await scanPublicFolderRecursive(folderId);
       setScannedDriveBooks(books);
-      setDriveScanMessage(`Đã tìm thấy ${books.length} file sách trong các thư mục con lồng nhau!`);
+      setDriveScanMessage(t('community.driveFoundCount', { count: books.length }));
     } catch (err: any) {
-      setDriveScanMessage(`Lỗi quét thư mục: ${err.message}`);
+      setDriveScanMessage(t('community.driveScanError', { message: err.message }));
     } finally {
       setIsScanningDrive(false);
     }
@@ -121,7 +123,7 @@ export default function CommunityBookshelfScreen() {
       await importScannedDriveBook(book, false);
       setImportedBookIds((prev) => new Set(prev).add(book.driveFileId));
     } catch (err: any) {
-      alert(`Lỗi thêm sách vào kệ: ${err.message}`);
+      alert(`${t('community.failedDownload')}: ${err.message}`);
     } finally {
       setImportingBookId(null);
     }
@@ -138,7 +140,7 @@ export default function CommunityBookshelfScreen() {
       const books = parseOpdsXml(xml, 'custom_opds');
       setCustomBooks(books);
     } catch (err: any) {
-      alert(`Lỗi duyệt nguồn OPDS: ${err.message}`);
+      alert(t('community.errorBrowsingOpds', { message: err.message }));
     } finally {
       setIsFetchingCustom(false);
     }
@@ -154,15 +156,15 @@ export default function CommunityBookshelfScreen() {
           style={styles.backBtn}
           activeOpacity={0.7}
           onPress={() => router.back()}
-          accessibilityLabel="Quay lại"
+          accessibilityLabel={t('common.back')}
         >
           <ChevronLeftIcon size={18} color={colors.textPrimary} />
-          <Text style={styles.backBtnText}>Tủ sách</Text>
+          <Text style={styles.backBtnText}>{t('community.backToLibrary')}</Text>
         </TouchableOpacity>
 
         <View style={styles.navCenter}>
           <Text style={styles.navTitle} numberOfLines={1}>
-            Cộng Đồng & Nguồn Sách OPDS
+            {t('community.title')}
           </Text>
         </View>
 
@@ -187,7 +189,7 @@ export default function CommunityBookshelfScreen() {
               color={activeTab === 'opds' ? colors.accentPrimary : colors.textSecondary}
             />
             <Text style={[styles.tabText, activeTab === 'opds' && styles.tabTextActive]}>
-              Sách Công Quyền
+              {t('community.tabOpds')}
             </Text>
           </TouchableOpacity>
 
@@ -200,7 +202,7 @@ export default function CommunityBookshelfScreen() {
               color={activeTab === 'drive' ? colors.accentPrimary : colors.textSecondary}
             />
             <Text style={[styles.tabText, activeTab === 'drive' && styles.tabTextActive]}>
-              Google Drive Chia Sẻ
+              {t('community.tabDrive')}
             </Text>
           </TouchableOpacity>
 
@@ -213,7 +215,7 @@ export default function CommunityBookshelfScreen() {
               color={activeTab === 'custom' ? colors.accentPrimary : colors.textSecondary}
             />
             <Text style={[styles.tabText, activeTab === 'custom' && styles.tabTextActive]}>
-              Nguồn OPDS Riêng
+              {t('community.tabCustom')}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -246,17 +248,17 @@ export default function CommunityBookshelfScreen() {
             {isLoadingCatalog ? (
               <View style={styles.centerLoading}>
                 <ActivityIndicator size="large" color={colors.accentPrimary} />
-                <Text style={styles.loadingText}>Đang tải danh mục sách công quyền...</Text>
+                <Text style={styles.loadingText}>{t('community.loadingCatalog')}</Text>
               </View>
             ) : catalogError ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateTitle}>Không thể tải catalog</Text>
+                <Text style={styles.emptyStateTitle}>{t('community.errorLoadingCatalog')}</Text>
                 <Text style={styles.emptyStateText}>{catalogError}</Text>
               </View>
             ) : catalogBooks.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateTitle}>Catalog chưa có sách</Text>
-                <Text style={styles.emptyStateText}>Nguồn chính thức hiện không trả về mục sách nào.</Text>
+                <Text style={styles.emptyStateTitle}>{t('community.emptyCatalog')}</Text>
+                <Text style={styles.emptyStateText}>{t('community.emptyCatalogDesc')}</Text>
               </View>
             ) : (
               <View style={styles.bookList}>
@@ -301,7 +303,7 @@ export default function CommunityBookshelfScreen() {
                             <View style={styles.btnContentRow}>
                               {isImported && <CheckIcon size={14} color="#FFFFFF" />}
                               <Text style={styles.importBtnText}>
-                                {isImported ? 'Đã có trong kệ' : '+ Tải vào Thư Viện'}
+                                {isImported ? t('community.downloaded') : t('community.download')}
                               </Text>
                             </View>
                           )}
@@ -321,11 +323,10 @@ export default function CommunityBookshelfScreen() {
             <View style={styles.driveHeaderCard}>
               <View style={styles.driveHeaderTitleRow}>
                 <FolderIcon size={20} color={colors.accentPrimary} />
-                <Text style={styles.driveHeaderTitle}>Kết Nối Folder Google Drive Cộng Đồng</Text>
+                <Text style={styles.driveHeaderTitle}>{t('community.driveHeader')}</Text>
               </View>
               <Text style={styles.driveHeaderDesc}>
-                Dán đường dẫn thư mục Google Drive do bạn bè hoặc cộng đồng chia sẻ. Folium sẽ quét
-                đệ quy toàn bộ các thư mục con lồng nhau và tự động biến tên subfolder thành Kệ sách tương ứng!
+                {t('community.driveDesc')}
               </Text>
 
               <View style={styles.driveInputRow}>
@@ -333,7 +334,7 @@ export default function CommunityBookshelfScreen() {
                   style={styles.driveInput}
                   value={driveFolderInput}
                   onChangeText={setDriveFolderInput}
-                  placeholder="https://drive.google.com/drive/folders/... hoặc Folder ID"
+                  placeholder={t('community.drivePlaceholder')}
                   placeholderTextColor={colors.textMuted}
                 />
                 <TouchableOpacity
@@ -344,7 +345,7 @@ export default function CommunityBookshelfScreen() {
                   {isScanningDrive ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
-                    <Text style={styles.scanBtnText}>Quét Đệ Quy</Text>
+                    <Text style={styles.scanBtnText}>{t('community.scanDriveBtn')}</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -358,7 +359,7 @@ export default function CommunityBookshelfScreen() {
             {scannedDriveBooks.length > 0 && (
               <View style={styles.scannedList}>
                 <Text style={styles.scannedTitle}>
-                  Tài liệu tìm thấy ({scannedDriveBooks.length} cuốn):
+                  {t('community.driveFoundCount', { count: scannedDriveBooks.length })}
                 </Text>
                 {scannedDriveBooks.map((b) => {
                   const isImported = importedBookIds.has(b.driveFileId);
@@ -393,7 +394,7 @@ export default function CommunityBookshelfScreen() {
                           <View style={styles.btnContentRow}>
                             {isImported && <CheckIcon size={14} color="#FFFFFF" />}
                             <Text style={styles.addScannedBtnText}>
-                              {isImported ? 'Đã Thêm' : '+ Thêm Kệ'}
+                              {isImported ? t('community.inLibrary') : t('community.addToLibrary')}
                             </Text>
                           </View>
                         )}
@@ -412,11 +413,10 @@ export default function CommunityBookshelfScreen() {
             <View style={styles.customCard}>
               <View style={styles.driveHeaderTitleRow}>
                 <CommunityGlobeIcon size={20} color={colors.accentPrimary} />
-                <Text style={styles.customTitle}>Nguồn Thư Viện OPDS Tùy Chỉnh</Text>
+                <Text style={styles.customTitle}>{t('community.customHeader')}</Text>
               </View>
               <Text style={styles.customDesc}>
-                Kết nối với máy chủ Calibre Content Server tại nhà hoặc bất kỳ feed catalog OPDS mở
-                nào khác trên internet:
+                {t('community.customDesc')}
               </Text>
 
               <View style={styles.driveInputRow}>
@@ -424,7 +424,7 @@ export default function CommunityBookshelfScreen() {
                   style={styles.driveInput}
                   value={customOpdsUrl}
                   onChangeText={setCustomOpdsUrl}
-                  placeholder="https://my-calibre-server.org/opds"
+                  placeholder={t('community.customUrlPlaceholder')}
                   placeholderTextColor={colors.textMuted}
                 />
                 <TouchableOpacity
@@ -435,7 +435,7 @@ export default function CommunityBookshelfScreen() {
                   {isFetchingCustom ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
-                    <Text style={styles.scanBtnText}>Duyệt Feed</Text>
+                    <Text style={styles.scanBtnText}>{t('community.fetchCatalogBtn')}</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -452,7 +452,7 @@ export default function CommunityBookshelfScreen() {
                         style={styles.importBtn}
                         onPress={() => handleImportOpds(b)}
                       >
-                        <Text style={styles.importBtnText}>+ Thêm vào Kệ Sách</Text>
+                        <Text style={styles.importBtnText}>{t('community.addToLibrary')}</Text>
                       </TouchableOpacity>
                     </View>
                   </View>

@@ -8,7 +8,7 @@ import { useI18n } from '../src/i18n';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { locale, setLocale, t } = useI18n();
+  const { locale, setLocale, t, supportedLocales } = useI18n();
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
 
   return (
@@ -35,23 +35,21 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>{t('settings.language')}</Text>
-          <View style={styles.segmentedControl}>
-            <TouchableOpacity
-              style={[styles.segment, locale === 'vi' && styles.segmentActive]}
-              onPress={() => setLocale('vi')}
-            >
-              <Text style={[styles.segmentText, locale === 'vi' && styles.segmentTextActive]}>
-                {t('settings.vietnamese')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.segment, locale === 'en' && styles.segmentActive]}
-              onPress={() => setLocale('en')}
-            >
-              <Text style={[styles.segmentText, locale === 'en' && styles.segmentTextActive]}>
-                {t('settings.english')}
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.languageGrid}>
+            {supportedLocales.map((item) => {
+              const isSelected = locale === item.code;
+              return (
+                <TouchableOpacity
+                  key={item.code}
+                  style={[styles.languageChip, isSelected && styles.languageChipActive]}
+                  onPress={() => setLocale(item.code)}
+                >
+                  <Text style={[styles.languageChipText, isSelected && styles.languageChipTextActive]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -120,11 +118,28 @@ const styles = StyleSheet.create({
   subtitle: { color: colors.textSecondary, fontSize: typography.fontSize.body, lineHeight: typography.lineHeight.body, marginTop: spacing.sm },
   section: { marginTop: spacing.xl },
   sectionLabel: { color: colors.textMuted, fontSize: typography.fontSize.micro, fontWeight: typography.fontWeight.bold, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: spacing.sm },
-  segmentedControl: { flexDirection: 'row', padding: spacing.xs, borderRadius: radius.md, backgroundColor: colors.bgSurface, borderWidth: 1, borderColor: colors.borderSubtle },
-  segment: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: radius.sm },
-  segmentActive: { backgroundColor: colors.accentPrimary },
-  segmentText: { color: colors.textSecondary, fontSize: typography.fontSize.body, fontWeight: typography.fontWeight.medium },
-  segmentTextActive: { color: colors.textPrimary, fontWeight: typography.fontWeight.semibold },
+  languageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  languageChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: radius.md,
+    backgroundColor: colors.bgSurface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  languageChipActive: {
+    backgroundColor: colors.accentPrimary,
+    borderColor: colors.accentPrimary,
+  },
+  languageChipText: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.body,
+    fontWeight: typography.fontWeight.medium,
+  },
+  languageChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: typography.fontWeight.semibold,
+  },
   settingRow: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, backgroundColor: colors.bgSurface, borderWidth: 1, borderColor: colors.borderSubtle, borderRadius: radius.md },
   rowIcon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgElevated },
   rowCopy: { flex: 1, marginLeft: spacing.md },

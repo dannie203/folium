@@ -1,25 +1,27 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, typography, spacing } from '../../theme/tokens';
+import { useI18n } from '../../i18n';
 
 interface BookshelfFooterProps {
   onNavigate: (route: string) => void;
 }
 
 export function BookshelfFooter({ onNavigate }: BookshelfFooterProps) {
+  const { t } = useI18n();
   return (
     <View style={styles.footerContainer}>
       <View style={styles.footerLinksRow}>
         <TouchableOpacity onPress={() => onNavigate('/privacy')}>
-          <Text style={styles.footerLinkText}>Quyền riêng tư</Text>
+          <Text style={styles.footerLinkText}>{t('settings.privacy')}</Text>
         </TouchableOpacity>
         <Text style={styles.footerDivider}>•</Text>
         <TouchableOpacity onPress={() => onNavigate('/terms')}>
-          <Text style={styles.footerLinkText}>Điều khoản & DMCA</Text>
+          <Text style={styles.footerLinkText}>{t('settings.terms')}</Text>
         </TouchableOpacity>
         <Text style={styles.footerDivider}>•</Text>
         <TouchableOpacity onPress={() => onNavigate('/security')}>
-          <Text style={styles.footerLinkText}>Bảo mật ZK</Text>
+          <Text style={styles.footerLinkText}>{t('settings.security')}</Text>
         </TouchableOpacity>
       </View>
       <Text style={styles.footerCopyright}>
