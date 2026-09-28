@@ -186,4 +186,12 @@ export const en: Record<TranslationKey, string> = {
   'sync.dialogNever': 'Never',
   'sync.dialogPrompt': 'Press OK to sync now.',
   'sync.close': 'Close',
+
+  // Errors
+  'error.bookNotFound': 'Book not found in library',
+  'error.bookFileNotFound': 'Book file not found in local storage. Please remove and re-add the book.',
+  'error.bookLoadFailed': 'Failed to load book file',
+  'error.signInFailed': 'Google sign-in failed.',
+  'error.signOutFailed': 'Sign-out failed.',
+  'error.syncFailed': 'Google Drive sync failed.',
 };

@@ -19,7 +19,7 @@ export async function getOrCreateFoliumFolder(): Promise<string> {
   if (cachedFolderId) return cachedFolderId;
 
   const user = getCurrentUser();
-  if (!user) throw new Error('Chưa đăng nhập Google Drive.');
+  if (!user) throw new Error('Not signed in to Google Drive.');
 
   // Demo fallback
   if (user.accessToken.startsWith('demo_')) {
@@ -36,7 +36,7 @@ export async function getOrCreateFoliumFolder(): Promise<string> {
   });
 
   if (!searchResp.ok) {
-    throw new Error(`Lỗi tìm kiếm thư mục Google Drive: ${searchResp.statusText}`);
+    throw new Error(`Google Drive folder search failed: ${searchResp.statusText}`);
   }
 
   const searchData = await searchResp.json();
@@ -60,7 +60,7 @@ export async function getOrCreateFoliumFolder(): Promise<string> {
   });
 
   if (!createResp.ok) {
-    throw new Error('Không thể tạo thư mục /Folium trên Google Drive.');
+    throw new Error('Failed to create /Folium folder on Google Drive.');
   }
 
   const createData = await createResp.json();
@@ -73,7 +73,7 @@ export async function getOrCreateFoliumFolder(): Promise<string> {
  */
 export async function getOrCreateShelfSubfolder(shelfName: string): Promise<string> {
   const user = getCurrentUser();
-  if (!user) throw new Error('Chưa đăng nhập Google Drive.');
+  if (!user) throw new Error('Not signed in to Google Drive.');
 
   if (user.accessToken.startsWith('demo_')) {
     return `demo_folder_${shelfName}`;
@@ -111,7 +111,7 @@ export async function getOrCreateShelfSubfolder(shelfName: string): Promise<stri
   });
 
   if (!createResp.ok) {
-    throw new Error(`Không thể tạo thư mục kệ sách /Folium/${shelfName} trên Google Drive.`);
+    throw new Error(`Failed to create shelf folder /Folium/${shelfName} on Google Drive.`);
   }
 
   const newFolder = await createResp.json();
@@ -123,7 +123,7 @@ export async function getOrCreateShelfSubfolder(shelfName: string): Promise<stri
  */
 export async function uploadBookToDrive(book: Book): Promise<string> {
   const user = getCurrentUser();
-  if (!user) throw new Error('Vui lòng đăng nhập Google Drive.');
+  if (!user) throw new Error('Please sign in to Google Drive.');
 
   // Demo fallback
   if (user.accessToken.startsWith('demo_')) {
@@ -153,10 +153,10 @@ export async function uploadBookToDrive(book: Book): Promise<string> {
   let fileBuffer: ArrayBuffer;
   if (Platform.OS === 'web') {
     const webData = await getWebBook(book.id);
-    if (!webData) throw new Error(`Không tìm thấy dữ liệu sách ${book.title} trong IndexedDB.`);
+    if (!webData) throw new Error(`Book data for ${book.title} not found in IndexedDB.`);
     fileBuffer = webData;
   } else {
-    if (!book.local_path) throw new Error(`Đường dẫn file không hợp lệ: ${book.title}`);
+    if (!book.local_path) throw new Error(`Invalid file path for: ${book.title}`);
     const base64 = await FileSystem.readAsStringAsync(book.local_path, {
       encoding: FileSystem.EncodingType.Base64,
     });

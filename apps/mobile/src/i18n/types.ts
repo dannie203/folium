@@ -190,4 +190,12 @@ export type TranslationKey =
   | 'sync.dialogSyncNow'
   | 'sync.dialogNever'
   | 'sync.dialogPrompt'
-  | 'sync.close';
+  | 'sync.close'
+
+  // Errors
+  | 'error.bookNotFound'
+  | 'error.bookFileNotFound'
+  | 'error.bookLoadFailed'
+  | 'error.signInFailed'
+  | 'error.signOutFailed'
+  | 'error.syncFailed';

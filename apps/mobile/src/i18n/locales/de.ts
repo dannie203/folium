@@ -186,4 +186,12 @@ export const de: Record<TranslationKey, string> = {
   'sync.dialogNever': 'Nie',
   'sync.dialogPrompt': 'Drücken Sie OK, um jetzt mit der Cloud zu synchronisieren.',
   'sync.close': 'Schließen',
+
+  // Errors
+  'error.bookNotFound': 'Buch nicht in der Bibliothek gefunden',
+  'error.bookFileNotFound': 'Buchdatei nicht im lokalen Speicher gefunden. Bitte entfernen und erneut hinzufügen.',
+  'error.bookLoadFailed': 'Fehler beim Laden der Buchdatei',
+  'error.signInFailed': 'Google-Anmeldung fehlgeschlagen.',
+  'error.signOutFailed': 'Abmeldung fehlgeschlagen.',
+  'error.syncFailed': 'Google Drive-Synchronisierung fehlgeschlagen.',
 };

@@ -186,4 +186,12 @@ export const zh: Record<TranslationKey, string> = {
   'sync.dialogNever': '从未同步',
   'sync.dialogPrompt': '点击确定立即与云端同步。',
   'sync.close': '关闭',
+
+  // Errors
+  'error.bookNotFound': '在书库中未找到该书',
+  'error.bookFileNotFound': '本地存储中未找到书籍文件。请删除后重新添加。',
+  'error.bookLoadFailed': '加载书籍文件失败',
+  'error.signInFailed': 'Google 登录失败。',
+  'error.signOutFailed': '退出登录失败。',
+  'error.syncFailed': 'Google Drive 同步失败。',
 };

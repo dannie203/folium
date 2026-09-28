@@ -186,4 +186,12 @@ export const ja: Record<TranslationKey, string> = {
   'sync.dialogNever': '未同期',
   'sync.dialogPrompt': 'OKを押して今すぐクラウドと同期します。',
   'sync.close': '閉じる',
+
+  // Errors
+  'error.bookNotFound': 'ライブラリに本が見つかりません',
+  'error.bookFileNotFound': 'ローカルストレージに書籍ファイルが見つかりません。本を削除して再追加してください。',
+  'error.bookLoadFailed': '書籍ファイルの読み込みに失敗しました',
+  'error.signInFailed': 'Google ログインに失敗しました。',
+  'error.signOutFailed': 'ログアウトに失敗しました。',
+  'error.syncFailed': 'Google Drive の同期に失敗しました。',
 };

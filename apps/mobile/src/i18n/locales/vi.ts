@@ -186,4 +186,12 @@ export const vi: Record<TranslationKey, string> = {
   'sync.dialogNever': 'Chưa từng',
   'sync.dialogPrompt': 'Nhấn OK để đồng bộ ngay.',
   'sync.close': 'Đóng',
+
+  // Errors
+  'error.bookNotFound': 'Không tìm thấy sách trong thư viện',
+  'error.bookFileNotFound': 'Không tìm thấy tệp sách trong bộ nhớ cục bộ. Bạn vui lòng xoá và thêm lại sách nhé.',
+  'error.bookLoadFailed': 'Lỗi nạp file sách',
+  'error.signInFailed': 'Đăng nhập Google thất bại.',
+  'error.signOutFailed': 'Đăng xuất thất bại.',
+  'error.syncFailed': 'Lỗi đồng bộ Google Drive.',
 };

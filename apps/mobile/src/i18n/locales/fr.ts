@@ -186,4 +186,12 @@ export const fr: Record<TranslationKey, string> = {
   'sync.dialogNever': 'Jamais',
   'sync.dialogPrompt': 'Cliquez sur OK pour synchroniser maintenant avec le cloud.',
   'sync.close': 'Fermer',
+
+  // Errors
+  'error.bookNotFound': 'Livre introuvable dans la bibliothèque',
+  'error.bookFileNotFound': 'Fichier du livre introuvable dans le stockage local. Veuillez supprimer et réimporter le livre.',
+  'error.bookLoadFailed': 'Échec du chargement du fichier du livre',
+  'error.signInFailed': 'Échec de la connexion Google.',
+  'error.signOutFailed': 'Échec de la déconnexion.',
+  'error.syncFailed': 'Échec de la synchronisation Google Drive.',
 };

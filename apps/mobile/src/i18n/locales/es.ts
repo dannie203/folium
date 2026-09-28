@@ -186,4 +186,12 @@ export const es: Record<TranslationKey, string> = {
   'sync.dialogNever': 'Nunca',
   'sync.dialogPrompt': 'Pulsa OK para sincronizar ahora con la nube.',
   'sync.close': 'Cerrar',
+
+  // Errors
+  'error.bookNotFound': 'Libro no encontrado en la biblioteca',
+  'error.bookFileNotFound': 'Archivo del libro no encontrado en el almacenamiento local. Elimina y vuelve a agregar el libro.',
+  'error.bookLoadFailed': 'Error al cargar el archivo del libro',
+  'error.signInFailed': 'Error al iniciar sesión con Google.',
+  'error.signOutFailed': 'Error al cerrar sesión.',
+  'error.syncFailed': 'Error de sincronización con Google Drive.',
 };

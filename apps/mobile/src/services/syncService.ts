@@ -356,7 +356,7 @@ export async function pushPendingMutations(): Promise<{
   const serverUrl = await getSyncServerUrl();
   const user = getCurrentUser();
   if (!user || user.accessToken.startsWith('demo_')) {
-    throw new Error('Cần đăng nhập Google thật để đồng bộ dữ liệu.');
+    throw new Error('Google sign-in required for data sync.');
   }
 
   console.log(
@@ -423,7 +423,7 @@ export async function pullRemoteChanges(): Promise<{
   const serverUrl = await getSyncServerUrl();
   const user = getCurrentUser();
   if (!user || user.accessToken.startsWith('demo_')) {
-    throw new Error('Cần đăng nhập Google thật để đồng bộ dữ liệu.');
+    throw new Error('Google sign-in required for data sync.');
   }
   const cursor = await getLastSyncedSeq();
 
@@ -658,11 +658,11 @@ export async function performFullSync(): Promise<{ pushed: number; pulled: numbe
     if (isNetworkError) {
       console.warn('[SyncService] Device is offline, sync postponed.');
       currentStatus = 'offline';
-      currentErrorMessage = 'Thiết bị đang ngoại tuyến';
+      currentErrorMessage = 'Device is offline';
     } else {
       console.error('[SyncService] Sync failed with error:', err);
       currentStatus = 'error';
-      currentErrorMessage = err?.message || 'Lỗi đồng bộ';
+      currentErrorMessage = err?.message || 'Sync error';
       scheduleRetry();
     }
 

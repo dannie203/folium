@@ -7,12 +7,14 @@ import {
   signOut,
 } from '../services/authService';
 import { syncWithGoogleDrive } from '../services/googleDriveService';
+import { useI18n } from '../i18n';
 
 export interface UseDriveSyncOptions {
   onSyncComplete?: () => void;
 }
 
 export function useDriveSync(options?: UseDriveSyncOptions) {
+  const { t } = useI18n();
   const [user, setUser] = useState<AuthUser | null>(getCurrentUser());
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -32,7 +34,7 @@ export function useDriveSync(options?: UseDriveSyncOptions) {
       setErrorMessage(null);
       await signInWithGoogle(demo);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Đăng nhập Google thất bại.');
+      setErrorMessage(err.message || t('error.signInFailed'));
     } finally {
       setIsAuthenticating(false);
     }
@@ -43,7 +45,7 @@ export function useDriveSync(options?: UseDriveSyncOptions) {
       await signOut();
       setSyncResult(null);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Đăng xuất thất bại.');
+      setErrorMessage(err.message || t('error.signOutFailed'));
     }
   };
 
@@ -57,7 +59,7 @@ export function useDriveSync(options?: UseDriveSyncOptions) {
         options.onSyncComplete();
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Lỗi đồng bộ Google Drive.');
+      setErrorMessage(err.message || t('error.syncFailed'));
     } finally {
       setIsSyncing(false);
     }
