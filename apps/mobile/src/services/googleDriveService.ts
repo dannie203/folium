@@ -5,6 +5,7 @@ import { getCurrentUser } from './authService';
 import { getDatabase } from '../db';
 import { getWebBook, saveWebBook, saveBookFile } from './storage';
 import { deleteBook } from './bookService';
+import { validateBookBytes } from './fileValidator';
 
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3';
@@ -168,6 +169,9 @@ export async function uploadBookToDrive(book: Book): Promise<string> {
     }
     fileBuffer = bytes.buffer;
   }
+
+  // Pre-flight Storage Armor check before uploading to Google Drive
+  validateBookBytes(fileBuffer, book.file_type);
 
   // Construct multipart/related upload payload
   const metadata = {
@@ -375,6 +379,9 @@ export async function downloadBookFromDrive(
   }
 
   const arrayBuf = await resp.arrayBuffer();
+
+  // Validate downloaded book bytes before saving to disk/IndexedDB
+  validateBookBytes(arrayBuf, format);
 
   if (Platform.OS === 'web') {
     await saveWebBook(bookId, arrayBuf);

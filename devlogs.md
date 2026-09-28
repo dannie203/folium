@@ -365,4 +365,49 @@ Completed full internationalization (i18n) across the entire Folium client codeb
 - `pnpm test`: 21/21 security and regression tests passing.
 - `npx expo export --platform web`: All 9 static routes cleanly bundled with zero asset errors.
 
+### Entry #13 (2026-09-28): Phase 8.8 Storage Armor, Ingestion Gatekeeper & Zero-Exfiltration Sandbox
+
+#### Summary & Motivation
+Implemented Phase 8.8 of the Folium roadmap across the client and reader engines to protect local storage (SQLite/IndexedDB) and Google Drive bandwidth from corrupt files, malicious disguised binaries (PE/ELF/Mach-O/scripts), and Zip Bomb DoS payloads. Hardened reader sandboxing with zero-network Content Security Policies (Super CSP) and W3C SVG script quarantine.
+
+#### 1. Ingestion Gatekeeper & Storage Abuse Firewall (`apps/mobile/src/services/fileValidator.ts`)
+- **Magic Bytes Validation**:
+  - **PDF**: Verified `%PDF-` (`0x25 0x50 0x44 0x46`) header and end-of-file trailer `%%EOF` within the last 1024 bytes.
+  - **EPUB**: Validated Local File Header `PK\x03\x04` and IDPF/W3C OCF uncompressed `mimetype` entry starting with exact ASCII string `application/epub+zip`.
+- **Storage Abuse Firewall**:
+  - Added pre-flight rejection of disguised Windows PE executables (`MZ` / `0x4D 0x5A`), Linux ELF binaries (`\x7fELF`), Unix shell scripts (`#!`), and Mach-O binaries.
+  - Integrated gatekeeper checks before writing to local SQLite / IndexedDB (`bookService.ts`, `opdsService.ts`, `publicDriveService.ts`) and before/after Google Drive transmission (`googleDriveService.ts`).
+  - Completely cuts off Google Drive upload APIs when an invalid binary is encountered, protecting user quota and account standing.
+
+#### 2. Decompression Defense (Zip Bomb & DoS Shield)
+- **Central Directory Pre-Flight Scan**:
+  - Traverses ZIP End of Central Directory (`PK\x05\x06`) and all Central Directory entry headers (`PK\x01\x02`) *before* any in-memory inflation or buffer allocation.
+- **Safety Ceiling Enforcement**:
+  - `MAX_TOTAL_UNCOMPRESSED_SIZE`: Caps cumulative uncompressed size at 300 MB.
+  - `MAX_DECOMPRESSION_RATIO`: Rejects single entries or archives exceeding 100:1 compression ratio.
+  - `MAX_ENTRY_COUNT`: Caps maximum archive inner files at 2,000 to prevent directory tree exhaustion attacks.
+
+#### 3. Zero-Exfiltration Sandbox & SVG Quarantine
+- **Super CSP (Zero-Network Content Security Policy)**:
+  - Inlined `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'none';">` in both `epubViewerHtml.ts` and `pdfViewerHtml.ts`.
+  - `connect-src 'none'` permanently eliminates network egress (`fetch`, `XHR`, `WebSocket`), neutralizing CSS exfiltration attacks.
+  - Added `sandbox: 'allow-scripts allow-same-origin'` to `PdfReader.tsx` web iframe container (matching `EpubReader.tsx`).
+- **W3C SVG Security Isolation**:
+  - Strips `<script>` tags and active `on*` event handlers from all SVG elements upon document load in the EPUB reader engine.
+- **Bug Fix**:
+  - Resolved malformed `<!DOCTYPE \n if (payload.highlights...` in `epubViewerHtml.ts` and restored highlight initialization upon book render.
+
+#### 4. Automated Security Verification Suite (`tests/security/storage_armor.test.mjs`)
+- Added 14 new automated security and regression tests:
+  - Rejection of corrupt or trailer-less PDFs.
+  - Rejection of disguised PE binaries, ELF binaries, shell scripts.
+  - OCF-compliant EPUB validation & rejection of non-OCF zips.
+  - Zip bomb rejection (excessive entries, excessive uncompressed size, excessive ratio).
+  - Reader CSP and iframe sandbox enforcement audit.
+- **Verification Metrics**:
+  - `pnpm typecheck`: 0 errors across 3 packages.
+  - `pnpm test`: 35/35 passing (0 failing).
+  - `npx expo export --platform web`: 9/9 static routes bundled successfully.
+
+
 

