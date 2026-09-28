@@ -40,11 +40,11 @@
 ├──────────────────────────────────────────────┤
 │  PHASE 8.8: Storage Armor & Gatekeeper   ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 9: Mobile Release Train & Stores  ⏳  │ <── [ NEXT STAGE ]
-├──────────────────────────────────────────────┤
-│  PHASE 10: TTS Audio & Accessibility     ⏳  │
+│  PHASE 10: TTS Audio & Accessibility     ⏳  │ <── [ NEXT STAGE ]
 ├──────────────────────────────────────────────┤
 │  PHASE 11: Freemium, E2EE & Self-Hosting 🔮  │
+├──────────────────────────────────────────────┤
+│  PHASE 12: Mobile Release Train & Stores 🚀  │ (Deferred to Final Launch)
 └──────────────────────────────────────────────┘
 ```
 
@@ -311,8 +311,8 @@
 | **Community Bookshelf & OPDS** | 8.5 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
 | **30-Day GC & Bi-Delete Sync** | 8.6 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
 | **Storage Armor & Gatekeeper** | 8.8 | ✅ Done | ✅ Done | ✅ Done | N/A |
-| **EAS Build & Store Release** | 9 | N/A | ⏳ Next | ⏳ Next | N/A |
-| **EAS OTA Updates** | 9 | N/A | 📋 Planned | 📋 Planned | N/A |
-| **Text-to-Speech (TTS)** | 10 | 📋 Planned | 📋 Planned | 📋 Planned | N/A |
+| **Text-to-Speech (TTS) & Accessibility** | 10 | ⏳ Next | ⏳ Next | ⏳ Next | N/A |
 | **Freemium & In-App Purchase** | 11 | 🔮 Future | 🔮 Future | 🔮 Future | 🔮 Future |
 | **Self-Hostable Worker Package** | 11 | 🔮 Future | 🔮 Future | 🔮 Future | 🔮 Future |
+| **EAS Build & Store Release Train** | 12 | N/A | 📋 Deferred | 📋 Deferred | N/A |
+| **EAS OTA Updates** | 12 | N/A | 📋 Deferred | 📋 Deferred | N/A |
