@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, typography, spacing, radius } from '../../theme/tokens';
-import { FoliumLeafIcon, PlusIcon } from '../icons/Icons';
+import { FoliumLeafIcon, PlusIcon, CloudDriveIcon, BookLibraryIcon } from '../icons/Icons';
 import { useI18n } from '../../i18n';
 
 interface EmptyBookshelfProps {
@@ -19,29 +19,42 @@ export function EmptyBookshelf({
 
   return (
     <View style={styles.centerContainer}>
-      <View style={styles.emptyIconCircle}>
-        <FoliumLeafIcon size={48} color="rgba(99, 102, 241, 0.4)" />
-      </View>
-      <Text style={styles.emptyTitle}>
-        {isLibraryEmpty ? t('bookshelf.emptyTitle') : t('bookshelf.emptySearchTitle')}
-      </Text>
-      <Text style={styles.emptySubtitle}>
-        {isLibraryEmpty
-          ? t('bookshelf.emptySubtitle')
-          : t('bookshelf.emptySearchSubtitle')}
-      </Text>
+      <View style={styles.emptyPanel}>
+        <View style={styles.emptyLead}>
+          <View style={styles.emptyIconCircle}>
+            <FoliumLeafIcon size={42} color={colors.accentPrimary} />
+          </View>
+          <View style={styles.emptyCopy}>
+            <Text style={styles.emptyKicker}>{t('settings.localFirst')}</Text>
+            <Text style={styles.emptyTitle}>
+              {isLibraryEmpty ? t('bookshelf.emptyTitle') : t('bookshelf.emptySearchTitle')}
+            </Text>
+            <Text style={styles.emptySubtitle}>
+              {isLibraryEmpty ? t('bookshelf.emptySubtitle') : t('bookshelf.emptySearchSubtitle')}
+            </Text>
+          </View>
+        </View>
 
-      {isLibraryEmpty && (
-        <TouchableOpacity
-          style={styles.ctaButton}
-          activeOpacity={0.85}
-          onPress={onImport}
-          disabled={isImporting}
-        >
-          <PlusIcon size={16} color="#FFFFFF" />
-          <Text style={styles.ctaButtonText}>{t('bookshelf.chooseFile')}</Text>
-        </TouchableOpacity>
-      )}
+        {isLibraryEmpty && (
+          <View style={styles.emptyActions}>
+            <TouchableOpacity
+              style={styles.ctaButton}
+              activeOpacity={0.85}
+              onPress={onImport}
+              disabled={isImporting}
+            >
+              <PlusIcon size={16} color={colors.accentText} />
+              <Text style={styles.ctaButtonText}>{t('bookshelf.chooseFile')}</Text>
+            </TouchableOpacity>
+            <View style={styles.emptyMetaRow}>
+              <BookLibraryIcon size={14} color={colors.textMuted} />
+              <Text style={styles.emptyMetaText}>EPUB / PDF</Text>
+              <CloudDriveIcon size={14} color={colors.textMuted} />
+              <Text style={styles.emptyMetaText}>{t('settings.drive')}</Text>
+            </View>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -51,18 +64,45 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.xxxl,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xxxl,
+  },
+  emptyPanel: {
+    width: '100%',
+    maxWidth: 760,
+    backgroundColor: colors.bgSurface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+  },
+  emptyLead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+  },
+  emptyCopy: {
+    flex: 1,
+  },
+  emptyKicker: {
+    color: colors.accentPrimary,
+    fontSize: typography.fontSize.micro,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
   },
   emptyIconCircle: {
     width: 88,
     height: 88,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(99, 102, 241, 0.08)',
+    borderRadius: radius.lg,
+    backgroundColor: colors.bgElevated,
     borderWidth: 1,
-    borderColor: 'rgba(99, 102, 241, 0.2)',
+    borderColor: 'rgba(184, 227, 107, 0.28)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: 0,
+    transform: [{ rotate: '-4deg' }],
   },
   emptyTitle: {
     fontSize: typography.fontSize.titleLg,
@@ -73,10 +113,27 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     fontSize: typography.fontSize.body,
     color: colors.textSecondary,
-    textAlign: 'center',
+    textAlign: 'left',
     lineHeight: 22,
-    maxWidth: 420,
-    marginBottom: spacing.xl,
+    maxWidth: 520,
+    marginBottom: 0,
+  },
+  emptyActions: {
+    marginTop: spacing.xl,
+    paddingTop: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+  },
+  emptyMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
+  emptyMetaText: {
+    color: colors.textMuted,
+    fontSize: typography.fontSize.micro,
+    marginRight: spacing.sm,
   },
   ctaButton: {
     flexDirection: 'row',
@@ -88,7 +145,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   ctaButtonText: {
-    color: '#FFFFFF',
+    color: colors.accentText,
     fontWeight: typography.fontWeight.semibold,
     fontSize: typography.fontSize.body,
   },

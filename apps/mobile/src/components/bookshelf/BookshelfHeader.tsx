@@ -22,6 +22,8 @@ interface BookshelfHeaderProps {
   isDesktop: boolean;
   isImporting: boolean;
   onImport: () => void;
+  totalBooks: number;
+  visibleBooks: number;
 }
 
 export function BookshelfHeader({
@@ -30,6 +32,8 @@ export function BookshelfHeader({
   isDesktop,
   isImporting,
   onImport,
+  totalBooks,
+  visibleBooks,
 }: BookshelfHeaderProps) {
   const { t } = useI18n();
   return (
@@ -38,7 +42,10 @@ export function BookshelfHeader({
         {!isDesktop && (
           <View style={styles.brandContainer}>
             <FoliumLeafIcon size={24} color={colors.accentPrimary} />
-            <Text style={styles.brandTitle}>Folium</Text>
+            <View>
+              <Text style={styles.brandKicker}>FOLIUM</Text>
+              <Text style={styles.brandTitle}>{t('nav.library')}</Text>
+            </View>
           </View>
         )}
 
@@ -58,7 +65,7 @@ export function BookshelfHeader({
 
         {/* Action Controls */}
         <View style={styles.actionsGroup}>
-          {!isDesktop && <SyncStatusBadge theme="dark" compact />}
+          <SyncStatusBadge theme="dark" compact />
 
           <TouchableOpacity
             style={styles.importButton}
@@ -71,7 +78,7 @@ export function BookshelfHeader({
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <>
-                <PlusIcon size={14} color="#FFFFFF" />
+                <PlusIcon size={14} color={colors.accentText} />
                 {isDesktop && <Text style={styles.importButtonText}>{t('header.addBook')}</Text>}
               </>
             )}
@@ -92,6 +99,36 @@ export function BookshelfHeader({
           />
         </View>
       )}
+
+      {isDesktop && (
+        <View style={styles.desktopContextRow}>
+          <View style={styles.contextCopy}>
+            <Text style={styles.contextTitle}>{t('nav.allBooks')}</Text>
+            <Text style={styles.contextSubtitle}>{t('settings.localFirstDesc')}</Text>
+          </View>
+          <View style={styles.contextStats}>
+            <View style={styles.statBlock}>
+              <Text style={styles.statValue}>{visibleBooks}</Text>
+              <Text style={styles.statLabel}>{t('nav.allBooks')}</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBlock}>
+              <Text style={styles.statValue}>{totalBooks}</Text>
+              <Text style={styles.statLabel}>{t('nav.library')}</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {!isDesktop && (
+        <View style={styles.mobileContextRow}>
+          <View>
+            <Text style={styles.contextTitle}>{t('nav.allBooks')}</Text>
+            <Text style={styles.contextSubtitle}>{visibleBooks} / {totalBooks}</Text>
+          </View>
+          <Text style={styles.mobileContextAccent}>LOCAL-FIRST</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -99,11 +136,11 @@ export function BookshelfHeader({
 const styles = StyleSheet.create({
   headerBar: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
     gap: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(39, 39, 42, 0.4)',
+    borderBottomColor: colors.borderSubtle,
   },
   headerTopRow: {
     flexDirection: 'row',
@@ -116,11 +153,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  brandTitle: {
-    fontSize: 18,
+  brandKicker: {
+    color: colors.accentPrimary,
+    fontSize: typography.fontSize.micro,
     fontWeight: typography.fontWeight.bold,
+    letterSpacing: 1.3,
+  },
+  brandTitle: {
+    fontSize: typography.fontSize.titleLg,
+    fontWeight: typography.fontWeight.semibold,
     color: colors.textPrimary,
-    letterSpacing: -0.5,
+    marginTop: 1,
   },
   searchBox: {
     flex: 1,
@@ -130,7 +173,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgSurface,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    height: 40,
+    height: 44,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     gap: 8,
@@ -141,7 +184,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgSurface,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    height: 38,
+    height: 42,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     gap: 8,
@@ -164,7 +207,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.bgSurface,
     paddingHorizontal: 12,
-    height: 38,
+    height: 40,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
@@ -205,5 +248,74 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: typography.fontWeight.semibold,
     fontSize: typography.fontSize.body,
+  },
+  desktopContextRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
+    padding: spacing.lg,
+    backgroundColor: colors.bgSurface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: radius.lg,
+  },
+  contextCopy: {
+    flex: 1,
+    paddingRight: spacing.lg,
+  },
+  contextTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.display,
+    lineHeight: typography.lineHeight.display,
+    fontWeight: typography.fontWeight.bold,
+  },
+  contextSubtitle: {
+    color: colors.textMuted,
+    fontSize: typography.fontSize.caption,
+    lineHeight: typography.lineHeight.caption,
+    marginTop: 2,
+    maxWidth: 620,
+  },
+  contextStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  statBlock: {
+    alignItems: 'flex-end',
+  },
+  statValue: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.titleLg,
+    fontWeight: typography.fontWeight.bold,
+  },
+  statLabel: {
+    color: colors.textMuted,
+    fontSize: typography.fontSize.micro,
+    marginTop: 1,
+  },
+  statDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.borderSubtle,
+  },
+  mobileContextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.xs,
+    padding: spacing.md,
+    backgroundColor: colors.bgSurface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: radius.md,
+  },
+  mobileContextAccent: {
+    color: colors.accentPrimary,
+    fontSize: typography.fontSize.micro,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0.8,
   },
 });

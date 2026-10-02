@@ -37,6 +37,32 @@ export const vi: Record<TranslationKey, string> = {
   'header.search': 'Tìm theo tựa sách, tác giả...',
   'header.addBook': 'Thêm sách',
 
+  // Privacy Policy
+  'privacy.navTitle': 'Chính Sách Quyền Riêng Tư',
+  'privacy.badge': 'QUYỀN RIÊNG TƯ • ZERO-TELEMETRY',
+  'privacy.updated': 'Cập nhật: 19/09/2026',
+  'privacy.title': 'Chính Sách Bảo Vệ Quyền Riêng Tư',
+  'privacy.subtitle': 'Folium được xây dựng với triết lý: Quyền riêng tư khi đọc là bất khả xâm phạm. Chúng tôi không theo dõi hành vi, không bán dữ liệu và không bao giờ lưu trữ sách của bạn trên máy chủ trung tâm.',
+  'privacy.section1Title': 'Kiến Trúc Ưu Tiên Cục Bộ (Local-First)',
+  'privacy.section1Paragraph1': 'Khi bạn sử dụng Folium để đọc sách (EPUB, PDF), toàn bộ tài liệu, vị trí đọc dở (CFI), bookmark, highlight và ghi chú được lưu trữ trực tiếp trên thiết bị của bạn (SQLite trên mobile, IndexedDB trên web).',
+  'privacy.section1Paragraph2': 'Ứng dụng hoạt động 100% ngoại tuyến mà không đòi hỏi kết nối internet. Bạn có thể đọc sách trên máy bay hoặc nơi hẻo lánh mà không lo bị ngắt quãng.',
+  'privacy.section2Title': 'Không Thu Thập Dữ Liệu (Zero Telemetry)',
+  'privacy.section2Intro': 'Folium là dự án mã nguồn mở phi lợi nhuận. Chúng tôi cam kết tuyệt đối:',
+  'privacy.section2Bullet1': 'KHÔNG cài đặt bất kỳ mã theo dõi, Google Analytics hay Facebook Pixel.',
+  'privacy.section2Bullet2': 'KHÔNG ghi nhận lịch sử đọc, tốc độ đọc hay thời gian đọc của bạn.',
+  'privacy.section2Bullet3': 'KHÔNG hiển thị quảng cáo thương mại hoặc bán hồ sơ người dùng cho bên thứ ba.',
+  'privacy.section3Title': 'Quyền Truy Cập Google Drive (drive.file)',
+  'privacy.section3Paragraph1': 'Khi bạn tuỳ chọn kích hoạt tính năng sao lưu thư viện qua Google Drive:',
+  'privacy.section3Paragraph2': 'Folium chỉ yêu cầu quyền hạn hẹp nhất:',
+  'privacy.section3Callout': 'Theo quy định bảo mật của Google, quyền này chỉ cho phép ứng dụng đọc/ghi các file nằm trong thư mục do chính Folium tạo ra (/Folium). Folium hoàn toàn không có quyền xem hay chạm vào bất kỳ hình ảnh, tài liệu cá nhân nào khác trên Google Drive của bạn.',
+  'privacy.section4Title': 'Đồng Bộ Không Kiến Thức (Zero-Knowledge Sync)',
+  'privacy.section4Paragraph1': 'Tính năng đồng bộ tiến độ đọc qua Cloudflare D1 sử dụng cơ chế mã hoá đầu cuối tại máy khách (Client-Side AES-256-GCM). Hạ tầng serverless chỉ lưu trữ các khối bản mã mù (Blind Ciphertext) và không sở hữu khoá giải mã.',
+  'privacy.section4Paragraph2': 'Ngay cả đội ngũ phát triển hay nhà cung cấp hạ tầng máy chủ cũng không thể giải mã hay xem được dữ liệu của bạn.',
+  'privacy.section5Title': 'Minh Bạch Mã Nguồn Mở',
+  'privacy.section5Paragraph': 'Mã nguồn của Folium được công khai 100% trên GitHub để cộng đồng tự do kiểm chứng và đóng góp:',
+  'privacy.officialSource': 'Kho mã nguồn chính thức:',
+  'privacy.backToLibrary': 'Quay lại Thư viện',
+
   // Bookshelf
   'bookshelf.emptyTitle': 'Chưa có cuốn sách nào',
   'bookshelf.emptySearchTitle': 'Không tìm thấy sách',
@@ -195,3 +221,4 @@ export const vi: Record<TranslationKey, string> = {
   'error.signOutFailed': 'Đăng xuất thất bại.',
   'error.syncFailed': 'Lỗi đồng bộ Google Drive.',
 };
+

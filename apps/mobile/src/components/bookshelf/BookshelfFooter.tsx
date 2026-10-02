@@ -33,10 +33,15 @@ export function BookshelfFooter({ onNavigate }: BookshelfFooterProps) {
 
 const styles = StyleSheet.create({
   footerContainer: {
-    paddingTop: spacing.xxl,
-    paddingBottom: spacing.xxxl,
+    height: 58,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 4,
   },
   footerLinksRow: {
     flexDirection: 'row',
@@ -55,6 +60,5 @@ const styles = StyleSheet.create({
   footerCopyright: {
     color: colors.textMuted,
     fontSize: typography.fontSize.micro,
-    marginTop: 4,
   },
 });

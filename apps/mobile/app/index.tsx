@@ -160,6 +160,8 @@ export default function BookshelfScreen() {
         isDesktop={isDesktop}
         isImporting={isImporting}
         onImport={handleImport}
+        totalBooks={books.length}
+        visibleBooks={filteredBooks.length}
       />
 
       <ShelfFilterChips
@@ -184,12 +186,14 @@ export default function BookshelfScreen() {
           keyExtractor={(item) => item.id}
           numColumns={isDesktop ? 4 : 2}
           renderItem={({ item }) => (
-            <BookCard
-              book={item}
-              onPress={handleOpenBook}
-              onDelete={handleDelete}
-              onLongPress={(b) => setEditingBook(b)}
-            />
+            <View style={[styles.gridItem, isDesktop ? styles.gridItemDesktop : styles.gridItemMobile]}>
+              <BookCard
+                book={item}
+                onPress={handleOpenBook}
+                onDelete={handleDelete}
+                onLongPress={(b) => setEditingBook(b)}
+              />
+            </View>
           )}
           contentContainerStyle={styles.gridContent}
           refreshControl={
@@ -199,15 +203,18 @@ export default function BookshelfScreen() {
               tintColor={colors.accentPrimary}
             />
           }
-          ListFooterComponent={
-            <BookshelfFooter onNavigate={(route) => router.push(route as any)} />
-          }
         />
       )}
+
+      <BookshelfFooter onNavigate={(route) => router.push(route as any)} />
 
       {!isDesktop && (
         <BottomTabBar
           activeTab="shelf"
+          onOpenShelf={() => {
+            setSelectedShelf('all');
+            setActiveFilter('all');
+          }}
           onOpenCommunity={() => router.push('/community' as any)}
           onOpenSettings={() => router.push('/settings' as any)}
         />
@@ -283,5 +290,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
     paddingBottom: 72,
+  },
+  gridItem: {
+    flexGrow: 0,
+    flexShrink: 0,
+    minWidth: 0,
+  },
+  gridItemDesktop: {
+    width: '25%',
+  },
+  gridItemMobile: {
+    width: '50%',
   },
 });

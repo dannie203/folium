@@ -28,6 +28,10 @@ export function ShelfFilterChips({
 
   return (
     <View style={styles.filterWrapper}>
+      <View style={styles.filterHeader}>
+        <Text style={styles.filterEyebrow}>{t('nav.shelves')}</Text>
+        <Text style={styles.filterHint}>{books.length} {t('nav.allBooks').toLowerCase()}</Text>
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
         <TouchableOpacity
           style={[
@@ -108,6 +112,22 @@ const styles = StyleSheet.create({
   filterWrapper: {
     paddingVertical: spacing.sm,
   },
+  filterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  filterEyebrow: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.caption,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  filterHint: {
+    color: colors.textMuted,
+    fontSize: typography.fontSize.micro,
+  },
   filterRow: {
     flexDirection: 'row',
     paddingHorizontal: spacing.lg,
@@ -117,8 +137,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: radius.full,
+    paddingVertical: 8,
+    borderRadius: radius.sm,
     backgroundColor: colors.bgSurface,
     borderWidth: 1,
     borderColor: colors.borderSubtle,

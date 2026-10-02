@@ -1,6 +1,6 @@
 import type { TranslationKey } from '../types';
 
-export const ja: Record<TranslationKey, string> = {
+export const ja: Partial<Record<TranslationKey, string>> = {
   // Common
   'common.back': '戻る',
   'common.cancel': 'キャンセル',
@@ -195,3 +195,4 @@ export const ja: Record<TranslationKey, string> = {
   'error.signOutFailed': 'ログアウトに失敗しました。',
   'error.syncFailed': 'Google Drive の同期に失敗しました。',
 };
+

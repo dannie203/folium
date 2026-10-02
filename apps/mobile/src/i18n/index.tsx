@@ -21,7 +21,7 @@ export const SUPPORTED_LOCALES: LocaleInfo[] = [
   { code: 'de', label: 'Deutsch' },
 ];
 
-const messages: Record<Locale, Record<TranslationKey, string>> = {
+const messages: Record<Locale, Partial<Record<TranslationKey, string>>> = {
   vi,
   en,
   ja,

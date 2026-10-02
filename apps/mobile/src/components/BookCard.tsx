@@ -141,13 +141,15 @@ export function BookCard({ book, onPress, onDelete, onLongPress }: BookCardProps
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: 'transparent',
+    backgroundColor: colors.bgSurface,
     borderRadius: radius.md,
     overflow: 'hidden',
     marginBottom: spacing.xl,
     flex: 1,
     marginHorizontal: 8,
-    maxWidth: '48%',
+    width: '100%',
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
   },
   coverContainer: {
     height: 200,
@@ -166,10 +168,10 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   coverEpub: {
-    backgroundColor: '#161426',
+    backgroundColor: '#1B261B',
   },
   coverPdf: {
-    backgroundColor: '#24121E',
+    backgroundColor: '#2A2117',
   },
   placeholderWrapper: {
     flex: 1,
@@ -215,10 +217,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.xs,
   },
   badgeEpub: {
-    backgroundColor: 'rgba(79, 70, 229, 0.4)',
+    backgroundColor: 'rgba(184, 227, 107, 0.22)',
   },
   badgePdf: {
-    backgroundColor: 'rgba(225, 29, 72, 0.4)',
+    backgroundColor: 'rgba(232, 161, 93, 0.24)',
   },
   formatBadgeText: {
     fontSize: 9,
@@ -226,16 +228,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   badgeTextEpub: {
-    color: '#C7D2FE',
+    color: '#D9F5A3',
   },
   badgeTextPdf: {
-    color: '#FECDD3',
+    color: '#F6C894',
   },
   shelfBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(124, 58, 237, 0.35)',
+    backgroundColor: 'rgba(184, 227, 107, 0.16)',
     paddingHorizontal: 6,
     paddingVertical: 2.5,
     borderRadius: radius.xs,
@@ -244,7 +246,7 @@ const styles = StyleSheet.create({
   shelfBadgeText: {
     fontSize: 9,
     fontWeight: typography.fontWeight.semibold,
-    color: '#DDD6FE',
+    color: '#D9F5A3',
   },
   moreActionBtn: {
     position: 'absolute',
@@ -290,7 +292,8 @@ const styles = StyleSheet.create({
   },
   infoContainer: {
     paddingTop: 10,
-    paddingHorizontal: 2,
+    paddingHorizontal: 10,
+    paddingBottom: 12,
   },
   title: {
     fontSize: typography.fontSize.caption,

@@ -1,6 +1,6 @@
 import type { TranslationKey } from '../types';
 
-export const es: Record<TranslationKey, string> = {
+export const es: Partial<Record<TranslationKey, string>> = {
   // Common
   'common.back': 'Volver',
   'common.cancel': 'Cancelar',
@@ -195,3 +195,4 @@ export const es: Record<TranslationKey, string> = {
   'error.signOutFailed': 'Error al cerrar sesión.',
   'error.syncFailed': 'Error de sincronización con Google Drive.',
 };
+

@@ -1,6 +1,6 @@
 import type { TranslationKey } from '../types';
 
-export const zh: Record<TranslationKey, string> = {
+export const zh: Partial<Record<TranslationKey, string>> = {
   // Common
   'common.back': '返回',
   'common.cancel': '取消',
@@ -195,3 +195,4 @@ export const zh: Record<TranslationKey, string> = {
   'error.signOutFailed': '退出登录失败。',
   'error.syncFailed': 'Google Drive 同步失败。',
 };
+

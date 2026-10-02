@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgBase,
   },
   navBar: {
-    height: 52,
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -499,8 +499,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   navTitle: {
-    color: colors.textSecondary,
-    fontSize: typography.fontSize.caption,
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.titleMd,
     fontWeight: typography.fontWeight.semibold,
   },
   navRight: {
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
   },
   content: {
-    padding: spacing.lg,
+    padding: spacing.xl,
     maxWidth: 860,
     alignSelf: 'center',
     width: '100%',
@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
   bookCard: {
     flexDirection: 'row',
     backgroundColor: colors.bgSurface,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
@@ -644,7 +644,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   bookAuthor: {
-    color: '#A5B4FC',
+    color: colors.textSecondary,
     fontSize: typography.fontSize.caption,
     marginBottom: 6,
   },
@@ -682,7 +682,7 @@ const styles = StyleSheet.create({
   },
   driveHeaderCard: {
     backgroundColor: colors.bgSurface,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
@@ -770,7 +770,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   categoryBadge: {
-    color: '#C4B5FD',
+    color: colors.accentPrimary,
     fontSize: typography.fontSize.micro,
     fontWeight: typography.fontWeight.medium,
   },
@@ -794,7 +794,7 @@ const styles = StyleSheet.create({
   },
   customCard: {
     backgroundColor: colors.bgSurface,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.borderSubtle,

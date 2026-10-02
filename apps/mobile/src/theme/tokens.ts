@@ -5,23 +5,24 @@
 
 export const colors = {
   // Canvas & Backgrounds
-  bgBase: '#09090B',       // Zinc 950 - Main viewport canvas
-  bgSurface: '#141417',    // Elevated cards, drawers, search input
-  bgElevated: '#1F1F23',   // Modals, popovers, active tooltips
-  bgOverlay: 'rgba(9, 9, 11, 0.75)',
+  bgBase: '#0D120F',       // Deep moss-black reading room canvas
+  bgSurface: '#151C17',    // Elevated cards, drawers, search input
+  bgElevated: '#202A21',   // Modals, popovers, active tooltips
+  bgOverlay: 'rgba(13, 18, 15, 0.78)',
 
   // Borders & Dividers
-  borderSubtle: '#27272A', // Zinc 800 - 1px hairline border
-  borderMedium: '#3F3F46', // Zinc 700 - Hover border state
-  borderFocus: '#6366F1',  // Folium Indigo - Keyboard focus / active input
+  borderSubtle: '#2A382D', // Moss 800 - 1px hairline border
+  borderMedium: '#405143', // Moss 700 - Hover border state
+  borderFocus: '#B8E36B',  // Folium Leaf - Keyboard focus / active input
 
   // Typography & Content
-  textPrimary: '#F4F4F5',  // Zinc 100 - Titles, reading text (WCAG AAA 17.8:1)
-  textSecondary: '#A1A1AA',// Zinc 400 - Authors, metadata, captions (WCAG AA 7.4:1)
-  textMuted: '#71717A',    // Zinc 500 - Placeholders, disabled states
+  textPrimary: '#F1F3E9',  // Warm white - Titles, reading text
+  textSecondary: '#AAB5A8',// Moss gray - Authors, metadata, captions
+  textMuted: '#748176',    // Moss gray - Placeholders, disabled states
 
   // Brand & Accents
-  accentPrimary: '#6366F1',// Folium Indigo (Electric 500)
+  accentPrimary: '#B8E36B',// Folium Leaf (Lime 300)
+  accentText: '#17210F',   // Text on leaf-colored controls
 
   // Status & Synchronization
   statusSuccess: '#10B981',// Emerald 500 - Synced to Edge

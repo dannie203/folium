@@ -213,20 +213,7 @@ export function SidebarNav({
 
       {/* Footer Legal & Info */}
       <View style={styles.sidebarFooter}>
-        <View style={styles.legalLinksRow}>
-          <TouchableOpacity onPress={onOpenPrivacy}>
-            <Text style={styles.footerLink}>{t('settings.privacy')}</Text>
-          </TouchableOpacity>
-          <Text style={styles.footerDivider}>•</Text>
-          <TouchableOpacity onPress={onOpenTerms}>
-            <Text style={styles.footerLink}>{t('settings.terms')}</Text>
-          </TouchableOpacity>
-          <Text style={styles.footerDivider}>•</Text>
-          <TouchableOpacity onPress={onOpenSecurity}>
-            <Text style={styles.footerLink}>{t('settings.security')}</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.copyrightText}>Folium v1.0 • Zero-Knowledge</Text>
+        <Text style={styles.copyrightText}>Folium v0.0.1</Text>
       </View>
     </View>
   );
@@ -234,7 +221,7 @@ export function SidebarNav({
 
 const styles = StyleSheet.create({
   sidebar: {
-    width: 240,
+    width: 252,
     backgroundColor: colors.bgSurface,
     borderRightWidth: 1,
     borderRightColor: colors.borderSubtle,
@@ -292,7 +279,10 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   navItemActive: {
-    backgroundColor: 'rgba(99, 102, 241, 0.12)',
+    backgroundColor: 'rgba(184, 227, 107, 0.12)',
+    borderLeftWidth: 2,
+    borderLeftColor: colors.accentPrimary,
+    paddingLeft: 10,
   },
   navLabel: {
     flex: 1,
@@ -320,10 +310,13 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   sidebarFooter: {
-    padding: spacing.md,
+    height: 58,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.borderSubtle,
-    gap: 6,
+    justifyContent: 'center',
+    gap: 4,
   },
   legalLinksRow: {
     flexDirection: 'row',
