@@ -194,5 +194,24 @@ export const zh: Partial<Record<TranslationKey, string>> = {
   'error.signInFailed': 'Google 登录失败。',
   'error.signOutFailed': '退出登录失败。',
   'error.syncFailed': 'Google Drive 同步失败。',
+
+  // TTS (Text-to-Speech)
+  'settings.ttsSection': '语音与朗读',
+  'settings.ttsVoice': '默认朗读语音',
+  'settings.ttsVoiceAuto': '系统默认',
+  'settings.ttsSpeed': '朗读速度',
+  'settings.ttsPitch': '语调高低',
+  'settings.ttsTest': '试听语音',
+  'settings.ttsTestSample': '您好，我是 Folium 朗读助手。',
+  'settings.ttsAutoNext': '自动朗读下一句',
+  'reader.ttsTitle': '语音朗读 (TTS)',
+  'reader.ttsPlay': '播放',
+  'reader.ttsPause': '暂停',
+  'reader.ttsStop': '停止',
+  'reader.ttsNextSentence': '下一句',
+  'reader.ttsPrevSentence': '上一句',
+  'reader.ttsSpeed': '速度',
+  'reader.ttsNoText': '未找到可朗读的文本内容',
+  'reader.ttsExtracting': '正在提取文本...',
 };
 

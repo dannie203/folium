@@ -220,5 +220,24 @@ export const en: Record<TranslationKey, string> = {
   'error.signInFailed': 'Google sign-in failed.',
   'error.signOutFailed': 'Sign-out failed.',
   'error.syncFailed': 'Google Drive sync failed.',
+
+  // TTS (Text-to-Speech)
+  'settings.ttsSection': 'Voice & Narration',
+  'settings.ttsVoice': 'Default Voice',
+  'settings.ttsVoiceAuto': 'System Default',
+  'settings.ttsSpeed': 'Reading Speed',
+  'settings.ttsPitch': 'Pitch',
+  'settings.ttsTest': 'Preview Voice',
+  'settings.ttsTestSample': 'Hello, I am Folium reading assistant.',
+  'settings.ttsAutoNext': 'Automatically advance to next sentence',
+  'reader.ttsTitle': 'Narration (TTS)',
+  'reader.ttsPlay': 'Play',
+  'reader.ttsPause': 'Pause',
+  'reader.ttsStop': 'Stop',
+  'reader.ttsNextSentence': 'Next Sentence',
+  'reader.ttsPrevSentence': 'Previous Sentence',
+  'reader.ttsSpeed': 'Speed',
+  'reader.ttsNoText': 'No readable text content found',
+  'reader.ttsExtracting': 'Extracting book text...',
 };
 

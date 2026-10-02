@@ -17,6 +17,10 @@
 - [Entry #08 (2026-09-19): Google Drive Storage, OAuth & The Zero-Knowledge Privacy Vault](#entry-08-2026-09-19-google-drive-storage-oauth--the-zero-knowledge-privacy-vault)
 - [Entry #09 (2026-09-19): Community Bookshelf, OPDS & Folder-as-a-Shelf Sync](#entry-09-2026-09-19-community-bookshelf-opds--folder-as-a-shelf-sync)
 - [Entry #10 (2026-09-19): 30-Day Tombstone Retention & Bidirectional Deletion Sync](#entry-10-2026-09-19-30-day-tombstone-retention--bidirectional-deletion-sync)
+- [Entry #11 (2026-09-22): Codebase Audit, Security Hardening & Zero-Knowledge Upgrades](#entry-11-2026-09-22-codebase-audit-p0p1p2-remediation-security-hardening--zero-knowledge-architecture-upgrades)
+- [Entry #12 (2026-09-22): Full Codebase Localization (i18n) Supporting 7 Languages](#entry-12-2026-09-22-full-codebase-localization-i18n-supporting-7-languages)
+- [Entry #13 (2026-09-28): Phase 8.8 Storage Armor & Zero-Exfiltration Sandbox](#entry-13-2026-09-28-phase-88-storage-armor-ingestion-gatekeeper--zero-exfiltration-sandbox)
+- [Entry #14 (2026-10-02): Phase 10 Audio Narration (TTS) & Accessibility](#entry-14-2026-10-02-phase-10-audio-narration-tts--accessibility)
 
 ---
 
@@ -409,5 +413,49 @@ Implemented Phase 8.8 of the Folium roadmap across the client and reader engines
   - `pnpm test`: 35/35 passing (0 failing).
   - `npx expo export --platform web`: 9/9 static routes bundled successfully.
 
+---
 
+### Entry #14 (2026-10-02): Phase 10 Audio Narration (TTS) & Accessibility
 
+#### Summary & Motivation
+Implemented Phase 10 of the Folium roadmap, introducing cross-platform Text-to-Speech (TTS) audio narration across Web and Native Mobile without incurring any external cloud server costs ($0 operating cost) or bloating the application bundle (0 KB bundle penalty). Built smart voice selection in Settings, synchronized reader playback controls via `TTSPlayerBar`, and fortified sentence chunking with Vietnamese honorific protection.
+
+#### 1. Zero-Cost, Zero-Bundle Engine Architecture (`ttsService.ts`, `useTTS.ts`)
+- **Native OS & Web Speech API Synthesis**:
+  - Web: Uses `window.speechSynthesis` and `SpeechSynthesisUtterance` with an active 10-second heartbeat keepalive defense against Chromium's 15-second playback timeout bug.
+  - Mobile: Integrated with `expo-speech` delegating synthesis directly to on-device OS engines (Google Speech Services on Android, AVFoundation on iOS).
+  - Preserved 100% offline autonomy and 0 KB network latency.
+- **Smart Sentence Chunking & Casing Preservation**:
+  - Implemented `splitTextIntoSentences()` with regex protection for honorifics and title prefixes (`BS.`, `ThS.`, `TP.`, `TS.`, `GS.`, `Mr.`, `Dr.`), decimal numbers (`3.14`), and dialogue quotes (`"..."`, `“...”`).
+  - Preserves exact original character casing (`BS.`, `TP.`) through non-destructive marker tokenization.
+- **Stateful React Hook (`useTTS.ts`)**:
+  - Manages playback lifecycle (`play`, `pause`, `resume`, `stop`, `nextSentence`, `prevSentence`, `seekSentence`).
+  - Persists user preferences (`voiceURI`, `rate`, `pitch`, `autoNext`) directly into SQLite `sync_meta` under key `tts_settings`.
+
+#### 2. User-Centric Voice Selection & Settings (`settings.tsx`)
+- Added **Voice & Narration** (`settings.ttsSection`) section to the main Settings screen:
+  - Interactive Voice Picker Modal grouping recommended voices matching the active app language (`vi` -> Vietnamese voices first) followed by other system voices.
+  - One-tap audio sample test button (`testVoice`) allowing users to preview pronunciation before choosing.
+  - Playback speed chips (`0.75x`, `1.0x`, `1.25x`, `1.5x`, `1.75x`, `2.0x`).
+  - Auto-advance sentence toggle switch.
+
+#### 3. Reader Bridge & Synchronized Playback UI (`reader/[id].tsx`, `TTSPlayerBar.tsx`)
+- **Bidirectional Text Extraction**:
+  - Added `GET_CURRENT_TEXT` message protocol to both `epubViewerHtml.ts` and `pdfViewerHtml.ts`.
+  - EPUB: Extracts live chapter DOM inner text via `rendition.getContents()`.
+  - PDF: Queries `pdfjsLib` current page text content stream.
+  - Exposed `onTextExtracted` and `getCurrentText()` across `EpubReader.tsx` and `PdfReader.tsx`.
+- **Floating `TTSPlayerBar`**:
+  - Top header displaying live status, sentence counter `(current/total)`, and speed rate cycler.
+  - Sentence quote preview card rendering the sentence currently being spoken.
+  - Transport controls (Previous sentence, Play/Pause circle, Next sentence, Close).
+  - Integrated with text selection: selecting any paragraph or sentence in the reader and opening TTS instantly speaks the chosen passage.
+
+#### 4. Internationalization & Quality Gates
+- **i18n Localization**:
+  - Complete translations for all TTS keys across all 7 supported languages (`vi`, `en`, `ja`, `zh`, `fr`, `es`, `de`).
+- **Test Metrics (`tests/security/tts.test.mjs`)**:
+  - Added 6 automated tests validating Vietnamese sentence splitting, abbreviation protection, HTML tag stripping, and language-aware voice prioritization.
+  - Total automated test count increased to **41/41 passing** (0 failing).
+  - `pnpm typecheck`: **0 errors** across monorepo.
+  - `npx expo export --platform web`: All 9 static routes cleanly bundled with zero warnings.

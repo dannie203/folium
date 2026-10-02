@@ -19,6 +19,7 @@ export interface EpubReaderRef {
   applySettings: (settings: Partial<ReaderSettings>) => void;
   addHighlight: (id: string, cfiRange: string, color: string) => void;
   removeHighlight: (cfiRange: string) => void;
+  getCurrentText: () => void;
 }
 
 interface EpubReaderProps {
@@ -37,8 +38,10 @@ interface EpubReaderProps {
   onEscape?: () => void;
   onSelection?: (selection: { cfiRange: string; text: string }) => void;
   onHighlightClick?: (highlight: { id: string; cfiRange: string }) => void;
+  onTextExtracted?: (text: string) => void;
   onError?: (errorMessage: string) => void;
 }
+
 
 export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref) => {
   const nativeWebViewRef = useRef<any>(null);
@@ -110,6 +113,7 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
         postMessageToViewer({ type: 'ADD_HIGHLIGHT', id, cfiRange, color }),
       removeHighlight: (cfiRange: string) =>
         postMessageToViewer({ type: 'REMOVE_HIGHLIGHT', cfiRange }),
+      getCurrentText: () => postMessageToViewer({ type: 'GET_CURRENT_TEXT' }),
     }),
     [postMessageToViewer]
   );
@@ -178,6 +182,10 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
 
           case 'HIGHLIGHT_CLICKED':
             props.onHighlightClick?.(data);
+            break;
+
+          case 'TEXT_EXTRACTED':
+            props.onTextExtracted?.(data.text);
             break;
 
           case 'ERROR':

@@ -40,11 +40,11 @@
 ├──────────────────────────────────────────────┤
 │  PHASE 8.8: Storage Armor & Gatekeeper   ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 10: TTS Audio & Accessibility     ⏳  │ <── [ NEXT STAGE ]
+│  PHASE 10: TTS Audio & Accessibility     ✅  │
 ├──────────────────────────────────────────────┤
 │  PHASE 11: Freemium, E2EE & Self-Hosting 🔮  │
 ├──────────────────────────────────────────────┤
-│  PHASE 12: Mobile Release Train & Stores 🚀  │ (Deferred to Final Launch)
+│  PHASE 12: Mobile Release Train & Stores 🚀  │ <── [ NEXT STAGE ]
 └──────────────────────────────────────────────┘
 ```
 
@@ -261,20 +261,22 @@
 
 ---
 
-### Phase 10: Audio Narration (TTS) & Accessibility ⏳
-*Status: Planned*
+### Phase 10: Audio Narration (TTS) & Accessibility ✅
+*Status: Completed*
 
-- [ ] **On-Device Text-to-Speech (TTS)**:
+- [x] **On-Device Text-to-Speech (TTS)**:
   - Integration with `expo-speech` on mobile (utilizing local system voices for English, Vietnamese, Japanese, etc.).
-  - Integration with Web Speech Synthesis API on desktop browsers.
-- [ ] **Synchronized Reading UI**:
-  - Real-time sentence-by-sentence highlight tracking audio voice playback.
-  - Play, pause, speed control (0.75x - 2.0x), and skip sentence shortcuts.
-- [ ] **Background Audio & Media Notification**:
-  - Lock-screen media playback controls on iOS and Android.
-- [ ] **Enhanced Accessibility**:
-  - Dyslexia-friendly font toggles (OpenDyslexic).
-  - Bionic reading mode and high-contrast color schemes.
+  - Integration with Web Speech Synthesis API on desktop browsers with Chrome 15s keepalive defense.
+- [x] **Smart Voice Selection & Settings**:
+  - In-app Voice Picker modal categorizing recommended voices matching current app/book language, plus audio sample preview testing.
+  - Speech rate controls (0.75x - 2.0x), pitch, and auto-sentence advance toggle persisted to SQLite `sync_meta`.
+- [x] **Synchronized Reading UI & Reader Bridge**:
+  - `TTSPlayerBar` floating playback controller (play, pause, next sentence, previous sentence, speed cycling, sentence counter).
+  - Sentence segmentation engine with Vietnamese title and honorific abbreviation protection.
+  - Reader bridge text extraction (`GET_CURRENT_TEXT` -> `TEXT_EXTRACTED`) across both EPUB and PDF reader frames.
+- [x] **Accessibility & Localization**:
+  - Complete i18n support across 7 languages (`vi`, `en`, `ja`, `zh`, `fr`, `es`, `de`).
+  - Unit test suite verifying sentence segmentation, decimal protection, and voice priority filtering.
 
 ---
 
@@ -311,7 +313,7 @@
 | **Community Bookshelf & OPDS** | 8.5 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
 | **30-Day GC & Bi-Delete Sync** | 8.6 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
 | **Storage Armor & Gatekeeper** | 8.8 | ✅ Done | ✅ Done | ✅ Done | N/A |
-| **Text-to-Speech (TTS) & Accessibility** | 10 | ⏳ Next | ⏳ Next | ⏳ Next | N/A |
+| **Text-to-Speech (TTS) & Accessibility** | 10 | ✅ Done | ✅ Done | ✅ Done | N/A |
 | **Freemium & In-App Purchase** | 11 | 🔮 Future | 🔮 Future | 🔮 Future | 🔮 Future |
 | **Self-Hostable Worker Package** | 11 | 🔮 Future | 🔮 Future | 🔮 Future | 🔮 Future |
 | **EAS Build & Store Release Train** | 12 | N/A | 📋 Deferred | 📋 Deferred | N/A |

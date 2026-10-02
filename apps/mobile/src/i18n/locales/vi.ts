@@ -220,5 +220,24 @@ export const vi: Record<TranslationKey, string> = {
   'error.signInFailed': 'Đăng nhập Google thất bại.',
   'error.signOutFailed': 'Đăng xuất thất bại.',
   'error.syncFailed': 'Lỗi đồng bộ Google Drive.',
+
+  // TTS (Text-to-Speech)
+  'settings.ttsSection': 'Giọng đọc & Âm thanh',
+  'settings.ttsVoice': 'Giọng đọc mặc định',
+  'settings.ttsVoiceAuto': 'Tự động theo hệ thống',
+  'settings.ttsSpeed': 'Tốc độ đọc',
+  'settings.ttsPitch': 'Cao độ',
+  'settings.ttsTest': 'Nghe thử',
+  'settings.ttsTestSample': 'Xin chào, đây là giọng đọc sách của Folium.',
+  'settings.ttsAutoNext': 'Tự động đọc tiếp câu kế tiếp',
+  'reader.ttsTitle': 'Đọc sách (TTS)',
+  'reader.ttsPlay': 'Phát âm thanh',
+  'reader.ttsPause': 'Tạm dừng',
+  'reader.ttsStop': 'Dừng đọc',
+  'reader.ttsNextSentence': 'Câu kế tiếp',
+  'reader.ttsPrevSentence': 'Câu trước',
+  'reader.ttsSpeed': 'Tốc độ',
+  'reader.ttsNoText': 'Không tìm thấy nội dung văn bản để đọc',
+  'reader.ttsExtracting': 'Đang trích xuất văn bản...',
 };
 

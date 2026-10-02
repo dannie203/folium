@@ -197,4 +197,22 @@ export interface CommunityCatalogSource {
   type: 'opds' | 'google_drive';
 }
 
+// ------------------------------------------------------------------------------
+// Phase 10: TTS (Text-to-Speech) Audio Narration & Accessibility
+// ------------------------------------------------------------------------------
+
+export interface TTSSettings {
+  voiceURI?: string;
+  rate: number; // 0.5 - 2.0 (default 1.0)
+  pitch: number; // 0.8 - 1.2 (default 1.0)
+  autoNext: boolean; // default true
+}
+
+export interface TTSVoice {
+  identifier: string; // voiceURI on Web, identifier on expo-speech
+  name: string;
+  language: string;
+  quality?: string;
+}
+
 

@@ -194,5 +194,24 @@ export const es: Partial<Record<TranslationKey, string>> = {
   'error.signInFailed': 'Error al iniciar sesión con Google.',
   'error.signOutFailed': 'Error al cerrar sesión.',
   'error.syncFailed': 'Error de sincronización con Google Drive.',
+
+  // TTS (Text-to-Speech)
+  'settings.ttsSection': 'Voz y narración',
+  'settings.ttsVoice': 'Voz predeterminada',
+  'settings.ttsVoiceAuto': 'Predeterminado del sistema',
+  'settings.ttsSpeed': 'Velocidad de lectura',
+  'settings.ttsPitch': 'Tono',
+  'settings.ttsTest': 'Escuchar muestra',
+  'settings.ttsTestSample': 'Hola, soy el asistente de lectura de Folium.',
+  'settings.ttsAutoNext': 'Avanzar automáticamente a la siguiente frase',
+  'reader.ttsTitle': 'Narración (TTS)',
+  'reader.ttsPlay': 'Reproducir',
+  'reader.ttsPause': 'Pausar',
+  'reader.ttsStop': 'Detener',
+  'reader.ttsNextSentence': 'Siguiente frase',
+  'reader.ttsPrevSentence': 'Frase anterior',
+  'reader.ttsSpeed': 'Velocidad',
+  'reader.ttsNoText': 'No se encontró contenido de texto legible',
+  'reader.ttsExtracting': 'Extrayendo texto...',
 };
 
