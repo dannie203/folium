@@ -194,4 +194,23 @@ export const de: Record<TranslationKey, string> = {
   'error.signInFailed': 'Google-Anmeldung fehlgeschlagen.',
   'error.signOutFailed': 'Abmeldung fehlgeschlagen.',
   'error.syncFailed': 'Google Drive-Synchronisierung fehlgeschlagen.',
+
+  // TTS (Text-to-Speech)
+  'settings.ttsSection': 'Sprachausgabe & Vorlesen',
+  'settings.ttsVoice': 'Standardstimme',
+  'settings.ttsVoiceAuto': 'Systemstandard',
+  'settings.ttsSpeed': 'Lesegeschwindigkeit',
+  'settings.ttsPitch': 'Tonhöhe',
+  'settings.ttsTest': 'Stimme testen',
+  'settings.ttsTestSample': 'Hallo, ich bin die Folium-Lesehilfe.',
+  'settings.ttsAutoNext': 'Automatisch zum nächsten Satz springen',
+  'reader.ttsTitle': 'Sprachausgabe (TTS)',
+  'reader.ttsPlay': 'Abspielen',
+  'reader.ttsPause': 'Pause',
+  'reader.ttsStop': 'Stopp',
+  'reader.ttsNextSentence': 'Nächster Satz',
+  'reader.ttsPrevSentence': 'Vorheriger Satz',
+  'reader.ttsSpeed': 'Geschwindigkeit',
+  'reader.ttsNoText': 'Kein lesbarer Textinhalt gefunden',
+  'reader.ttsExtracting': 'Text wird extrahiert...',
 };

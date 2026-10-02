@@ -17,6 +17,7 @@ export interface PdfReaderRef {
   prevPage: () => void;
   goTo: (page: string | number) => void;
   applySettings: (settings: Partial<ReaderSettings>) => void;
+  getCurrentText: () => void;
 }
 
 export interface PdfReaderProps {
@@ -30,6 +31,7 @@ export interface PdfReaderProps {
   onToggleUI?: () => void;
   onChangeFontSize?: (delta: number) => void;
   onEscape?: () => void;
+  onTextExtracted?: (text: string) => void;
   onError?: (errorMessage: string) => void;
 }
 
@@ -96,6 +98,7 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
       goTo: (page: string | number) => postMessageToViewer({ type: 'GO_TO', cfi: String(page) }),
       applySettings: (settings: Partial<ReaderSettings>) =>
         postMessageToViewer({ type: 'APPLY_SETTINGS', settings }),
+      getCurrentText: () => postMessageToViewer({ type: 'GET_CURRENT_TEXT' }),
     }),
     [postMessageToViewer]
   );
@@ -152,6 +155,10 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
 
           case 'ESCAPE':
             props.onEscape?.();
+            break;
+
+          case 'TEXT_EXTRACTED':
+            props.onTextExtracted?.(data.text);
             break;
 
           case 'ERROR':

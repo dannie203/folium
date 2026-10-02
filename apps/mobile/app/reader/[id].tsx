@@ -34,12 +34,15 @@ import {
   TrashIcon,
   SearchIcon,
   TextAaIcon,
+  SpeakerIcon,
 } from '../../src/components/icons/Icons';
+import { TTSPlayerBar } from '../../src/components/TTSPlayerBar';
 
 import { useBookLoader } from '../../src/hooks/useBookLoader';
 import { useReaderAnnotations } from '../../src/hooks/useReaderAnnotations';
 import { useReaderSettings } from '../../src/hooks/useReaderSettings';
 import { useReaderKeyboard } from '../../src/hooks/useReaderKeyboard';
+import { useTTS } from '../../src/hooks/useTTS';
 import { useI18n } from '../../src/i18n';
 
 export default function ReaderScreen() {
@@ -128,6 +131,63 @@ export default function ReaderScreen() {
     showDrawerModal,
     setShowDrawerModal,
   });
+
+  // 6. Text-to-Speech (TTS) hook & controls
+  const [showTTSPlayer, setShowTTSPlayer] = useState(false);
+  const {
+    settings: ttsSettings,
+    updateSettings: updateTtsSettings,
+    sentences: ttsSentences,
+    currentSentenceIndex: ttsCurrentSentenceIndex,
+    currentSentence: ttsCurrentSentence,
+    isPlaying: isTtsPlaying,
+    isPaused: isTtsPaused,
+    loadText: loadTtsText,
+    play: playTts,
+    pause: pauseTts,
+    resume: resumeTts,
+    stop: stopTts,
+    nextSentence: nextTtsSentence,
+    prevSentence: prevTtsSentence,
+  } = useTTS();
+
+  const handleTextExtracted = useCallback(
+    (text: string) => {
+      if (!text || !text.trim()) {
+        showToast(t('reader.ttsNoText'));
+        return;
+      }
+      const chunks = loadTtsText(text);
+      if (chunks.length > 0) {
+        playTts(0);
+      } else {
+        showToast(t('reader.ttsNoText'));
+      }
+    },
+    [loadTtsText, playTts, showToast, t]
+  );
+
+  const handleToggleTTS = useCallback(() => {
+    if (showTTSPlayer) {
+      stopTts();
+      setShowTTSPlayer(false);
+      return;
+    }
+
+    setShowTTSPlayer(true);
+
+    if (selectionData?.text && selectionData.text.trim().length > 0) {
+      const chunks = loadTtsText(selectionData.text);
+      if (chunks.length > 0) {
+        playTts(0);
+      }
+      return;
+    }
+
+    if (readerRef.current?.getCurrentText) {
+      readerRef.current.getCurrentText();
+    }
+  }, [showTTSPlayer, stopTts, selectionData, loadTtsText, playTts]);
 
   // Debounced progress saver
   const saveProgressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -288,6 +348,18 @@ export default function ReaderScreen() {
             >
               <TextAaIcon size={18} color={barText} />
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={handleToggleTTS}
+              activeOpacity={0.7}
+              accessibilityLabel={t('reader.ttsTitle')}
+            >
+              <SpeakerIcon
+                size={18}
+                color={showTTSPlayer ? colors.accentPrimary : barText}
+              />
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -308,6 +380,7 @@ export default function ReaderScreen() {
               onToggleUI={() => setShowUI((prev) => !prev)}
               onChangeFontSize={changeFontSize}
               onEscape={handleEscape}
+              onTextExtracted={handleTextExtracted}
               onError={(err) => setErrorMessage(err)}
             />
           ) : (
@@ -327,6 +400,7 @@ export default function ReaderScreen() {
               onChangeFontSize={changeFontSize}
               onEscape={handleEscape}
               onSelection={(sel) => setSelectionData(sel)}
+              onTextExtracted={handleTextExtracted}
               onError={(err) => setErrorMessage(err)}
             />
           )}
@@ -365,6 +439,28 @@ export default function ReaderScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* TTS Audio Narration Player Bar */}
+      <TTSPlayerBar
+        visible={showTTSPlayer}
+        isPlaying={isTtsPlaying}
+        isPaused={isTtsPaused}
+        currentSentence={ttsCurrentSentence}
+        currentSentenceIndex={ttsCurrentSentenceIndex}
+        totalSentences={ttsSentences.length}
+        rate={ttsSettings.rate}
+        onPlay={playTts}
+        onPause={pauseTts}
+        onResume={resumeTts}
+        onStop={stopTts}
+        onNext={nextTtsSentence}
+        onPrev={prevTtsSentence}
+        onRateChange={(rate) => updateTtsSettings({ rate })}
+        onClose={() => {
+          stopTts();
+          setShowTTSPlayer(false);
+        }}
+      />
 
       {/* Toast Notification */}
       {toastMessage && (

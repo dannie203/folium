@@ -194,4 +194,23 @@ export const fr: Record<TranslationKey, string> = {
   'error.signInFailed': 'Échec de la connexion Google.',
   'error.signOutFailed': 'Échec de la déconnexion.',
   'error.syncFailed': 'Échec de la synchronisation Google Drive.',
+
+  // TTS (Text-to-Speech)
+  'settings.ttsSection': 'Voix et lecture audio',
+  'settings.ttsVoice': 'Voix par défaut',
+  'settings.ttsVoiceAuto': 'Système par défaut',
+  'settings.ttsSpeed': 'Vitesse de lecture',
+  'settings.ttsPitch': 'Tonalité',
+  'settings.ttsTest': 'Écouter un extrait',
+  'settings.ttsTestSample': 'Bonjour, je suis l\'assistant de lecture Folium.',
+  'settings.ttsAutoNext': 'Passer automatiquement à la phrase suivante',
+  'reader.ttsTitle': 'Lecture audio (TTS)',
+  'reader.ttsPlay': 'Lire',
+  'reader.ttsPause': 'Pause',
+  'reader.ttsStop': 'Arrêter',
+  'reader.ttsNextSentence': 'Phrase suivante',
+  'reader.ttsPrevSentence': 'Phrase précédente',
+  'reader.ttsSpeed': 'Vitesse',
+  'reader.ttsNoText': 'Aucun contenu textuel lisible trouvé',
+  'reader.ttsExtracting': 'Extraction du texte...',
 };

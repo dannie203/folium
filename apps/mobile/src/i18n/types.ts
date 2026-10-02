@@ -198,4 +198,24 @@ export type TranslationKey =
   | 'error.bookLoadFailed'
   | 'error.signInFailed'
   | 'error.signOutFailed'
-  | 'error.syncFailed';
+  | 'error.syncFailed'
+
+  // TTS (Text-to-Speech)
+  | 'settings.ttsSection'
+  | 'settings.ttsVoice'
+  | 'settings.ttsVoiceAuto'
+  | 'settings.ttsSpeed'
+  | 'settings.ttsPitch'
+  | 'settings.ttsTest'
+  | 'settings.ttsTestSample'
+  | 'settings.ttsAutoNext'
+  | 'reader.ttsTitle'
+  | 'reader.ttsPlay'
+  | 'reader.ttsPause'
+  | 'reader.ttsStop'
+  | 'reader.ttsNextSentence'
+  | 'reader.ttsPrevSentence'
+  | 'reader.ttsSpeed'
+  | 'reader.ttsNoText'
+  | 'reader.ttsExtracting';
+

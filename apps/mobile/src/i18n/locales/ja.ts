@@ -194,4 +194,23 @@ export const ja: Record<TranslationKey, string> = {
   'error.signInFailed': 'Google ログインに失敗しました。',
   'error.signOutFailed': 'ログアウトに失敗しました。',
   'error.syncFailed': 'Google Drive の同期に失敗しました。',
+
+  // TTS (Text-to-Speech)
+  'settings.ttsSection': '音声と読み上げ',
+  'settings.ttsVoice': 'デフォルトの音声',
+  'settings.ttsVoiceAuto': 'システムデフォルト',
+  'settings.ttsSpeed': '読み上げ速度',
+  'settings.ttsPitch': 'ピッチ',
+  'settings.ttsTest': '音声を試聴',
+  'settings.ttsTestSample': 'こんにちは、Folium の読み上げアシスタントです。',
+  'settings.ttsAutoNext': '次の文を自動的に読み上げる',
+  'reader.ttsTitle': '音声読み上げ (TTS)',
+  'reader.ttsPlay': '再生',
+  'reader.ttsPause': '一時停止',
+  'reader.ttsStop': '停止',
+  'reader.ttsNextSentence': '次の文',
+  'reader.ttsPrevSentence': '前の文',
+  'reader.ttsSpeed': '速度',
+  'reader.ttsNoText': '読み上げ可能なテキストが見つかりません',
+  'reader.ttsExtracting': 'テキストを抽出中...',
 };
