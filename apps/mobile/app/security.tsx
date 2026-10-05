@@ -14,9 +14,11 @@ import { verifyCryptoVault } from '../src/services/cryptoService';
 import { STANDALONE_AUDIT_SNIPPET } from '../src/services/securityProofSnippet';
 import { colors, typography, spacing, radius } from '../src/theme/tokens';
 import { ChevronLeftIcon, FoliumLeafIcon } from '../src/components/icons/Icons';
+import { useI18n } from '../src/i18n';
 
 export default function SecurityProofScreen() {
   const router = useRouter();
+  const { t } = useI18n();
   const [isRunningProof, setIsRunningProof] = useState(false);
   const [proofResult, setProofResult] = useState<{
     success: boolean;
@@ -57,15 +59,15 @@ export default function SecurityProofScreen() {
           style={styles.backBtn}
           activeOpacity={0.7}
           onPress={() => router.back()}
-          accessibilityLabel="Quay lại"
+          accessibilityLabel={t('common.back')}
         >
           <ChevronLeftIcon size={18} color={colors.textPrimary} />
-          <Text style={styles.backBtnText}>Tủ sách</Text>
+          <Text style={styles.backBtnText}>{t('settings.back')}</Text>
         </TouchableOpacity>
 
         <View style={styles.navCenter}>
           <Text style={styles.navTitle} numberOfLines={1}>
-            Kiểm Toán & Bảo Mật ZK
+            {t('settings.security')}
           </Text>
         </View>
 
@@ -204,7 +206,7 @@ export default function SecurityProofScreen() {
             activeOpacity={0.8}
             onPress={() => router.back()}
           >
-            <Text style={styles.bottomBackBtnText}>← Quay lại Thư viện</Text>
+            <Text style={styles.bottomBackBtnText}>← {t('privacy.backToLibrary')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

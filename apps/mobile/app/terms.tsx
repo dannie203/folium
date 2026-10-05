@@ -11,9 +11,11 @@ import {
 import { useRouter, Stack } from 'expo-router';
 import { colors, typography, spacing, radius } from '../src/theme/tokens';
 import { ChevronLeftIcon, FoliumLeafIcon } from '../src/components/icons/Icons';
+import { useI18n } from '../src/i18n';
 
 export default function TermsAndDMCAScreen() {
   const router = useRouter();
+  const { t } = useI18n();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -25,15 +27,15 @@ export default function TermsAndDMCAScreen() {
           style={styles.backBtn}
           activeOpacity={0.7}
           onPress={() => router.back()}
-          accessibilityLabel="Quay lại"
+          accessibilityLabel={t('common.back')}
         >
           <ChevronLeftIcon size={18} color={colors.textPrimary} />
-          <Text style={styles.backBtnText}>Tủ sách</Text>
+          <Text style={styles.backBtnText}>{t('settings.back')}</Text>
         </TouchableOpacity>
 
         <View style={styles.navCenter}>
           <Text style={styles.navTitle} numberOfLines={1}>
-            Điều Khoản Dịch Vụ & DMCA
+            {t('settings.terms')}
           </Text>
         </View>
 
@@ -164,7 +166,7 @@ export default function TermsAndDMCAScreen() {
             activeOpacity={0.8}
             onPress={() => router.back()}
           >
-            <Text style={styles.bottomBackBtnText}>← Quay lại Thư viện</Text>
+            <Text style={styles.bottomBackBtnText}>← {t('privacy.backToLibrary')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

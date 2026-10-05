@@ -5,8 +5,10 @@ import type { Book } from '@folium/shared';
 import { getDatabase } from '../db';
 import { getWebBook } from '../services/storage';
 import { flushSyncImmediately } from '../services/syncService';
+import { useI18n } from '../i18n';
 
 export function useBookLoader(id: string | undefined) {
+  const { t } = useI18n();
   const [book, setBook] = useState<Book | null>(null);
   const [bookBase64, setBookBase64] = useState<string | undefined>(undefined);
   const [bookDataUrl, setBookDataUrl] = useState<string | undefined>(undefined);
@@ -29,7 +31,7 @@ export function useBookLoader(id: string | undefined) {
         );
 
         if (!bookRow) {
-          setErrorMessage('Không tìm thấy sách trong thư viện');
+          setErrorMessage(t('error.bookNotFound'));
           setIsLoading(false);
           return;
         }
@@ -56,7 +58,7 @@ export function useBookLoader(id: string | undefined) {
             } else if (bookRow.local_path && !bookRow.local_path.startsWith('indexeddb://')) {
               setBookDataUrl(bookRow.local_path);
             } else {
-              setErrorMessage('Không tìm thấy tệp sách trong bộ nhớ cục bộ. Bạn vui lòng xoá và thêm lại sách nhé.');
+              setErrorMessage(t('error.bookFileNotFound'));
             }
           } else {
             const base64 = await FileSystem.readAsStringAsync(bookRow.local_path, {
@@ -67,7 +69,7 @@ export function useBookLoader(id: string | undefined) {
         }
       } catch (err: any) {
         console.error('Failed to load book file:', err);
-        setErrorMessage(err.message || 'Lỗi nạp file sách');
+        setErrorMessage(err.message || t('error.bookLoadFailed'));
       } finally {
         setIsLoading(false);
       }

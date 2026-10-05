@@ -11,9 +11,11 @@ import {
 import { useRouter, Stack } from 'expo-router';
 import { colors, typography, spacing, radius } from '../src/theme/tokens';
 import { ChevronLeftIcon, FoliumLeafIcon } from '../src/components/icons/Icons';
+import { useI18n } from '../src/i18n';
 
 export default function PrivacyPolicyScreen() {
   const router = useRouter();
+  const { t } = useI18n();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -25,15 +27,15 @@ export default function PrivacyPolicyScreen() {
           style={styles.backBtn}
           activeOpacity={0.7}
           onPress={() => router.back()}
-          accessibilityLabel="Quay lại"
+          accessibilityLabel={t('common.back')}
         >
           <ChevronLeftIcon size={18} color={colors.textPrimary} />
-          <Text style={styles.backBtnText}>Tủ sách</Text>
+          <Text style={styles.backBtnText}>{t('settings.back')}</Text>
         </TouchableOpacity>
 
         <View style={styles.navCenter}>
           <Text style={styles.navTitle} numberOfLines={1}>
-            Chính Sách Quyền Riêng Tư
+            {t('privacy.navTitle')}
           </Text>
         </View>
 
@@ -49,15 +51,12 @@ export default function PrivacyPolicyScreen() {
           <View style={styles.header}>
             <View style={styles.badgeRow}>
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>QUYỀN RIÊNG TƯ • ZERO-TELEMETRY</Text>
+                <Text style={styles.badgeText}>{t('privacy.badge')}</Text>
               </View>
-              <Text style={styles.metaText}>Cập nhật: 19/09/2026</Text>
+              <Text style={styles.metaText}>{t('privacy.updated')}</Text>
             </View>
-            <Text style={styles.title}>Chính Sách Bảo Vệ Quyền Riêng Tư</Text>
-            <Text style={styles.subtitle}>
-              Folium được xây dựng với triết lý: Quyền riêng tư khi đọc là bất khả xâm phạm. Chúng tôi không theo
-              dõi hành vi, không bán dữ liệu và không bao giờ lưu trữ sách của bạn trên máy chủ trung tâm.
-            </Text>
+            <Text style={styles.title}>{t('privacy.title')}</Text>
+            <Text style={styles.subtitle}>{t('privacy.subtitle')}</Text>
           </View>
 
           {/* Section 1 */}
@@ -66,16 +65,10 @@ export default function PrivacyPolicyScreen() {
               <View style={styles.sectionNumber}>
                 <Text style={styles.sectionNumberText}>01</Text>
               </View>
-              <Text style={styles.sectionTitle}>Kiến Trúc Ưu Tiên Cục Bộ (Local-First)</Text>
+              <Text style={styles.sectionTitle}>{t('privacy.section1Title')}</Text>
             </View>
-            <Text style={styles.paragraph}>
-              Khi bạn sử dụng Folium để đọc sách (EPUB, PDF), toàn bộ tài liệu, vị trí đọc dở (CFI), bookmark,
-              highlight và ghi chú được lưu trữ trực tiếp trên thiết bị của bạn (SQLite trên mobile, IndexedDB trên web).
-            </Text>
-            <Text style={styles.paragraph}>
-              Ứng dụng hoạt động 100% ngoại tuyến mà không đòi hỏi kết nối internet. Bạn có thể đọc sách trên máy bay
-              hoặc nơi hẻo lánh mà không lo bị ngắt quãng.
-            </Text>
+            <Text style={styles.paragraph}>{t('privacy.section1Paragraph1')}</Text>
+            <Text style={styles.paragraph}>{t('privacy.section1Paragraph2')}</Text>
           </View>
 
           {/* Section 2 */}
@@ -84,24 +77,22 @@ export default function PrivacyPolicyScreen() {
               <View style={styles.sectionNumber}>
                 <Text style={styles.sectionNumberText}>02</Text>
               </View>
-              <Text style={styles.sectionTitle}>Không Thu Thập Dữ Liệu (Zero Telemetry)</Text>
+              <Text style={styles.sectionTitle}>{t('privacy.section2Title')}</Text>
             </View>
-            <Text style={styles.paragraph}>
-              Folium là dự án mã nguồn mở phi lợi nhuận. Chúng tôi cam kết tuyệt đối:
-            </Text>
+            <Text style={styles.paragraph}>{t('privacy.section2Intro')}</Text>
 
             <View style={styles.bulletList}>
               <View style={styles.bulletItem}>
                 <View style={styles.bulletDot} />
-                <Text style={styles.bulletText}>KHÔNG cài đặt bất kỳ mã theo dõi, Google Analytics hay Facebook Pixel.</Text>
+                <Text style={styles.bulletText}>{t('privacy.section2Bullet1')}</Text>
               </View>
               <View style={styles.bulletItem}>
                 <View style={styles.bulletDot} />
-                <Text style={styles.bulletText}>KHÔNG ghi nhận lịch sử đọc, tốc độ đọc hay thời gian đọc của bạn.</Text>
+                <Text style={styles.bulletText}>{t('privacy.section2Bullet2')}</Text>
               </View>
               <View style={styles.bulletItem}>
                 <View style={styles.bulletDot} />
-                <Text style={styles.bulletText}>KHÔNG hiển thị quảng cáo thương mại hoặc bán hồ sơ người dùng cho bên thứ ba.</Text>
+                <Text style={styles.bulletText}>{t('privacy.section2Bullet3')}</Text>
               </View>
             </View>
           </View>
@@ -112,22 +103,15 @@ export default function PrivacyPolicyScreen() {
               <View style={styles.sectionNumber}>
                 <Text style={styles.sectionNumberText}>03</Text>
               </View>
-              <Text style={styles.sectionTitle}>Quyền Truy Cập Google Drive (drive.file)</Text>
+              <Text style={styles.sectionTitle}>{t('privacy.section3Title')}</Text>
             </View>
+            <Text style={styles.paragraph}>{t('privacy.section3Paragraph1')}</Text>
             <Text style={styles.paragraph}>
-              Khi bạn tuỳ chọn kích hoạt tính năng sao lưu thư viện qua Google Drive:
-            </Text>
-            <Text style={styles.paragraph}>
-              Folium chỉ yêu cầu quyền hạn hẹp nhất:{' '}
+              {t('privacy.section3Paragraph2')}{' '}
               <Text style={styles.codeTag}>https://www.googleapis.com/auth/drive.file</Text>
             </Text>
             <View style={styles.calloutBox}>
-              <Text style={styles.calloutText}>
-                Theo quy định bảo mật của Google, quyền này chỉ cho phép ứng dụng đọc/ghi các file nằm trong thư mục do chính
-                Folium tạo ra (<Text style={styles.codeTag}>/Folium</Text>). Folium{' '}
-                <Text style={styles.boldWhite}>hoàn toàn không có quyền xem hay chạm vào</Text> bất kỳ hình ảnh, tài liệu cá nhân
-                nào khác trên Google Drive của bạn.
-              </Text>
+              <Text style={styles.calloutText}>{t('privacy.section3Callout')}</Text>
             </View>
           </View>
 
@@ -137,15 +121,10 @@ export default function PrivacyPolicyScreen() {
               <View style={styles.sectionNumber}>
                 <Text style={styles.sectionNumberText}>04</Text>
               </View>
-              <Text style={styles.sectionTitle}>Đồng Bộ Không Kiến Thức (Zero-Knowledge Sync)</Text>
+              <Text style={styles.sectionTitle}>{t('privacy.section4Title')}</Text>
             </View>
-            <Text style={styles.paragraph}>
-              Tính năng đồng bộ tiến độ đọc qua Cloudflare D1 sử dụng cơ chế mã hoá đầu cuối tại máy khách (Client-Side AES-256-GCM).
-              Hạ tầng serverless chỉ lưu trữ các khối bản mã mù (Blind Ciphertext) và không sở hữu khoá giải mã.
-            </Text>
-            <Text style={styles.paragraph}>
-              Ngay cả đội ngũ phát triển hay nhà cung cấp hạ tầng máy chủ cũng không thể giải mã hay xem được dữ liệu của bạn.
-            </Text>
+            <Text style={styles.paragraph}>{t('privacy.section4Paragraph1')}</Text>
+            <Text style={styles.paragraph}>{t('privacy.section4Paragraph2')}</Text>
           </View>
 
           {/* Section 5 */}
@@ -154,13 +133,11 @@ export default function PrivacyPolicyScreen() {
               <View style={styles.sectionNumber}>
                 <Text style={styles.sectionNumberText}>05</Text>
               </View>
-              <Text style={styles.sectionTitle}>Minh Bạch Mã Nguồn Mở</Text>
+              <Text style={styles.sectionTitle}>{t('privacy.section5Title')}</Text>
             </View>
-            <Text style={styles.paragraph}>
-              Mã nguồn của Folium được công khai 100% trên GitHub để cộng đồng tự do kiểm chứng và đóng góp:
-            </Text>
+            <Text style={styles.paragraph}>{t('privacy.section5Paragraph')}</Text>
             <View style={styles.contactCard}>
-              <Text style={styles.contactTitle}>Kho mã nguồn chính thức:</Text>
+              <Text style={styles.contactTitle}>{t('privacy.officialSource')}</Text>
               <Text style={styles.contactEmail}>github.com/dannie203/folium</Text>
             </View>
           </View>
@@ -171,7 +148,7 @@ export default function PrivacyPolicyScreen() {
             activeOpacity={0.8}
             onPress={() => router.back()}
           >
-            <Text style={styles.bottomBackBtnText}>← Quay lại Thư viện</Text>
+            <Text style={styles.bottomBackBtnText}>← {t('privacy.backToLibrary')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

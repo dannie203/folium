@@ -21,7 +21,7 @@ export async function addBookmark(bookId: string, cfi: string, title?: string): 
   const db = await getDatabase();
   const id = generateUUID();
   const now = Date.now();
-  const defaultTitle = title || `Dấu trang tại ${cfi.slice(0, 16)}...`;
+  const defaultTitle = title || `Bookmark at ${cfi.slice(0, 16)}...`;
 
   const bookmark: Bookmark = {
     id,
@@ -269,8 +269,8 @@ export async function searchAnnotations(
       type: 'highlight',
       id: r.id,
       book_id: r.book_id,
-      title: r.book_title || 'Tô sáng',
-      snippet: r.text + (r.note ? ` — Ghi chú: ${r.note}` : ''),
+      title: r.book_title || 'Highlight',
+      snippet: r.text + (r.note ? ` — Note: ${r.note}` : ''),
       cfi: r.cfi_range,
       created_at: r.client_created_at,
     });
@@ -288,7 +288,7 @@ export async function searchAnnotations(
       type: 'bookmark',
       id: r.id,
       book_id: r.book_id,
-      title: r.book_title || 'Dấu trang',
+      title: r.book_title || 'Bookmark',
       snippet: r.title,
       cfi: r.cfi,
       created_at: r.client_created_at,

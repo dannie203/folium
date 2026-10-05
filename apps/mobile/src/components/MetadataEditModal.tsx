@@ -15,6 +15,7 @@ import type { Book } from '@folium/shared';
 import { updateBookMetadata, getAvailableShelves, deleteBook } from '../services/bookService';
 import { colors, typography, radius, spacing } from '../theme/tokens';
 import { EditPencilIcon, CloseIcon, FolderIcon, InboxTrayIcon, TrashIcon } from './icons/Icons';
+import { useI18n } from '../i18n';
 
 interface MetadataEditModalProps {
   visible: boolean;
@@ -31,6 +32,7 @@ export function MetadataEditModal({
   onSaved,
   onDelete,
 }: MetadataEditModalProps) {
+  const { t } = useI18n();
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
@@ -82,7 +84,7 @@ export function MetadataEditModal({
       onSaved();
       onClose();
     } catch (err: any) {
-      alert(`Lỗi lưu thông tin: ${err.message}`);
+      alert(`${t('common.error')}: ${err.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -91,16 +93,16 @@ export function MetadataEditModal({
   const handleDeleteBook = async () => {
     if (!book) return;
 
-    const confirmMsg = `Bạn có chắc chắn muốn xoá cuốn "${book.title}" khỏi thư viện?\n(Sách sẽ được dọn dẹp và chuyển vào thùng rác nếu có liên kết Google Drive)`;
+    const confirmMsg = t('metadata.deleteBookConfirm', { title: book.title });
 
     let confirmed = false;
     if (Platform.OS === 'web') {
       confirmed = window.confirm(confirmMsg);
     } else {
       confirmed = await new Promise<boolean>((resolve) => {
-        Alert.alert('Xoá sách', confirmMsg, [
-          { text: 'Huỷ', style: 'cancel', onPress: () => resolve(false) },
-          { text: 'Xoá', style: 'destructive', onPress: () => resolve(true) },
+        Alert.alert(t('metadata.deleteBook'), confirmMsg, [
+          { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+          { text: t('common.delete'), style: 'destructive', onPress: () => resolve(true) },
         ]);
       });
     }
@@ -117,7 +119,7 @@ export function MetadataEditModal({
       }
       onClose();
     } catch (err: any) {
-      alert(`Lỗi xoá sách: ${err.message}`);
+      alert(`${t('metadata.deleteError')}: ${err.message}`);
     } finally {
       setIsDeleting(false);
     }
@@ -132,9 +134,9 @@ export function MetadataEditModal({
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
               <EditPencilIcon size={18} color={colors.accentPrimary} />
-              <Text style={styles.title}>Chỉnh Sửa Sách & Kệ</Text>
+              <Text style={styles.title}>{t('metadata.title')}</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityLabel="Đóng">
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityLabel={t('common.close')}>
               <CloseIcon size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
@@ -142,31 +144,31 @@ export function MetadataEditModal({
           <ScrollView contentContainerStyle={styles.body}>
             {/* Title Input */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Tên sách</Text>
+              <Text style={styles.label}>{t('metadata.bookTitle')}</Text>
               <TextInput
                 style={styles.input}
                 value={title}
                 onChangeText={setTitle}
-                placeholder="Nhập tên sách..."
+                placeholder={t('metadata.bookTitlePlaceholder')}
                 placeholderTextColor={colors.textMuted}
               />
             </View>
 
             {/* Author Input */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Tác giả</Text>
+              <Text style={styles.label}>{t('metadata.author')}</Text>
               <TextInput
                 style={styles.input}
                 value={author}
                 onChangeText={setAuthor}
-                placeholder="Tên tác giả..."
+                placeholder={t('metadata.authorPlaceholder')}
                 placeholderTextColor={colors.textMuted}
               />
             </View>
 
             {/* Shelf / Category Selection */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Kệ sách (Folder trên Google Drive)</Text>
+              <Text style={styles.label}>{t('metadata.shelf')}</Text>
               <View style={styles.shelfChipsRow}>
                 {availableShelves.map((s) => {
                   const isSelected = shelf === s;
@@ -183,7 +185,7 @@ export function MetadataEditModal({
                         <FolderIcon size={12} color={isSelected ? '#FFFFFF' : colors.textSecondary} />
                       )}
                       <Text style={[styles.shelfChipText, isSelected && styles.shelfChipTextSelected]}>
-                        {isInbox ? 'Hộp thư đến (Inbox)' : s}
+                        {isInbox ? t('metadata.inboxLabel') : s}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -196,7 +198,7 @@ export function MetadataEditModal({
                   style={[styles.input, styles.addShelfInput]}
                   value={newShelfInput}
                   onChangeText={setNewShelfInput}
-                  placeholder="+ Tên kệ mới (Văn học, Kỹ thuật...)"
+                  placeholder={t('metadata.addShelfPlaceholder')}
                   placeholderTextColor={colors.textMuted}
                 />
                 <TouchableOpacity
@@ -204,19 +206,19 @@ export function MetadataEditModal({
                   onPress={handleAddNewShelf}
                   disabled={!newShelfInput.trim()}
                 >
-                  <Text style={styles.addShelfBtnText}>Thêm Kệ</Text>
+                  <Text style={styles.addShelfBtnText}>{t('metadata.addShelfBtn')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             {/* Cover URL Input */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Đường dẫn ảnh bìa (Cover URL - Tùy chọn)</Text>
+              <Text style={styles.label}>{t('metadata.coverUrl')}</Text>
               <TextInput
                 style={styles.input}
                 value={coverUrl}
                 onChangeText={setCoverUrl}
-                placeholder="https://example.com/cover.jpg"
+                placeholder={t('metadata.coverUrlPlaceholder')}
                 placeholderTextColor={colors.textMuted}
               />
             </View>
@@ -228,14 +230,14 @@ export function MetadataEditModal({
                 onPress={handleDeleteBook}
                 disabled={isSaving || isDeleting}
                 activeOpacity={0.8}
-                accessibilityLabel="Xoá sách khỏi thư viện"
+                accessibilityLabel={t('metadata.deleteBook')}
               >
                 {isDeleting ? (
                   <ActivityIndicator size="small" color={colors.statusError} />
                 ) : (
                   <>
                     <TrashIcon size={16} color={colors.statusError} />
-                    <Text style={styles.deleteBtnText}>Xoá Sách</Text>
+                    <Text style={styles.deleteBtnText}>{t('metadata.deleteBook')}</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -246,7 +248,7 @@ export function MetadataEditModal({
                   onPress={onClose}
                   disabled={isSaving || isDeleting}
                 >
-                  <Text style={styles.cancelBtnText}>Hủy</Text>
+                  <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.saveBtn, (isSaving || isDeleting) && styles.btnDisabled]}
@@ -256,7 +258,7 @@ export function MetadataEditModal({
                   {isSaving ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
-                    <Text style={styles.saveBtnText}>Lưu Thay Đổi</Text>
+                    <Text style={styles.saveBtnText}>{t('metadata.saveChanges')}</Text>
                   )}
                 </TouchableOpacity>
               </View>

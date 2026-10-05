@@ -17,6 +17,10 @@
 - [Entry #08 (2026-09-19): Google Drive Storage, OAuth & The Zero-Knowledge Privacy Vault](#entry-08-2026-09-19-google-drive-storage-oauth--the-zero-knowledge-privacy-vault)
 - [Entry #09 (2026-09-19): Community Bookshelf, OPDS & Folder-as-a-Shelf Sync](#entry-09-2026-09-19-community-bookshelf-opds--folder-as-a-shelf-sync)
 - [Entry #10 (2026-09-19): 30-Day Tombstone Retention & Bidirectional Deletion Sync](#entry-10-2026-09-19-30-day-tombstone-retention--bidirectional-deletion-sync)
+- [Entry #11 (2026-09-22): Codebase Audit, Security Hardening & Zero-Knowledge Upgrades](#entry-11-2026-09-22-codebase-audit-p0p1p2-remediation-security-hardening--zero-knowledge-architecture-upgrades)
+- [Entry #12 (2026-09-22): Full Codebase Localization (i18n) Supporting 7 Languages](#entry-12-2026-09-22-full-codebase-localization-i18n-supporting-7-languages)
+- [Entry #13 (2026-09-28): Phase 8.8 Storage Armor & Zero-Exfiltration Sandbox](#entry-13-2026-09-28-phase-88-storage-armor-ingestion-gatekeeper--zero-exfiltration-sandbox)
+- [Entry #14 (2026-10-02): Phase 10 Audio Narration (TTS) & Accessibility](#entry-14-2026-10-02-phase-10-audio-narration-tts--accessibility)
 
 ---
 
@@ -313,3 +317,145 @@ Following a comprehensive architectural and security review across the entire mo
   - `pnpm test`: 21/21 passing (0 failing).
   - `npx expo export --platform web`: 9/9 static routes cleanly bundled.
 
+### Entry #12 (2026-09-22): Full Codebase Localization (i18n) Supporting 7 Languages
+
+#### Summary & Motivation
+Completed full internationalization (i18n) across the entire Folium client codebase, removing hardcoded UI strings in favor of a lightweight, strongly typed, zero-runtime-overhead React Context architecture. Added complete translations for 7 languages: Vietnamese (`vi`), English (`en`), Japanese (`ja`), Simplified Chinese (`zh`), French (`fr`), Spanish (`es`), and German (`de`).
+
+#### 1. Architecture & Type Safety
+- **Typed Keys & Fallbacks (`apps/mobile/src/i18n/types.ts`)**:
+  - Comprehensive `TranslationKey` union covering all navigation, bookshelf, reader, drive sync, metadata editor, community OPDS, and sync badge strings.
+  - TypeScript strictly enforces key existence at compile-time via `pnpm typecheck`.
+- **Dynamic Parameter Interpolation (`apps/mobile/src/i18n/index.tsx`)**:
+  - Built-in parameter substitution: `t('reader.pageOf', { page: 12, total: 150, percent: 8.0 })`.
+  - Cascading fallback: `target locale` -> `en` -> `vi` -> raw key string.
+  - Persistent language selection in SQLite (`sync_meta` key `app_locale`).
+- **Complete Language Dictionaries (`apps/mobile/src/i18n/locales/`)**:
+  - `vi.ts` (Tiếng Việt - default)
+  - `en.ts` (English)
+  - `ja.ts` (日本語)
+  - `zh.ts` (简体中文)
+  - `fr.ts` (Français)
+  - `es.ts` (Español)
+  - `de.ts` (Deutsch)
+
+#### 2. Localized Views & Components
+- **Settings Screen (`apps/mobile/app/settings.tsx`)**:
+  - Converted the legacy 2-language toggle into an extensible `languageGrid` displaying all 7 supported languages with their native names and instant locale switching.
+- **Bookshelf & Navigation**:
+  - `BookshelfScreen` & `BookshelfHeader`: Search placeholders, file picker errors, and action tooltips.
+  - `EmptyBookshelf`: Localized empty state titles, descriptions, and file selection CTA.
+  - `ShelfFilterChips`: Localized "All" and "Inbox" filters.
+  - `BookCard`: Reading progress (`{percent}%`), unread badges, and delete confirmation dialogues.
+  - `BookshelfFooter` & `SidebarNav`: Localized library navigation, shelves list, cloud status, and legal links.
+  - `BottomTabBar`: Localized mobile navigation labels.
+- **Reader Experience (`apps/mobile/app/reader/[id].tsx` & `useReaderAnnotations.ts`)**:
+  - Localized drawer tabs: Table of Contents, Bookmarks, Highlights & Notes, Search.
+  - Search placeholder, empty query prompt, and "no results found" messaging.
+  - Floating text selection card: "Highlight & Note", color palette, and note input.
+  - Reader appearance modal: Theme options (Dark, Sepia, Light), font size adjustments, and keyboard shortcut cheatsheet.
+  - Page navigation controls, progress indicators, and toast notifications.
+- **Modals & Badges**:
+  - `DriveSyncModal`: OAuth login cards, Google Drive status, sync result breakdowns, and Zero-Knowledge security notices.
+  - `MetadataEditModal`: Book title, author, shelf category, cover URL, and delete confirmations.
+  - `SyncStatusBadge`: Real-time status indicators (Synced, Syncing, Offline, Error), pending count, and modal info dialogs.
+- **Community & OPDS (`apps/mobile/app/community.tsx`)**:
+  - OPDS catalog tabs, loading spinners, download status buttons ("Download to Library", "In Library").
+  - Google Drive folder scanner inputs, recursive scan feedback, and import buttons.
+  - Custom OPDS catalog feed inputs and validation alerts.
+
+#### 3. Verification & Build
+- `pnpm typecheck`: 0 errors across monorepo.
+- `pnpm test`: 21/21 security and regression tests passing.
+- `npx expo export --platform web`: All 9 static routes cleanly bundled with zero asset errors.
+
+### Entry #13 (2026-09-28): Phase 8.8 Storage Armor, Ingestion Gatekeeper & Zero-Exfiltration Sandbox
+
+#### Summary & Motivation
+Implemented Phase 8.8 of the Folium roadmap across the client and reader engines to protect local storage (SQLite/IndexedDB) and Google Drive bandwidth from corrupt files, malicious disguised binaries (PE/ELF/Mach-O/scripts), and Zip Bomb DoS payloads. Hardened reader sandboxing with zero-network Content Security Policies (Super CSP) and W3C SVG script quarantine.
+
+#### 1. Ingestion Gatekeeper & Storage Abuse Firewall (`apps/mobile/src/services/fileValidator.ts`)
+- **Magic Bytes Validation**:
+  - **PDF**: Verified `%PDF-` (`0x25 0x50 0x44 0x46`) header and end-of-file trailer `%%EOF` within the last 1024 bytes.
+  - **EPUB**: Validated Local File Header `PK\x03\x04` and IDPF/W3C OCF uncompressed `mimetype` entry starting with exact ASCII string `application/epub+zip`.
+- **Storage Abuse Firewall**:
+  - Added pre-flight rejection of disguised Windows PE executables (`MZ` / `0x4D 0x5A`), Linux ELF binaries (`\x7fELF`), Unix shell scripts (`#!`), and Mach-O binaries.
+  - Integrated gatekeeper checks before writing to local SQLite / IndexedDB (`bookService.ts`, `opdsService.ts`, `publicDriveService.ts`) and before/after Google Drive transmission (`googleDriveService.ts`).
+  - Completely cuts off Google Drive upload APIs when an invalid binary is encountered, protecting user quota and account standing.
+
+#### 2. Decompression Defense (Zip Bomb & DoS Shield)
+- **Central Directory Pre-Flight Scan**:
+  - Traverses ZIP End of Central Directory (`PK\x05\x06`) and all Central Directory entry headers (`PK\x01\x02`) *before* any in-memory inflation or buffer allocation.
+- **Safety Ceiling Enforcement**:
+  - `MAX_TOTAL_UNCOMPRESSED_SIZE`: Caps cumulative uncompressed size at 300 MB.
+  - `MAX_DECOMPRESSION_RATIO`: Rejects single entries or archives exceeding 100:1 compression ratio.
+  - `MAX_ENTRY_COUNT`: Caps maximum archive inner files at 2,000 to prevent directory tree exhaustion attacks.
+
+#### 3. Zero-Exfiltration Sandbox & SVG Quarantine
+- **Super CSP (Zero-Network Content Security Policy)**:
+  - Inlined `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'none';">` in both `epubViewerHtml.ts` and `pdfViewerHtml.ts`.
+  - `connect-src 'none'` permanently eliminates network egress (`fetch`, `XHR`, `WebSocket`), neutralizing CSS exfiltration attacks.
+  - Added `sandbox: 'allow-scripts allow-same-origin'` to `PdfReader.tsx` web iframe container (matching `EpubReader.tsx`).
+- **W3C SVG Security Isolation**:
+  - Strips `<script>` tags and active `on*` event handlers from all SVG elements upon document load in the EPUB reader engine.
+- **Bug Fix**:
+  - Resolved malformed `<!DOCTYPE \n if (payload.highlights...` in `epubViewerHtml.ts` and restored highlight initialization upon book render.
+
+#### 4. Automated Security Verification Suite (`tests/security/storage_armor.test.mjs`)
+- Added 14 new automated security and regression tests:
+  - Rejection of corrupt or trailer-less PDFs.
+  - Rejection of disguised PE binaries, ELF binaries, shell scripts.
+  - OCF-compliant EPUB validation & rejection of non-OCF zips.
+  - Zip bomb rejection (excessive entries, excessive uncompressed size, excessive ratio).
+  - Reader CSP and iframe sandbox enforcement audit.
+- **Verification Metrics**:
+  - `pnpm typecheck`: 0 errors across 3 packages.
+  - `pnpm test`: 35/35 passing (0 failing).
+  - `npx expo export --platform web`: 9/9 static routes bundled successfully.
+
+---
+
+### Entry #14 (2026-10-02): Phase 10 Audio Narration (TTS) & Accessibility
+
+#### Summary & Motivation
+Implemented Phase 10 of the Folium roadmap, introducing cross-platform Text-to-Speech (TTS) audio narration across Web and Native Mobile without incurring any external cloud server costs ($0 operating cost) or bloating the application bundle (0 KB bundle penalty). Built smart voice selection in Settings, synchronized reader playback controls via `TTSPlayerBar`, and fortified sentence chunking with Vietnamese honorific protection.
+
+#### 1. Zero-Cost, Zero-Bundle Engine Architecture (`ttsService.ts`, `useTTS.ts`)
+- **Native OS & Web Speech API Synthesis**:
+  - Web: Uses `window.speechSynthesis` and `SpeechSynthesisUtterance` with an active 10-second heartbeat keepalive defense against Chromium's 15-second playback timeout bug.
+  - Mobile: Integrated with `expo-speech` delegating synthesis directly to on-device OS engines (Google Speech Services on Android, AVFoundation on iOS).
+  - Preserved 100% offline autonomy and 0 KB network latency.
+- **Smart Sentence Chunking & Casing Preservation**:
+  - Implemented `splitTextIntoSentences()` with regex protection for honorifics and title prefixes (`BS.`, `ThS.`, `TP.`, `TS.`, `GS.`, `Mr.`, `Dr.`), decimal numbers (`3.14`), and dialogue quotes (`"..."`, `“...”`).
+  - Preserves exact original character casing (`BS.`, `TP.`) through non-destructive marker tokenization.
+- **Stateful React Hook (`useTTS.ts`)**:
+  - Manages playback lifecycle (`play`, `pause`, `resume`, `stop`, `nextSentence`, `prevSentence`, `seekSentence`).
+  - Persists user preferences (`voiceURI`, `rate`, `pitch`, `autoNext`) directly into SQLite `sync_meta` under key `tts_settings`.
+
+#### 2. User-Centric Voice Selection & Settings (`settings.tsx`)
+- Added **Voice & Narration** (`settings.ttsSection`) section to the main Settings screen:
+  - Interactive Voice Picker Modal grouping recommended voices matching the active app language (`vi` -> Vietnamese voices first) followed by other system voices.
+  - One-tap audio sample test button (`testVoice`) allowing users to preview pronunciation before choosing.
+  - Playback speed chips (`0.75x`, `1.0x`, `1.25x`, `1.5x`, `1.75x`, `2.0x`).
+  - Auto-advance sentence toggle switch.
+
+#### 3. Reader Bridge & Synchronized Playback UI (`reader/[id].tsx`, `TTSPlayerBar.tsx`)
+- **Bidirectional Text Extraction**:
+  - Added `GET_CURRENT_TEXT` message protocol to both `epubViewerHtml.ts` and `pdfViewerHtml.ts`.
+  - EPUB: Extracts live chapter DOM inner text via `rendition.getContents()`.
+  - PDF: Queries `pdfjsLib` current page text content stream.
+  - Exposed `onTextExtracted` and `getCurrentText()` across `EpubReader.tsx` and `PdfReader.tsx`.
+- **Floating `TTSPlayerBar`**:
+  - Top header displaying live status, sentence counter `(current/total)`, and speed rate cycler.
+  - Sentence quote preview card rendering the sentence currently being spoken.
+  - Transport controls (Previous sentence, Play/Pause circle, Next sentence, Close).
+  - Integrated with text selection: selecting any paragraph or sentence in the reader and opening TTS instantly speaks the chosen passage.
+
+#### 4. Internationalization & Quality Gates
+- **i18n Localization**:
+  - Complete translations for all TTS keys across all 7 supported languages (`vi`, `en`, `ja`, `zh`, `fr`, `es`, `de`).
+- **Test Metrics (`tests/security/tts.test.mjs`)**:
+  - Added 6 automated tests validating Vietnamese sentence splitting, abbreviation protection, HTML tag stripping, and language-aware voice prioritization.
+  - Total automated test count increased to **41/41 passing** (0 failing).
+  - `pnpm typecheck`: **0 errors** across monorepo.
+  - `npx expo export --platform web`: All 9 static routes cleanly bundled with zero warnings.

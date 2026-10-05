@@ -172,8 +172,8 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
   if (result.type !== 'success' || !result.params.access_token) {
     throw new Error(
       result.type === 'cancel'
-        ? 'Đăng nhập Google đã bị hủy.'
-        : `Đăng nhập thất bại: ${result.type}`
+        ? 'Google sign-in was cancelled.'
+        : `Sign-in failed: ${result.type}`
     );
   }
 
@@ -187,7 +187,7 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
   });
 
   if (!userinfoResp.ok) {
-    throw new Error('Không thể tải thông tin tài khoản Google.');
+    throw new Error('Failed to load Google account info.');
   }
 
   const profile = await userinfoResp.json();

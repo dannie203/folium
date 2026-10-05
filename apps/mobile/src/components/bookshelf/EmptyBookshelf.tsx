@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, typography, spacing, radius } from '../../theme/tokens';
 import { FoliumLeafIcon, PlusIcon } from '../icons/Icons';
+import { useI18n } from '../../i18n';
 
 interface EmptyBookshelfProps {
   isLibraryEmpty: boolean;
@@ -14,18 +15,20 @@ export function EmptyBookshelf({
   isImporting,
   onImport,
 }: EmptyBookshelfProps) {
+  const { t } = useI18n();
+
   return (
     <View style={styles.centerContainer}>
       <View style={styles.emptyIconCircle}>
         <FoliumLeafIcon size={48} color="rgba(99, 102, 241, 0.4)" />
       </View>
       <Text style={styles.emptyTitle}>
-        {isLibraryEmpty ? 'Tủ sách của bạn còn trống' : 'Không tìm thấy sách phù hợp'}
+        {isLibraryEmpty ? t('bookshelf.emptyTitle') : t('bookshelf.emptySearchTitle')}
       </Text>
       <Text style={styles.emptySubtitle}>
         {isLibraryEmpty
-          ? 'Nhấn nút "+ Thêm sách" để nạp file EPUB hoặc PDF từ thiết bị vào phòng đọc riêng tư.'
-          : 'Thử tìm kiếm với từ khoá khác hoặc xoá bộ lọc đang chọn.'}
+          ? t('bookshelf.emptySubtitle')
+          : t('bookshelf.emptySearchSubtitle')}
       </Text>
 
       {isLibraryEmpty && (
@@ -36,7 +39,7 @@ export function EmptyBookshelf({
           disabled={isImporting}
         >
           <PlusIcon size={16} color="#FFFFFF" />
-          <Text style={styles.ctaButtonText}>Chọn file sách từ máy</Text>
+          <Text style={styles.ctaButtonText}>{t('bookshelf.chooseFile')}</Text>
         </TouchableOpacity>
       )}
     </View>

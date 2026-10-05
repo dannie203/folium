@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, Image } from
 import type { BookWithProgress } from '../services/bookService';
 import { colors, typography, radius, spacing } from '../theme/tokens';
 import { FoliumLeafIcon, FolderIcon, EditPencilIcon } from './icons/Icons';
+import { useI18n } from '../i18n';
 
 interface BookCardProps {
   book: BookWithProgress;
@@ -12,19 +13,20 @@ interface BookCardProps {
 }
 
 export function BookCard({ book, onPress, onDelete, onLongPress }: BookCardProps) {
+  const { t } = useI18n();
   const isPdf = book.file_type === 'pdf';
   const progressPercent = Math.round(book.progress_percentage || 0);
 
   const confirmDelete = () => {
-    const confirmMsg = `Bạn có chắc chắn muốn xoá cuốn "${book.title}" khỏi thư viện?`;
+    const confirmMsg = t('bookshelf.deleteConfirmMsg', { title: book.title });
     if (Platform.OS === 'web') {
       if (window.confirm(confirmMsg)) {
         onDelete(book);
       }
     } else {
-      Alert.alert('Xoá sách', confirmMsg, [
-        { text: 'Huỷ', style: 'cancel' },
-        { text: 'Xoá', style: 'destructive', onPress: () => onDelete(book) },
+      Alert.alert(t('bookshelf.deleteConfirmTitle'), confirmMsg, [
+        { text: t('bookshelf.cancel'), style: 'cancel' },
+        { text: t('bookshelf.delete'), style: 'destructive', onPress: () => onDelete(book) },
       ]);
     }
   };
@@ -100,7 +102,7 @@ export function BookCard({ book, onPress, onDelete, onLongPress }: BookCardProps
             handleLongPress();
           }}
           activeOpacity={0.75}
-          accessibilityLabel={`Tùy chọn cho sách ${book.title}`}
+          accessibilityLabel={`${t('bookshelf.bookOptions')}: ${book.title}`}
         >
           <EditPencilIcon size={12} color="#FFFFFF" />
         </TouchableOpacity>
@@ -119,14 +121,16 @@ export function BookCard({ book, onPress, onDelete, onLongPress }: BookCardProps
           {book.title}
         </Text>
         <Text style={styles.author} numberOfLines={1}>
-          {book.author || 'Tác giả không xác định'}
+          {book.author || t('common.unknownAuthor')}
         </Text>
 
         <View style={styles.metaRow}>
           {progressPercent > 0 ? (
-            <Text style={styles.progressLabel}>Đã đọc {progressPercent}%</Text>
+            <Text style={styles.progressLabel}>
+              {t('bookshelf.readProgress', { percent: progressPercent })}
+            </Text>
           ) : (
-            <Text style={styles.newLabel}>Chưa đọc</Text>
+            <Text style={styles.newLabel}>{t('bookshelf.unread')}</Text>
           )}
           <Text style={styles.fileSizeText}>{formatFileSize(book.file_size)}</Text>
         </View>

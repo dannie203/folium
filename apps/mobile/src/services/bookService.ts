@@ -37,7 +37,7 @@ function parseBookMetadata(filename: string): { title: string; author: string; f
 
   return {
     title: clean,
-    author: 'Tác giả không rõ',
+    author: 'Unknown author',
     format: ext,
   };
 }
@@ -66,7 +66,7 @@ export async function importBookFromPicker(): Promise<BookWithProgress | null> {
   const isPdf = filename.toLowerCase().endsWith('.pdf');
 
   if (!isEpub && !isPdf) {
-    throw new Error('Định dạng không được hỗ trợ. Vui lòng chọn file .epub hoặc .pdf.');
+    throw new Error('Unsupported format. Please choose an .epub or .pdf file.');
   }
 
   const { title, author, format } = parseBookMetadata(filename);
@@ -173,7 +173,7 @@ export async function updateBookMetadata(
 ): Promise<void> {
   const db = await getDatabase();
   const existing = await db.getFirstAsync<Book>('SELECT * FROM books WHERE id = ?', [bookId]);
-  if (!existing) throw new Error('Không tìm thấy sách.');
+  if (!existing) throw new Error('Book not found.');
 
   const title = updates.title ?? existing.title;
   const author = updates.author ?? existing.author;

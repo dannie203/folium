@@ -20,6 +20,7 @@
     "expo-linking": "~7.0.4",
     "expo-router": "~4.0.17",
     "expo-secure-store": "~14.0.1",
+    "expo-speech": "^57.0.3",
     "expo-sqlite": "~15.0.6",
     "expo-status-bar": "~2.0.1",
     "fast-xml-parser": "^5.11.1",
