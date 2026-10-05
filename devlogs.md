@@ -22,6 +22,7 @@
 - [Entry #13 (2026-09-28): Phase 8.8 Storage Armor & Zero-Exfiltration Sandbox](#entry-13-2026-09-28-phase-88-storage-armor-ingestion-gatekeeper--zero-exfiltration-sandbox)
 - [Entry #14 (2026-10-02): Phase 10 Audio Narration (TTS) & Accessibility](#entry-14-2026-10-02-phase-10-audio-narration-tts--accessibility)
 - [Entry #15 (2026-10-05): Sync Engine Hardening, Comprehensive LWW Conflict Resolution & Stale Client Invalidation](#entry-15-2026-10-05-sync-engine-hardening-comprehensive-lww-conflict-resolution--stale-client-invalidation)
+- [Entry #16 (2026-10-05): Decoupling Google Drive Authentication from Dev Mode & Dynamic OAuth Client Configuration](#entry-16-2026-10-05-decoupling-google-drive-authentication-from-dev-mode--dynamic-oauth-client-configuration)
 
 ---
 
@@ -535,5 +536,39 @@ Following an adversarial code review of Folium's synchronization pipeline, sever
     9. In-batch atomic sequence allocation preventing pre-transaction memory races.
   - Test suite expanded to **51/51 passing** tests (100% pass rate).
   - TypeScript typecheck: **0 errors** across all monorepo packages.
+
+---
+
+### Entry #16 (2026-10-05): Decoupling Google Drive Authentication from Dev Mode & Dynamic OAuth Client Configuration
+
+#### Summary & Problem Analysis
+During UI and user journey testing of the Google Drive integration, a critical UX and functional defect was identified:
+1. **Silent Fallback to Dev Mode**: In `apps/mobile/src/services/authService.ts`, the condition `if (!clientId || demoFallback)` automatically fell back to `demoUser` (`Folium Reader (Dev Mode)`) with a mocked token (`demo_access_token_folium_sandbox`) whenever `clientId` was undefined in the environment.
+2. **Broken Google Drive Sync**: Clicking the primary "Đăng nhập với Google" button hijacked the user into Dev Mode without notifying them of missing OAuth credentials. When the user subsequently attempted to sync with Google Drive, requests to official Google APIs (`https://www.googleapis.com/drive/v3/...`) inevitably failed with `401 Unauthorized` due to the dummy token.
+3. **Configuration Inflexibility**: Web and mobile builds lacked an interactive mechanism to configure or update the Google OAuth Client ID at runtime, requiring complete rebuilds to change credentials.
+4. **UX Ambiguity**: Users had no visual indication that their active session was simulated in Dev Mode rather than connected to real Google Cloud services.
+
+#### 1. Decoupling OAuth Flow & Explicit Failure Guarantees (`authService.ts`)
+- **Strict Separation of Sandbox vs. Production OAuth**:
+  - `signInWithGoogle(demoFallback)` now strictly gates the sandbox fallback on `demoFallback === true`.
+  - When the primary sign-in action is invoked (`demoFallback === false`) without a configured Client ID, the service throws an explicit, actionable error guiding the user instead of silently fabricating an in-memory session.
+- **Environment-Driven Client ID Resolver**:
+  - Implemented clean `getGoogleClientId()`: resolves environment variables (`EXPO_PUBLIC_GOOGLE_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_MOBILE_CLIENT_ID`).
+  - Differentiated missing-configuration errors: provides actionable guidance in development (`__DEV__`) while advising end users to contact deployment administrators in production.
+- **Enhanced OAuth Error Reporting**:
+  - Improved error extraction from `AuthSession.promptAsync()` to extract specific `error_description` or `error` query parameters rather than vague `result.type` strings.
+
+#### 2. Streamlined Drive Sync Modal UX (`DriveSyncModal.tsx`)
+- **Zero-Clutter Consumer UI**:
+  - Eliminated developer-facing OAuth configuration forms from the modal. End users are presented with a clean, single-action "Đăng nhập với Google" button.
+  - Client ID configuration is enforced through environment variables (`EXPO_PUBLIC_GOOGLE_CLIENT_ID` in `.env` or CI/CD secrets), adhering to commercial app UX standards.
+- **Visual Sandbox Indicator**:
+  - Added an amber alert banner when an active session possesses a `demo_` token prefix, explicitly warning: `🛠️ Đang ở chế độ Sandbox (Dev Mode) — Sách được lưu trữ giả lập cục bộ...`.
+- **Strict __DEV__ Sandbox Isolation**:
+  - Guarded both the Sandbox UI button and `signInWithGoogle(true)` with `__DEV__` conditions. In production builds, the sandbox button is completely eliminated by the bundler, preventing any user tampering.
+
+#### 3. Verification & Quality Gates
+- `pnpm -r exec tsc --noEmit`: **0 errors** across monorepo.
+- `pnpm test`: **51/51 tests passing** (100% green).
 
 

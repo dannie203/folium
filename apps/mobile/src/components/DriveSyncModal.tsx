@@ -74,6 +74,15 @@ export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncMo
                     <Text style={styles.badgeDrive}>{t('drive.activeFolder')}</Text>
                   </View>
                 </View>
+
+                {user.accessToken?.startsWith('demo_') && (
+                  <View style={styles.sandboxNoticeBanner}>
+                    <Text style={styles.sandboxNoticeText}>
+                      🛠️ Đang ở chế độ Sandbox (Dev Mode) — Sách được lưu trữ giả lập cục bộ. Đăng xuất và cấu hình Google Client ID để sao lưu lên tài khoản Google Drive thật.
+                    </Text>
+                  </View>
+                )}
+
                 <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
                   <Text style={styles.signOutBtnText}>{t('drive.signOut')}</Text>
                 </TouchableOpacity>
@@ -96,12 +105,14 @@ export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncMo
                   )}
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.sandboxBtn}
-                  onPress={() => handleSignIn(true)}
-                >
-                  <Text style={styles.sandboxBtnText}>{t('drive.sandboxBtn')}</Text>
-                </TouchableOpacity>
+                {__DEV__ && (
+                  <TouchableOpacity
+                    style={styles.sandboxBtn}
+                    onPress={() => handleSignIn(true)}
+                  >
+                    <Text style={styles.sandboxBtnText}>{t('drive.sandboxBtn')}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
 
@@ -321,6 +332,19 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: typography.fontSize.caption,
     fontWeight: typography.fontWeight.medium,
+  },
+  sandboxNoticeBanner: {
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    backgroundColor: 'rgba(234, 179, 8, 0.1)',
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(234, 179, 8, 0.3)',
+  },
+  sandboxNoticeText: {
+    color: '#EAB308',
+    fontSize: typography.fontSize.caption,
+    lineHeight: typography.lineHeight.caption,
   },
   btnDisabled: {
     opacity: 0.6,
