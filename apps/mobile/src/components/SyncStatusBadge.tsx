@@ -116,7 +116,7 @@ export function SyncStatusBadge({ compact = false, theme = 'dark' }: Props) {
       ]}
       onPress={handlePress}
       activeOpacity={0.7}
-      accessibilityLabel={`Trạng thái đồng bộ: ${label}`}
+      accessibilityLabel={`${t('sync.accessibilityLabel')}: ${label}`}
     >
       {syncState.status === 'syncing' ? (
         <ActivityIndicator size="small" color={colors.accentPrimary} style={styles.spinner} />

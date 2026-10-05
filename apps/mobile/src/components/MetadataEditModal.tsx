@@ -119,7 +119,7 @@ export function MetadataEditModal({
       }
       onClose();
     } catch (err: any) {
-      alert(`Lỗi xoá sách: ${err.message}`);
+      alert(`${t('metadata.deleteError')}: ${err.message}`);
     } finally {
       setIsDeleting(false);
     }

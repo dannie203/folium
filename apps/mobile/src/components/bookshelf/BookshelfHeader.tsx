@@ -65,7 +65,7 @@ export function BookshelfHeader({
             activeOpacity={0.85}
             onPress={onImport}
             disabled={isImporting}
-            accessibilityLabel="Thêm sách mới"
+            accessibilityLabel={t('header.addBook')}
           >
             {isImporting ? (
               <ActivityIndicator size="small" color="#FFFFFF" />

@@ -102,7 +102,7 @@ export function BookCard({ book, onPress, onDelete, onLongPress }: BookCardProps
             handleLongPress();
           }}
           activeOpacity={0.75}
-          accessibilityLabel={`Tùy chọn cho sách ${book.title}`}
+          accessibilityLabel={`${t('bookshelf.bookOptions')}: ${book.title}`}
         >
           <EditPencilIcon size={12} color="#FFFFFF" />
         </TouchableOpacity>
@@ -121,7 +121,7 @@ export function BookCard({ book, onPress, onDelete, onLongPress }: BookCardProps
           {book.title}
         </Text>
         <Text style={styles.author} numberOfLines={1}>
-          {book.author || 'Tác giả không xác định'}
+          {book.author || t('common.unknownAuthor')}
         </Text>
 
         <View style={styles.metaRow}>

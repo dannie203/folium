@@ -15,6 +15,7 @@ export type TranslationKey =
   | 'common.error'
   | 'common.success'
   | 'common.loading'
+  | 'common.unknownAuthor'
 
   // Settings & Navigation
   | 'settings.title'
@@ -42,6 +43,32 @@ export type TranslationKey =
   | 'header.search'
   | 'header.addBook'
 
+  // Privacy Policy
+  | 'privacy.navTitle'
+  | 'privacy.badge'
+  | 'privacy.updated'
+  | 'privacy.title'
+  | 'privacy.subtitle'
+  | 'privacy.section1Title'
+  | 'privacy.section1Paragraph1'
+  | 'privacy.section1Paragraph2'
+  | 'privacy.section2Title'
+  | 'privacy.section2Intro'
+  | 'privacy.section2Bullet1'
+  | 'privacy.section2Bullet2'
+  | 'privacy.section2Bullet3'
+  | 'privacy.section3Title'
+  | 'privacy.section3Paragraph1'
+  | 'privacy.section3Paragraph2'
+  | 'privacy.section3Callout'
+  | 'privacy.section4Title'
+  | 'privacy.section4Paragraph1'
+  | 'privacy.section4Paragraph2'
+  | 'privacy.section5Title'
+  | 'privacy.section5Paragraph'
+  | 'privacy.officialSource'
+  | 'privacy.backToLibrary'
+
   // Bookshelf
   | 'bookshelf.emptyTitle'
   | 'bookshelf.emptySearchTitle'
@@ -58,6 +85,7 @@ export type TranslationKey =
   | 'bookshelf.unread'
   | 'bookshelf.importFailed'
   | 'bookshelf.importFailedTitle'
+  | 'bookshelf.bookOptions'
 
   // Reader
   | 'reader.toc'
@@ -143,6 +171,7 @@ export type TranslationKey =
   | 'metadata.saving'
   | 'metadata.deleteBook'
   | 'metadata.deleteBookConfirm'
+  | 'metadata.deleteError'
 
   // Community OPDS & Drive
   | 'community.title'
@@ -191,6 +220,7 @@ export type TranslationKey =
   | 'sync.dialogNever'
   | 'sync.dialogPrompt'
   | 'sync.close'
+  | 'sync.accessibilityLabel'
 
   // Errors
   | 'error.bookNotFound'
@@ -212,6 +242,8 @@ export type TranslationKey =
   | 'reader.ttsTitle'
   | 'reader.ttsPlay'
   | 'reader.ttsPause'
+  | 'reader.ttsPlaying'
+  | 'reader.ttsPaused'
   | 'reader.ttsStop'
   | 'reader.ttsNextSentence'
   | 'reader.ttsPrevSentence'

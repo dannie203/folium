@@ -75,7 +75,7 @@ export const TTSPlayerBar: React.FC<TTSPlayerBarProps> = ({
         <View style={styles.statusWrap}>
           <SpeakerIcon size={16} color={colors.accentPrimary} />
           <Text style={styles.statusText}>
-            {isPlaying && !isPaused ? t('reader.ttsPlaying' as any) || 'Đang đọc' : t('reader.ttsPaused' as any) || 'Tạm dừng'}
+            {isPlaying && !isPaused ? t('reader.ttsPlaying') : t('reader.ttsPaused')}
           </Text>
           {totalSentences > 0 && (
             <Text style={styles.counterText}>
