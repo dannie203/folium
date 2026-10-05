@@ -21,6 +21,7 @@
 - [Entry #12 (2026-09-22): Full Codebase Localization (i18n) Supporting 7 Languages](#entry-12-2026-09-22-full-codebase-localization-i18n-supporting-7-languages)
 - [Entry #13 (2026-09-28): Phase 8.8 Storage Armor & Zero-Exfiltration Sandbox](#entry-13-2026-09-28-phase-88-storage-armor-ingestion-gatekeeper--zero-exfiltration-sandbox)
 - [Entry #14 (2026-10-02): Phase 10 Audio Narration (TTS) & Accessibility](#entry-14-2026-10-02-phase-10-audio-narration-tts--accessibility)
+- [Entry #15 (2026-10-05): Sync Engine Hardening, Comprehensive LWW Conflict Resolution & Stale Client Invalidation](#entry-15-2026-10-05-sync-engine-hardening-comprehensive-lww-conflict-resolution--stale-client-invalidation)
 
 ---
 
@@ -459,3 +460,80 @@ Implemented Phase 10 of the Folium roadmap, introducing cross-platform Text-to-S
   - Total automated test count increased to **41/41 passing** (0 failing).
   - `pnpm typecheck`: **0 errors** across monorepo.
   - `npx expo export --platform web`: All 9 static routes cleanly bundled with zero warnings.
+
+---
+
+### Entry #15 (2026-10-05): Sync Engine Hardening, Comprehensive LWW Conflict Resolution & Stale Client Invalidation
+
+#### Summary & Motivation
+Following an adversarial code review of Folium's synchronization pipeline, several critical distributed edge edge-cases were identified:
+1. **Push-Before-Pull Race Condition**: In multi-device setups, pushing mutations prior to pulling updates caused the local sequence cursor to advance prematurely (`since = committedSeq`), inadvertently skipping intermediate sequences written by other devices while the client was offline.
+2. **Conflict Resolution Asymmetry**: True timestamp-guarded Last-Write-Wins (LWW) was implemented strictly on `reading_progress`, while `bookmarks`, `highlights`, and `notes` defaulted to Last-Arrival-Wins on Cloudflare D1 without timestamp guard clauses.
+3. **Stale Client Tombstone Purge Vulnerability**: After the 30-day tombstone retention period, purged records disappeared from the remote database without tracking a tombstone garbage collection watermark, allowing long-offline clients to potentially resurrect permanently deleted entities upon resynchronization.
+4. **Zero-Knowledge Scope Boundary**: Clarified the boundary between local Zero-Knowledge AES-GCM-256 vault benchmarks and the structured TLS-in-transit edge synchronization pipeline.
+
+#### 1. Inverted Sync Pipeline & Contiguous Sequence Gap Detection (`syncService.ts`)
+- **Inverted Execution Order (`performFullSync`)**:
+  - Reordered the synchronization workflow: `pullRemoteChanges()` is now invoked **before** `pushPendingMutations()`.
+  - Ensures the local SQLite database always ingests and reconciles remote mutations from peer devices prior to committing new local mutations to the server.
+- **Contiguous Advance & Dynamic Gap Detection (`pushPendingMutations`)**:
+  - Replaced naive cursor advancement (`committedSeq > currentCursor`) with strict contiguous checking (`committedSeq === currentCursor + 1`).
+  - If a sequence gap is detected (`committedSeq > currentCursor + 1` caused by concurrent writes during push preparation), the client prevents cursor jumping and immediately fires an intervening `pullRemoteChanges()` to bridge the sequence gap and prevent data loss.
+
+#### 2. Universal Last-Write-Wins (LWW) Resolution (`packages/worker/src/index.ts`, `syncService.ts`)
+- **Cloudflare D1 Mutation Hardening**:
+  - Augmented `ON CONFLICT(id) DO UPDATE SET` clauses on `bookmarks`, `highlights`, and `notes` with strict timestamp predicates:
+    ```sql
+    WHERE table.user_id = excluded.user_id
+      AND excluded.client_created_at >= table.client_created_at
+    ```
+  - Ensures older mutations arriving out-of-order cannot overwrite newer annotations. Equal timestamps cleanly resolve in favor of incoming changes (`>=`).
+- **Client-Side SQLite Alignment**:
+  - Replicated identical LWW timestamp guard checks on local mobile SQLite upserts within `pullRemoteChanges()`, ensuring offline edits made locally are not clobbered by stale remote state.
+
+#### 3. GC Watermark & Stale Cursor Invalidation (`0003_gc_watermark.sql`, `packages/worker/src/index.ts`)
+- **D1 Migration 0003 (`user_sync_sequence`)**:
+  - Added `gc_watermark_seq INTEGER NOT NULL DEFAULT 0` column to track the maximum sequence up to which tombstones have been purged.
+- **Automatic Watermark Advancement**:
+  - During both automatic 30-day GC runs in the push cycle and explicit maintenance calls (`POST /api/sync/gc`), the server computes the maximum `sync_seq` among tombstones being purged and updates `gc_watermark_seq`.
+- **HTTP 410 Gone Defense (`/api/sync/pull`)**:
+  - If a client requests incremental changes with `since > 0 && since < gc_watermark_seq`, the server returns `HTTP 410 Gone` with code `CURSOR_EXPIRED`.
+  - Client automatically resets `sync_cursor = 0` upon receiving HTTP 410 and requests a clean full resync (`since = 0`), preventing zombie record resurrection.
+
+#### 4. Pull Snapshot Consistency Invariant (`packages/worker/src/index.ts`)
+- **Torn Read Defense via Strict Snapshot Boundaries**:
+  - Bound all 5 entity SELECT queries in `GET /api/sync/pull` with an explicit upper-bound sequence: `WHERE user_id = ? AND sync_seq > ? AND sync_seq <= ?` matching `snapshotSeq = currentServerSeq`.
+  - Guarantees strict snapshot isolation: `since < record.sync_seq <= snapshotSeq`.
+  - Mid-flight concurrent writes committed at `sync_seq > snapshotSeq` during pull query execution are cleanly quarantined for the subsequent pull, completely eliminating torn reads between entity tables.
+
+#### 5. In-Batch Atomic Sequence Allocation & D1 Single-Transaction Atomicity
+- **Elimination of Pre-Transaction JS Memory Sequence Race**:
+  - Replaced pre-transaction `SELECT current_seq` with atomic database-driven sequence allocation inside the batch.
+  - Statement 0 increments `user_sync_sequence` and returns `RETURNING current_seq`.
+  - Entity mutation statements (books, reading_progress, bookmarks, highlights, notes) reference the freshly incremented sequence via correlated subqueries:
+    ```sql
+    INSERT INTO highlights (..., sync_seq)
+    VALUES (..., (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
+    ```
+  - Completely eliminates sequence collisions and ghost gaps between concurrent worker isolates executing simultaneous pushes.
+- **Single-Transaction Headroom Cap (`MAX_PUSH_ITEMS = 90`)**:
+  - Enforced `MAX_PUSH_ITEMS = 90` payload validation in `POST /api/sync/push`, ensuring total batch statements ($1\text{ seq} + \le 90\text{ items} + 5\text{ GC} + 1\text{ watermark} = 97$) never exceed D1's 100-statement transaction limit.
+
+#### 6. Architecture Boundary & Comprehensive Stress Testing
+- **Documentation & Scope Alignment**:
+  - Updated `cryptoService.ts` module documentation detailing the cryptographic boundary between Phase 8 TLS-in-transit sync and Phase 9 End-to-End Envelope sync.
+- **Automated Test Suite Expansion (`sync_engine_lww.test.mjs`, `sync_integration_stress.test.mjs`)**:
+  - Added 10 automated test cases across two test suites:
+    1. LWW rejection of older timestamps and acceptance of newer timestamps on SQLite.
+    2. Contiguous cursor gap detection and dynamic pull invocation.
+    3. Stale client cursor rejection via HTTP 410 GC watermark.
+    4. Pull Snapshot Consistency under concurrent mid-flight writes.
+    5. Real end-to-end gap recovery lifecycle in local SQLite (B writes seq 11, A pushes seq 12, gap detected, pulls both, applies local, cursor=12).
+    6. 50 serialized transactional pushes simulation with `sql.js` (Sequence Continuity & Convergence).
+    7. Stale client 410 full resync convergence lifecycle.
+    8. Exact boundary validation for `MAX_PUSH_ITEMS = 90` (90 accepted, 91 rejected with `PAYLOAD_TOO_LARGE`).
+    9. In-batch atomic sequence allocation preventing pre-transaction memory races.
+  - Test suite expanded to **51/51 passing** tests (100% pass rate).
+  - TypeScript typecheck: **0 errors** across all monorepo packages.
+
+

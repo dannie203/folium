@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   statusText: {
-    color: colors.accentPrimary,
+    color: colors.accentBookmark,
     fontSize: typography.fontSize.caption,
     fontWeight: typography.fontWeight.semibold,
   },
@@ -257,6 +257,6 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accentPrimary,
+    backgroundColor: colors.accentBookmark,
   },
 });

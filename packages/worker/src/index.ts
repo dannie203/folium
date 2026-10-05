@@ -291,11 +291,16 @@ const STANDARD_EBOOKS_FALLBACK_FEED = `<?xml version="1.0" encoding="utf-8"?>
 // Proxy only the allowlisted official OPDS feeds so web clients are not blocked by CORS.
 app.get('/api/community/opds', async (c) => {
   const source = c.req.query('source');
-  const feedUrl = source ? OFFICIAL_OPDS_FEEDS[source] : undefined;
-  if (!feedUrl) return c.json({ error: 'Unknown OPDS source' }, 400);
+  const query = c.req.query('q')?.trim() || '';
+  const configuredFeedUrl = source ? OFFICIAL_OPDS_FEEDS[source] : undefined;
+  if (!configuredFeedUrl) return c.json({ error: 'Unknown OPDS source' }, 400);
+  const feedUrl = new URL(configuredFeedUrl);
+  if (source === 'project_gutenberg' && query) {
+    feedUrl.searchParams.set('query', query);
+  }
 
   try {
-    const response = await fetch(feedUrl, {
+    const response = await fetch(feedUrl.toString(), {
       redirect: 'follow',
       headers: {
         Accept: 'application/atom+xml, application/xml, text/xml, */*',
@@ -484,30 +489,48 @@ app.post('/api/sync/push', async (c) => {
       return c.json({ error: 'Invalid JSON payload' }, 400);
     }
 
+    const totalItems =
+      (body.books?.length || 0) +
+      (body.progress?.length || 0) +
+      (body.bookmarks?.length || 0) +
+      (body.highlights?.length || 0) +
+      (body.notes?.length || 0);
+
+    // D1 Single-Transaction Atomicity Invariant:
+    // Cloudflare D1 executes each db.batch() in a separate transaction (limit 100 statements).
+    // Client outbox is hard-capped at 50 items (syncService.ts:215).
+    // Enforce MAX_PUSH_ITEMS = 90 so that sequence advance (1) + mutations (<=90) + GC (<=6)
+    // always sum to <= 97 statements, guaranteeing execution in a single atomic transaction.
+    const MAX_PUSH_ITEMS = 90;
+    if (totalItems > MAX_PUSH_ITEMS) {
+      return c.json(
+        {
+          error: `Push payload exceeds maximum batch limit of ${MAX_PUSH_ITEMS} items (${totalItems} received). Split into smaller batches.`,
+          code: 'PAYLOAD_TOO_LARGE',
+        },
+        400
+      );
+    }
+
     const now = Date.now();
-
-    // 1. Calculate next monotonic sequence for this user
-    const seqRow = await db
-      .prepare('SELECT current_seq FROM user_sync_sequence WHERE user_id = ?')
-      .bind(userId)
-      .first<{ current_seq: number }>();
-
-    const newSeq = (seqRow?.current_seq ?? 0) + 1;
 
     const statements: D1PreparedStatement[] = [];
     let acceptedCount = 0;
 
-    // Advance user sequence atomically inside the same batch
+    // 1. In-Batch Atomic Sequence Allocation:
+    // Advance user sequence directly inside the database transaction (UPSERT with +1).
+    // RETURNING current_seq gives the exact committed sequence without pre-transaction JS race conditions.
     statements.push(
       db
         .prepare(
           `INSERT INTO user_sync_sequence (user_id, current_seq, updated_at)
-           VALUES (?, ?, ?)
+           VALUES (?, 1, ?)
            ON CONFLICT(user_id) DO UPDATE SET
-             current_seq = CASE WHEN excluded.current_seq > user_sync_sequence.current_seq THEN excluded.current_seq ELSE user_sync_sequence.current_seq + 1 END,
-             updated_at = excluded.updated_at`
+             current_seq = user_sync_sequence.current_seq + 1,
+             updated_at = excluded.updated_at
+           RETURNING current_seq`
         )
-        .bind(userId, newSeq, now)
+        .bind(userId, now)
     );
 
     // Batch upsert books metadata
@@ -525,7 +548,7 @@ app.post('/api/sync/push', async (c) => {
           db
             .prepare(
               `INSERT INTO books (id, user_id, title, author, cover_url, file_type, file_size, drive_file_id, is_deleted, deleted_at, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
                ON CONFLICT(id) DO UPDATE SET
                  title = CASE WHEN excluded.is_deleted = 0 AND excluded.title != 'Chưa có tiêu đề' THEN excluded.title ELSE books.title END,
                  author = CASE WHEN excluded.is_deleted = 0 AND excluded.author != 'Tác giả không rõ' THEN excluded.author ELSE books.author END,
@@ -549,7 +572,7 @@ app.post('/api/sync/push', async (c) => {
               b.drive_file_id ?? null,
               isDeleted,
               deletedAt,
-              newSeq
+              userId
             )
         );
         acceptedCount++;
@@ -570,7 +593,7 @@ app.post('/api/sync/push', async (c) => {
           db
             .prepare(
               `INSERT INTO reading_progress (id, user_id, book_id, cfi, percentage, client_updated_at, is_deleted, deleted_at, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
                ON CONFLICT(user_id, book_id) DO UPDATE SET
                  cfi = CASE WHEN excluded.is_deleted = 0 AND excluded.cfi != '' THEN excluded.cfi ELSE reading_progress.cfi END,
                  percentage = CASE WHEN excluded.is_deleted = 0 THEN excluded.percentage ELSE reading_progress.percentage END,
@@ -589,7 +612,7 @@ app.post('/api/sync/push', async (c) => {
               clientUpdatedAt,
               isDeleted,
               deletedAt,
-              newSeq
+              userId
             )
         );
         acceptedCount++;
@@ -611,7 +634,7 @@ app.post('/api/sync/push', async (c) => {
           db
             .prepare(
               `INSERT INTO bookmarks (id, user_id, book_id, cfi, title, client_created_at, is_deleted, deleted_at, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
                ON CONFLICT(id) DO UPDATE SET
                  book_id = CASE WHEN excluded.is_deleted = 0 AND excluded.book_id != '' THEN excluded.book_id ELSE bookmarks.book_id END,
                  title = CASE WHEN excluded.is_deleted = 0 AND excluded.title != '' THEN excluded.title ELSE bookmarks.title END,
@@ -619,7 +642,8 @@ app.post('/api/sync/push', async (c) => {
                  is_deleted = excluded.is_deleted,
                  deleted_at = excluded.deleted_at,
                  sync_seq = excluded.sync_seq
-               WHERE bookmarks.user_id = excluded.user_id`
+               WHERE bookmarks.user_id = excluded.user_id
+                 AND excluded.client_created_at >= bookmarks.client_created_at`
             )
             .bind(
               b.id,
@@ -630,7 +654,7 @@ app.post('/api/sync/push', async (c) => {
               clientCreatedAt,
               isDeleted,
               deletedAt,
-              newSeq
+              userId
             )
         );
         acceptedCount++;
@@ -653,7 +677,7 @@ app.post('/api/sync/push', async (c) => {
           db
             .prepare(
               `INSERT INTO highlights (id, user_id, book_id, cfi_range, text, color, note, client_created_at, is_deleted, deleted_at, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
                ON CONFLICT(id) DO UPDATE SET
                  book_id = CASE WHEN excluded.is_deleted = 0 AND excluded.book_id != '' THEN excluded.book_id ELSE highlights.book_id END,
                  cfi_range = CASE WHEN excluded.is_deleted = 0 AND excluded.cfi_range != '' THEN excluded.cfi_range ELSE highlights.cfi_range END,
@@ -663,7 +687,8 @@ app.post('/api/sync/push', async (c) => {
                  is_deleted = excluded.is_deleted,
                  deleted_at = excluded.deleted_at,
                  sync_seq = excluded.sync_seq
-               WHERE highlights.user_id = excluded.user_id`
+               WHERE highlights.user_id = excluded.user_id
+                 AND excluded.client_created_at >= highlights.client_created_at`
             )
             .bind(
               h.id,
@@ -676,7 +701,7 @@ app.post('/api/sync/push', async (c) => {
               clientCreatedAt,
               isDeleted,
               deletedAt,
-              newSeq
+              userId
             )
         );
         acceptedCount++;
@@ -697,7 +722,7 @@ app.post('/api/sync/push', async (c) => {
           db
             .prepare(
               `INSERT INTO notes (id, user_id, book_id, highlight_id, content, client_created_at, is_deleted, deleted_at, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
                ON CONFLICT(id) DO UPDATE SET
                  book_id = CASE WHEN excluded.is_deleted = 0 AND excluded.book_id != '' THEN excluded.book_id ELSE notes.book_id END,
                  highlight_id = CASE WHEN excluded.is_deleted = 0 THEN COALESCE(excluded.highlight_id, notes.highlight_id) ELSE notes.highlight_id END,
@@ -705,7 +730,8 @@ app.post('/api/sync/push', async (c) => {
                  is_deleted = excluded.is_deleted,
                  deleted_at = excluded.deleted_at,
                  sync_seq = excluded.sync_seq
-               WHERE notes.user_id = excluded.user_id`
+               WHERE notes.user_id = excluded.user_id
+                 AND excluded.client_created_at >= notes.client_created_at`
             )
             .bind(
               n.id,
@@ -716,7 +742,7 @@ app.post('/api/sync/push', async (c) => {
               clientCreatedAt,
               isDeleted,
               deletedAt,
-              newSeq
+              userId
             )
         );
         acceptedCount++;
@@ -728,6 +754,39 @@ app.post('/api/sync/push', async (c) => {
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const gcThreshold = now - THIRTY_DAYS_MS;
 
+    try {
+      const maxPurged = await db
+        .prepare(`
+          SELECT MAX(seq) as max_seq FROM (
+            SELECT sync_seq as seq FROM books WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM reading_progress WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM bookmarks WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM highlights WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM notes WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+          )
+        `)
+        .bind(userId, gcThreshold, userId, gcThreshold, userId, gcThreshold, userId, gcThreshold, userId, gcThreshold)
+        .first<{ max_seq: number | null }>();
+
+      if (maxPurged?.max_seq && maxPurged.max_seq > 0) {
+        statements.push(
+          db
+            .prepare(
+              `UPDATE user_sync_sequence
+               SET gc_watermark_seq = CASE WHEN ? > COALESCE(gc_watermark_seq, 0) THEN ? ELSE gc_watermark_seq END
+               WHERE user_id = ?`
+            )
+            .bind(maxPurged.max_seq, maxPurged.max_seq, userId)
+        );
+      }
+    } catch {
+      // Column may not exist yet if migration 0003 is pending
+    }
+
     statements.push(
       db.prepare('DELETE FROM books WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
       db.prepare('DELETE FROM reading_progress WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
@@ -737,15 +796,32 @@ app.post('/api/sync/push', async (c) => {
     );
 
     const D1_BATCH_LIMIT = 100;
+    let committedSeq = 0;
+
     for (let i = 0; i < statements.length; i += D1_BATCH_LIMIT) {
       const chunk = statements.slice(i, i + D1_BATCH_LIMIT);
       if (chunk.length > 0) {
-        await db.batch(chunk);
+        const batchResults = await db.batch(chunk);
+        // Statement 0 in the first chunk returns the newly allocated sequence
+        if (i === 0 && batchResults?.[0]?.results?.[0]) {
+          const row = batchResults[0].results[0] as { current_seq?: number };
+          if (row.current_seq) {
+            committedSeq = Number(row.current_seq);
+          }
+        }
       }
     }
 
+    if (!committedSeq) {
+      const fallbackRow = await db
+        .prepare('SELECT current_seq FROM user_sync_sequence WHERE user_id = ?')
+        .bind(userId)
+        .first<{ current_seq: number }>();
+      committedSeq = fallbackRow?.current_seq ?? 1;
+    }
+
     const response: SyncPushResponse = {
-      committed_sync_seq: newSeq,
+      committed_sync_seq: committedSeq,
       accepted_count: acceptedCount,
     };
 
@@ -769,13 +845,51 @@ app.post('/api/sync/gc', async (c) => {
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const gcThreshold = now - THIRTY_DAYS_MS;
 
-    await db.batch([
+    let maxPurgedSeq = 0;
+    try {
+      const maxPurged = await db
+        .prepare(`
+          SELECT MAX(seq) as max_seq FROM (
+            SELECT sync_seq as seq FROM books WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM reading_progress WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM bookmarks WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM highlights WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM notes WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+          )
+        `)
+        .bind(userId, gcThreshold, userId, gcThreshold, userId, gcThreshold, userId, gcThreshold, userId, gcThreshold)
+        .first<{ max_seq: number | null }>();
+      maxPurgedSeq = maxPurged?.max_seq ?? 0;
+    } catch {
+      // Column or table query fallback
+    }
+
+    const gcStatements: D1PreparedStatement[] = [];
+    if (maxPurgedSeq > 0) {
+      gcStatements.push(
+        db
+          .prepare(
+            `UPDATE user_sync_sequence
+             SET gc_watermark_seq = CASE WHEN ? > COALESCE(gc_watermark_seq, 0) THEN ? ELSE gc_watermark_seq END
+             WHERE user_id = ?`
+          )
+          .bind(maxPurgedSeq, maxPurgedSeq, userId)
+      );
+    }
+
+    gcStatements.push(
       db.prepare('DELETE FROM books WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
       db.prepare('DELETE FROM reading_progress WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
       db.prepare('DELETE FROM bookmarks WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
       db.prepare('DELETE FROM highlights WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
-      db.prepare('DELETE FROM notes WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
-    ]);
+      db.prepare('DELETE FROM notes WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold)
+    );
+
+    await db.batch(gcStatements);
 
     return c.json({
       status: 'ok',
@@ -799,12 +913,38 @@ app.get('/api/sync/pull', async (c) => {
     const since = parseInt(c.req.query('since') || '0', 10);
     const ifNoneMatch = c.req.header('if-none-match');
 
-    const seqRow = await db
-      .prepare('SELECT current_seq FROM user_sync_sequence WHERE user_id = ?')
-      .bind(userId)
-      .first<{ current_seq: number }>();
+    let seqRow: { current_seq: number; gc_watermark_seq?: number } | null = null;
+    try {
+      seqRow = await db
+        .prepare('SELECT current_seq, gc_watermark_seq FROM user_sync_sequence WHERE user_id = ?')
+        .bind(userId)
+        .first<{ current_seq: number; gc_watermark_seq?: number }>();
+    } catch {
+      seqRow = await db
+        .prepare('SELECT current_seq FROM user_sync_sequence WHERE user_id = ?')
+        .bind(userId)
+        .first<{ current_seq: number }>();
+    }
 
     const currentServerSeq = seqRow?.current_seq ?? 0;
+    const gcWatermarkSeq = seqRow?.gc_watermark_seq ?? 0;
+
+    // Stale Cursor Defense: If client cursor is older than GC watermark,
+    // tombstones prior to this cursor were permanently purged.
+    // Client cannot safely compute diff without risking data resurrection.
+    // Return HTTP 410 Gone to force a full re-sync.
+    if (gcWatermarkSeq > 0 && since > 0 && since < gcWatermarkSeq) {
+      return c.json(
+        {
+          error: 'Sync cursor expired. Tombstones older than cursor were purged.',
+          code: 'CURSOR_EXPIRED',
+          server_sync_seq: currentServerSeq,
+          gc_watermark_seq: gcWatermarkSeq,
+        },
+        410
+      );
+    }
+
     const etag = `W/"${currentServerSeq}"`;
 
     // 100k Writes/Day & Reads Quota Defense:
@@ -824,32 +964,36 @@ app.get('/api/sync/pull', async (c) => {
       return c.json(emptyResponse, 200);
     }
 
-    // Parallel queries for changed items
+    const snapshotSeq = currentServerSeq;
+
+    // Parallel queries for changed items bounded by snapshotSeq:
+    // Ensures strict snapshot isolation (since < sync_seq <= snapshotSeq).
+    // Any concurrent writes committed at > snapshotSeq are excluded and left for subsequent pull.
     const [booksRes, progressRes, bookmarksRes, highlightsRes, notesRes] = await Promise.all([
       db
-        .prepare('SELECT * FROM books WHERE user_id = ? AND sync_seq > ?')
-        .bind(userId, since)
+        .prepare('SELECT * FROM books WHERE user_id = ? AND sync_seq > ? AND sync_seq <= ?')
+        .bind(userId, since, snapshotSeq)
         .all<Book>(),
       db
-        .prepare('SELECT * FROM reading_progress WHERE user_id = ? AND sync_seq > ?')
-        .bind(userId, since)
+        .prepare('SELECT * FROM reading_progress WHERE user_id = ? AND sync_seq > ? AND sync_seq <= ?')
+        .bind(userId, since, snapshotSeq)
         .all<ReadingProgress>(),
       db
-        .prepare('SELECT * FROM bookmarks WHERE user_id = ? AND sync_seq > ?')
-        .bind(userId, since)
+        .prepare('SELECT * FROM bookmarks WHERE user_id = ? AND sync_seq > ? AND sync_seq <= ?')
+        .bind(userId, since, snapshotSeq)
         .all<Bookmark>(),
       db
-        .prepare('SELECT * FROM highlights WHERE user_id = ? AND sync_seq > ?')
-        .bind(userId, since)
+        .prepare('SELECT * FROM highlights WHERE user_id = ? AND sync_seq > ? AND sync_seq <= ?')
+        .bind(userId, since, snapshotSeq)
         .all<Highlight>(),
       db
-        .prepare('SELECT * FROM notes WHERE user_id = ? AND sync_seq > ?')
-        .bind(userId, since)
+        .prepare('SELECT * FROM notes WHERE user_id = ? AND sync_seq > ? AND sync_seq <= ?')
+        .bind(userId, since, snapshotSeq)
         .all<Note>(),
     ]);
 
     const response: SyncPullResponse = {
-      server_sync_seq: currentServerSeq,
+      server_sync_seq: snapshotSeq,
       books: (booksRes.results || []).map((r: any) => ({
         ...r,
         is_deleted: Boolean(r.is_deleted),

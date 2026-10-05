@@ -10,6 +10,7 @@ import {
   FlatList,
   TextInput,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { ReaderTheme } from '@folium/shared';
@@ -49,6 +50,8 @@ export default function ReaderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { t, locale } = useI18n();
+  const { width: windowWidth } = useWindowDimensions();
+  const isMobile = windowWidth < 768;
   const readerRef = useRef<any>(null);
 
   // 1. Book file & metadata loader hook
@@ -539,7 +542,13 @@ export default function ReaderScreen() {
       {/* Reader Drawer Modal (Mục lục, Dấu trang, Ghi chú, Tìm kiếm) */}
       <Modal visible={showDrawerModal} animationType="slide" transparent={true}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: barBg }]}>
+          <View
+            style={[
+              styles.modalContent,
+              isMobile ? styles.drawerMobile : styles.drawerDesktop,
+              { backgroundColor: barBg },
+            ]}
+          >
             {/* Modal Header */}
             <View style={[styles.modalHeader, { borderBottomColor: barBorder }]}>
               <Text style={[styles.modalTitle, { color: barText }]}>{t('reader.shelfDrawerTitle')}</Text>
@@ -785,7 +794,13 @@ export default function ReaderScreen() {
           activeOpacity={1}
           onPress={() => setShowSettingsModal(false)}
         >
-          <View style={[styles.settingsCard, { backgroundColor: barBg, borderColor: barBorder }]}>
+          <View
+            style={[
+              styles.settingsCard,
+              isMobile && styles.settingsCardMobile,
+              { backgroundColor: barBg, borderColor: barBorder },
+            ]}
+          >
             <Text style={[styles.settingsSectionTitle, { color: barText }]}>{t('reader.appearanceTitle')}</Text>
             <View style={styles.themeRow}>
               {(['dark', 'sepia', 'light'] as ReaderTheme[]).map((themeKey) => (
@@ -819,6 +834,7 @@ export default function ReaderScreen() {
               <TouchableOpacity
                 style={[styles.fontButton, { borderColor: barBorder }]}
                 onPress={() => changeFontSize(-10)}
+                accessibilityLabel={t('reader.decreaseFontSize')}
               >
                 <Text style={[styles.fontButtonText, { color: barText }]}>A -</Text>
               </TouchableOpacity>
@@ -826,6 +842,7 @@ export default function ReaderScreen() {
               <TouchableOpacity
                 style={[styles.fontButton, { borderColor: barBorder }]}
                 onPress={() => changeFontSize(10)}
+                accessibilityLabel={t('reader.increaseFontSize')}
               >
                 <Text style={[styles.fontButtonText, { color: barText }]}>A +</Text>
               </TouchableOpacity>
@@ -875,13 +892,15 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   backButtonCta: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: colors.bgElevated,
+    borderWidth: 1,
+    borderColor: colors.borderMedium,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
   },
   backButtonText: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontWeight: '600',
   },
   readerWrapper: {
@@ -889,12 +908,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'stretch',
-    backgroundColor: '#121214',
+    backgroundColor: colors.bgBase,
     width: '100%',
   },
   readerPageContainer: {
     flex: 1,
-    maxWidth: 840,
+    maxWidth: 740,
     width: '100%',
     height: '100%',
   },
@@ -907,8 +926,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    height: 48,
-    borderRadius: 24,
+    height: 52,
+    borderRadius: radius.md,
     borderWidth: 1,
     boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
   },
@@ -920,8 +939,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   topTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontFamily: Platform.select({ web: typography.fontFamily.serif, default: 'serif' }),
+    fontSize: 14.5,
+    fontWeight: '500',
   },
   actionsRight: {
     flexDirection: 'row',
@@ -939,8 +959,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 18,
-    height: 42,
-    borderRadius: 21,
+    height: 46,
+    borderRadius: radius.md,
     borderWidth: 1,
     boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)',
   },
@@ -967,11 +987,23 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    height: '75%',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
     paddingHorizontal: 16,
     paddingTop: 16,
+  },
+  drawerMobile: {
+    height: '88%',
+    width: '100%',
+    alignSelf: 'flex-end',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+  },
+  drawerDesktop: {
+    height: '100%',
+    width: 380,
+    maxWidth: '92%',
+    alignSelf: 'flex-end',
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -999,6 +1031,13 @@ const styles = StyleSheet.create({
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
     elevation: 8,
   },
+  settingsCardMobile: {
+    marginHorizontal: 0,
+    marginBottom: 0,
+    width: '100%',
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
   settingsSectionTitle: {
     fontSize: 11,
     fontWeight: '700',
@@ -1013,14 +1052,14 @@ const styles = StyleSheet.create({
   themeButton: {
     flex: 1,
     height: 44,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#3F3F46',
+    borderColor: colors.borderMedium,
   },
   themeButtonActive: {
-    borderColor: '#6366F1',
+    borderColor: colors.accentBookmark,
     borderWidth: 2,
   },
   themeButtonLabel: {
@@ -1160,7 +1199,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   btnSaveHighlight: {
-    backgroundColor: '#6366F1',
+    backgroundColor: colors.accentBookmark,
     paddingVertical: 6,
     paddingHorizontal: 16,
     borderRadius: 6,
@@ -1185,7 +1224,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   drawerTabActive: {
-    backgroundColor: 'rgba(99, 102, 241, 0.12)',
+    backgroundColor: 'rgba(196, 155, 102, 0.14)',
   },
   drawerTabText: {
     fontSize: 12,

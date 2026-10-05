@@ -138,7 +138,7 @@ export default function PrivacyPolicyScreen() {
             <Text style={styles.paragraph}>{t('privacy.section5Paragraph')}</Text>
             <View style={styles.contactCard}>
               <Text style={styles.contactTitle}>{t('privacy.officialSource')}</Text>
-              <Text style={styles.contactEmail}>github.com/dannie203/folium</Text>
+              <Text style={styles.contactEmail}>{t('privacy.projectStatus')}</Text>
             </View>
           </View>
 

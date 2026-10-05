@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import type { Book } from '@folium/shared';
 import { updateBookMetadata, getAvailableShelves, deleteBook } from '../services/bookService';
@@ -33,6 +34,8 @@ export function MetadataEditModal({
   onDelete,
 }: MetadataEditModalProps) {
   const { t } = useI18n();
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
@@ -130,7 +133,7 @@ export function MetadataEditModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={styles.modalCard}>
+        <View style={[styles.modalCard, isMobile && styles.modalCardMobile]}>
           <View style={styles.header}>
             <View style={styles.headerTitleRow}>
               <EditPencilIcon size={18} color={colors.accentPrimary} />
@@ -287,6 +290,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     overflow: 'hidden',
+  },
+  modalCardMobile: {
+    alignSelf: 'flex-end',
+    maxWidth: '100%',
+    maxHeight: '92%',
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderBottomWidth: 0,
   },
   header: {
     flexDirection: 'row',

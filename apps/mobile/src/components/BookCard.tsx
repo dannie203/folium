@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform, Image, useWindowDimensions } from 'react-native';
 import type { BookWithProgress } from '../services/bookService';
 import { colors, typography, radius, spacing } from '../theme/tokens';
 import { FoliumLeafIcon, FolderIcon, EditPencilIcon } from './icons/Icons';
@@ -14,6 +14,9 @@ interface BookCardProps {
 
 export function BookCard({ book, onPress, onDelete, onLongPress }: BookCardProps) {
   const { t } = useI18n();
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktop = windowWidth >= 768;
+  const desktopCardWidth = Math.min(190, Math.max(120, (windowWidth - 280) / 4 - 12));
   const isPdf = book.file_type === 'pdf';
   const progressPercent = Math.round(book.progress_percentage || 0);
 
@@ -47,7 +50,10 @@ export function BookCard({ book, onPress, onDelete, onLongPress }: BookCardProps
 
   return (
     <TouchableOpacity
-      style={styles.card}
+      style={[
+        styles.card,
+        isDesktop ? { width: desktopCardWidth } : styles.cardMobile,
+      ]}
       activeOpacity={0.88}
       onPress={() => onPress(book)}
       onLongPress={handleLongPress}
@@ -110,7 +116,13 @@ export function BookCard({ book, onPress, onDelete, onLongPress }: BookCardProps
         {/* Slender Progress Bar Overlay at bottom of cover */}
         {progressPercent > 0 && (
           <View style={styles.coverProgressTrack}>
-            <View style={[styles.coverProgressFill, { width: `${progressPercent}%` }]} />
+            <View
+              style={[
+                styles.coverProgressFill,
+                { width: `${progressPercent}%` },
+                progressPercent >= 100 && styles.coverProgressFillDone,
+              ]}
+            />
           </View>
         )}
       </View>
@@ -144,19 +156,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderRadius: radius.md,
     overflow: 'hidden',
-    marginBottom: spacing.xl,
-    flex: 1,
-    marginHorizontal: 8,
-    maxWidth: '48%',
+    marginBottom: spacing.xxl,
+    marginHorizontal: 6,
+  },
+  cardMobile: {
+    width: '48%',
   },
   coverContainer: {
-    height: 200,
-    borderRadius: radius.md,
+    aspectRatio: 1 / 1.5,
+    borderTopLeftRadius: 2,
+    borderBottomLeftRadius: 2,
+    borderTopRightRadius: 6,
+    borderBottomRightRadius: 6,
     position: 'relative',
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
-    boxShadow: '0 4px 14px rgba(0, 0, 0, 0.45)',
+    boxShadow: '0 8px 22px rgba(0, 0, 0, 0.55)',
   } as any,
   coverImage: {
     position: 'absolute',
@@ -166,10 +182,10 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   coverEpub: {
-    backgroundColor: '#161426',
+    backgroundColor: '#20262D',
   },
   coverPdf: {
-    backgroundColor: '#24121E',
+    backgroundColor: '#3A2924',
   },
   placeholderWrapper: {
     flex: 1,
@@ -215,10 +231,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.xs,
   },
   badgeEpub: {
-    backgroundColor: 'rgba(79, 70, 229, 0.4)',
+    backgroundColor: 'rgba(196, 155, 102, 0.32)',
   },
   badgePdf: {
-    backgroundColor: 'rgba(225, 29, 72, 0.4)',
+    backgroundColor: 'rgba(237, 224, 200, 0.22)',
   },
   formatBadgeText: {
     fontSize: 9,
@@ -226,16 +242,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   badgeTextEpub: {
-    color: '#C7D2FE',
+    color: '#F0D7AD',
   },
   badgeTextPdf: {
-    color: '#FECDD3',
+    color: '#F2E6D1',
   },
   shelfBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(124, 58, 237, 0.35)',
+    backgroundColor: 'rgba(129, 140, 248, 0.22)',
     paddingHorizontal: 6,
     paddingVertical: 2.5,
     borderRadius: radius.xs,
@@ -261,10 +277,11 @@ const styles = StyleSheet.create({
     zIndex: 2,
     alignItems: 'center',
     paddingHorizontal: 8,
+    width: '100%',
   },
   coverTitlePreview: {
     color: colors.textPrimary,
-    fontSize: typography.fontSize.titleMd,
+    fontSize: 14,
     fontWeight: typography.fontWeight.bold,
     textAlign: 'center',
     marginBottom: 6,
@@ -281,27 +298,31 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 3,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     zIndex: 8,
   },
   coverProgressFill: {
     height: '100%',
-    backgroundColor: colors.accentPrimary,
+    backgroundColor: colors.accentBookmark,
+  },
+  coverProgressFillDone: {
+    backgroundColor: colors.statusSuccess,
   },
   infoContainer: {
     paddingTop: 10,
     paddingHorizontal: 2,
   },
   title: {
-    fontSize: typography.fontSize.caption,
-    fontWeight: typography.fontWeight.semibold,
+    fontFamily: Platform.select({ web: typography.fontFamily.serif, default: 'serif' }),
+    fontSize: 13.5,
+    fontWeight: '500',
     color: colors.textPrimary,
     lineHeight: 18,
     marginBottom: 2,
     minHeight: 36,
   },
   author: {
-    fontSize: typography.fontSize.micro,
+    fontSize: 11.5,
     color: colors.textSecondary,
     marginBottom: 4,
   },
@@ -311,12 +332,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   progressLabel: {
-    fontSize: 10,
-    color: colors.accentPrimary,
-    fontWeight: typography.fontWeight.semibold,
+    fontSize: 10.5,
+    color: colors.accentBookmark,
+    fontWeight: '500',
   },
   newLabel: {
-    fontSize: 10,
+    fontSize: 10.5,
     color: colors.textMuted,
     fontStyle: 'italic',
   },

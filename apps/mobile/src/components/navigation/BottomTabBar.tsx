@@ -5,7 +5,7 @@ import { BookLibraryIcon, CommunityGlobeIcon, SettingsIcon } from '../icons/Icon
 import { useI18n } from '../../i18n';
 
 interface BottomTabBarProps {
-  activeTab?: 'shelf' | 'community' | 'sync';
+  activeTab?: 'shelf' | 'community' | 'settings';
   onOpenShelf?: () => void;
   onOpenCommunity: () => void;
   onOpenSettings: () => void;
@@ -65,12 +65,12 @@ export function BottomTabBar({
       >
         <SettingsIcon
           size={20}
-          color={activeTab === 'sync' ? colors.accentPrimary : colors.textSecondary}
+          color={activeTab === 'settings' ? colors.accentPrimary : colors.textSecondary}
         />
         <Text
           style={[
             styles.tabLabel,
-            activeTab === 'sync' && styles.tabLabelActive,
+            activeTab === 'settings' && styles.tabLabelActive,
           ]}
         >
           {t('bottom.settings')}
@@ -88,13 +88,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgSurface,
     borderTopWidth: 1,
     borderTopColor: colors.borderSubtle,
-    paddingVertical: 8,
+    paddingTop: 10,
     paddingBottom: Platform.OS === 'ios' ? 24 : 8,
   },
   tabItem: {
     alignItems: 'center',
     gap: 3,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
+    minWidth: 84,
+    minHeight: 44,
   },
   tabLabel: {
     fontSize: typography.fontSize.micro,

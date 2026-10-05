@@ -54,7 +54,7 @@ export function SidebarNav({
         <FoliumLeafIcon size={24} color={colors.accentPrimary} />
         <View>
           <Text style={styles.brandTitle}>Folium</Text>
-          <Text style={styles.brandSubtitle}>Reader & Vault</Text>
+          <Text style={styles.brandSubtitle}>{t('branding.readerVault')}</Text>
         </View>
       </View>
 
@@ -226,7 +226,7 @@ export function SidebarNav({
             <Text style={styles.footerLink}>{t('settings.security')}</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.copyrightText}>Folium v1.0 • Zero-Knowledge</Text>
+        <Text style={styles.copyrightText}>{t('branding.footer')}</Text>
       </View>
     </View>
   );
@@ -292,7 +292,9 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   navItemActive: {
-    backgroundColor: 'rgba(99, 102, 241, 0.12)',
+    backgroundColor: 'rgba(196, 155, 102, 0.12)',
+    borderLeftWidth: 2,
+    borderLeftColor: colors.accentBookmark,
   },
   navLabel: {
     flex: 1,
@@ -305,7 +307,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.semibold,
   },
   countBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: colors.bgElevated,
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: radius.full,
@@ -327,13 +329,16 @@ const styles = StyleSheet.create({
   },
   legalLinksRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    maxWidth: '100%',
   },
   footerLink: {
-    fontSize: 11,
+    fontSize: 10,
     color: colors.textMuted,
+    textAlign: 'center',
   },
   footerDivider: {
     fontSize: 10,

@@ -1,3 +1,18 @@
+/**
+ * ==============================================================================
+ *  FOLIUM ZERO-KNOWLEDGE CRYPTO VAULT SERVICE (WebCrypto PBKDF2 + AES-GCM-256)
+ * ==============================================================================
+ * 
+ * ARCHITECTURAL SCOPE & BOUNDARY:
+ * - This service implements client-side Zero-Knowledge encryption primitives
+ *   (PBKDF2 with 100,000 iterations + AES-GCM-256) for local vault proof-of-concept
+ *   and security verification benchmarks (see app/security.tsx).
+ * - Multi-device synchronization over Cloudflare D1 (Phase 8) currently operates with
+ *   TLS-in-transit security and structured plaintext columns for indexing and LWW resolution.
+ * - End-to-End Encrypted (E2EE) envelope synchronization on Cloudflare D1 is designated
+ *   for Phase 9, requiring user master passphrase synchronization across paired devices.
+ */
+
 import * as ExpoCrypto from 'expo-crypto';
 import type { EncryptedVaultPayload } from '@folium/shared';
 

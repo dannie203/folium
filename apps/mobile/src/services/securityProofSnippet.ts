@@ -2,18 +2,18 @@
  * Folium Public Cryptographic Proof Snippet
  * Standard: Kerckhoffs's Principle (Security through open architecture, not obscurity)
  *
- * This snippet proves client-side Zero-Knowledge encryption:
+ * This snippet demonstrates a client-side encryption round-trip:
  * 1. Derives AES-GCM-256 key from passphrase + random salt via PBKDF2 (100,000 rounds).
  * 2. Encrypts local reading progress and notes into opaque ciphertext before transmission.
- * 3. Guarantees Cloudflare D1 and sync workers hold 0 plaintext bytes and 0 decryption keys.
+ * 3. Shows that this example payload contains ciphertext before transmission.
  */
 
 export const STANDALONE_AUDIT_SNIPPET = `
 // ============================================================================
-// Folium Zero-Knowledge Standalone Proof (Run in Browser Console or Node.js)
+// Folium client-side encryption round-trip (Run in Browser Console or Node.js)
 // ============================================================================
 (async function verifyFoliumZeroKnowledge() {
-  console.log("🔒 [Folium ZK Proof] Starting Kerckhoffs Verification Protocol...");
+  console.log("🔒 [Folium Crypto Check] Starting client-side encryption round-trip...");
 
   const subtle = window.crypto?.subtle || (await import('crypto')).webcrypto.subtle;
   const enc = new TextEncoder();
@@ -56,7 +56,7 @@ export const STANDALONE_AUDIT_SNIPPET = `
     ciphertext: btoa(String.fromCharCode(...new Uint8Array(ciphertextBuffer)))
   };
 
-  console.log("☁️ [Cloud Inspection] Cloudflare D1 receives purely blind ciphertext:");
+  console.log("☁️ [Payload Check] This example payload contains ciphertext:");
   console.log(transmittedPayload);
 
   // Verification 1: Confirm ciphertext does not contain any plaintext fragments
@@ -73,7 +73,7 @@ export const STANDALONE_AUDIT_SNIPPET = `
   const decryptedObject = JSON.parse(dec.decode(restoredBuffer));
 
   console.assert(decryptedObject.bookTitle === rawReadingState.bookTitle, "❌ DECRYPT MISMATCH");
-  console.log("✅ [Folium ZK Proof] Roundtrip PASSED. Zero-Knowledge guarantee mathematically verified!");
+  console.log("✅ [Folium Crypto Check] Roundtrip passed for this example payload.");
   return { status: "VERIFIED", transmittedPayload, decryptedObject };
 })();
 `.trim();

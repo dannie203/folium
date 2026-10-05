@@ -155,12 +155,26 @@ export function parseOpdsXml(xmlText: string, sourceName = 'custom_opds'): OpdsB
 /**
  * Fetch catalog entries from an OPDS URL or curated feed.
  */
-export async function fetchOpdsCatalog(source: CommunityCatalogSource): Promise<OpdsBookEntry[]> {
+export async function fetchOpdsCatalog(
+  source: CommunityCatalogSource,
+  query = ''
+): Promise<OpdsBookEntry[]> {
   try {
-    const catalogUrl =
-      Platform.OS === 'web'
-        ? `${await getSyncServerUrl()}/api/community/opds?source=${encodeURIComponent(source.id)}`
-        : source.url;
+    let catalogUrl: string;
+    if (Platform.OS === 'web' && source.id === 'project_gutenberg' && query.trim()) {
+      const searchUrl = new URL(source.url);
+      searchUrl.searchParams.set('query', query.trim());
+      catalogUrl = searchUrl.toString();
+    } else if (Platform.OS === 'web') {
+      catalogUrl = `${await getSyncServerUrl()}/api/community/opds?source=${encodeURIComponent(source.id)}&q=${encodeURIComponent(query.trim())}`;
+    } else {
+      catalogUrl = source.url;
+      if (source.id === 'project_gutenberg' && query.trim()) {
+        const searchUrl = new URL(source.url);
+        searchUrl.searchParams.set('query', query.trim());
+        catalogUrl = searchUrl.toString();
+      }
+    }
     const response = await fetch(catalogUrl, {
       headers: {
         Accept: 'application/atom+xml, application/xml, text/xml, */*',

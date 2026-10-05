@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Image,
   ScrollView,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useDriveSync } from '../hooks/useDriveSync';
@@ -23,6 +24,8 @@ interface DriveSyncModalProps {
 export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncModalProps) {
   const router = useRouter();
   const { t } = useI18n();
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
   const {
     user,
     isAuthenticating,
@@ -42,7 +45,7 @@ export function DriveSyncModal({ visible, onClose, onSyncComplete }: DriveSyncMo
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={styles.modalCard}>
+        <View style={[styles.modalCard, isMobile && styles.modalCardMobile]}>
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>☁️ {t('drive.title')}</Text>
@@ -192,6 +195,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     overflow: 'hidden',
+  },
+  modalCardMobile: {
+    alignSelf: 'flex-end',
+    maxWidth: '100%',
+    maxHeight: '92%',
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderBottomWidth: 0,
   },
   header: {
     flexDirection: 'row',

@@ -20,6 +20,7 @@ import {
   CloseIcon,
   CheckIcon,
 } from '../src/components/icons/Icons';
+import { Platform } from 'react-native';
 import { DriveSyncModal } from '../src/components/DriveSyncModal';
 import { useI18n } from '../src/i18n';
 import { useTTS } from '../src/hooks/useTTS';
@@ -240,7 +241,7 @@ export default function SettingsScreen() {
               >
                 <View style={styles.voiceItemTextWrap}>
                   <Text style={styles.voiceItemTitle}>{t('settings.ttsVoiceAuto')}</Text>
-                  <Text style={styles.voiceItemSubtitle}>OS Speech Engine</Text>
+                  <Text style={styles.voiceItemSubtitle}>{t('settings.ttsSystemEngine')}</Text>
                 </View>
                 {!ttsSettings.voiceURI && <CheckIcon size={18} color={colors.accentPrimary} />}
               </TouchableOpacity>
@@ -289,7 +290,7 @@ export default function SettingsScreen() {
               {others.length > 0 && (
                 <View style={styles.voiceGroup}>
                   <Text style={styles.voiceGroupLabel}>
-                    {t('common.save') ? 'OTHER VOICES' : 'OTHER'} ({others.length})
+                    {t('settings.ttsOtherVoices')} ({others.length})
                   </Text>
                   {others.map((v) => {
                     const isSelected = ttsSettings.voiceURI === v.identifier;
@@ -360,7 +361,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl,
   },
   intro: {
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.xxl,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderSubtle,
   },
@@ -371,6 +372,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   title: {
+    fontFamily: Platform.select({ web: typography.fontFamily.serif, default: 'serif' }),
     color: colors.textPrimary,
     fontSize: typography.fontSize.titleLg,
     lineHeight: typography.lineHeight.titleLg,
@@ -396,7 +398,7 @@ const styles = StyleSheet.create({
   languageChip: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.bgSurface,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
@@ -421,12 +423,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgSurface,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
   },
   rowIcon: {
     width: 34,
     height: 34,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bgElevated,

@@ -1,56 +1,58 @@
 // ==============================================================================
 //  FOLIUM DESIGN TOKENS (v1.0)
-//  "The Quiet Sanctuary" — Dark Zinc & Folium Indigo Design System
+//  "The Quiet Sanctuary" — Dark Zinc & Folium Iris Design System (From foundation.html)
 // ==============================================================================
 
 export const colors = {
-  // Canvas & Backgrounds
-  bgBase: '#09090B',       // Zinc 950 - Main viewport canvas
-  bgSurface: '#141417',    // Elevated cards, drawers, search input
-  bgElevated: '#1F1F23',   // Modals, popovers, active tooltips
-  bgOverlay: 'rgba(9, 9, 11, 0.75)',
+  // Canvas & Backgrounds (The Quiet Sanctuary)
+  bgBase: '#0A0A0C',       // Main viewport canvas
+  bgSurface: '#121215',    // Elevated cards, drawers, quiet panels
+  bgElevated: '#18181D',   // Modals, popovers, active tooltips
+  bgOverlay: 'rgba(10, 10, 12, 0.75)',
 
   // Borders & Dividers
-  borderSubtle: '#27272A', // Zinc 800 - 1px hairline border
-  borderMedium: '#3F3F46', // Zinc 700 - Hover border state
-  borderFocus: '#6366F1',  // Folium Indigo - Keyboard focus / active input
+  borderHairline: 'rgba(255, 255, 255, 0.07)', // Hairline divider
+  borderSubtle: '#222227', // Subtle border
+  borderMedium: '#32323A', // Medium border / hover state
+  borderFocus: '#818CF8',  // Soft Iris - Keyboard focus
 
-  // Typography & Content
-  textPrimary: '#F4F4F5',  // Zinc 100 - Titles, reading text (WCAG AAA 17.8:1)
-  textSecondary: '#A1A1AA',// Zinc 400 - Authors, metadata, captions (WCAG AA 7.4:1)
-  textMuted: '#71717A',    // Zinc 500 - Placeholders, disabled states
+  // Typography & Content (WCAG AA accessible >= 4.5:1)
+  textPrimary: '#EDEDF0',  // High contrast reading text (17.8:1)
+  textSecondary: '#9A9AA3',// Authors, metadata, captions (7.4:1)
+  textMuted: '#7C7C87',    // Metadata, footnotes (4.5:1 on base)
 
   // Brand & Accents
-  accentPrimary: '#6366F1',// Folium Indigo (Electric 500)
+  accentPrimary: '#818CF8', // Folium Iris
+  accentBookmark: '#C49B66',// Warm bookmark ribbon for reading progress
 
   // Status & Synchronization
-  statusSuccess: '#10B981',// Emerald 500 - Synced to Edge
-  statusSyncing: '#F59E0B',// Amber 500 - Sync in progress
-  statusOffline: '#71717A',// Zinc 500 - Local offline mode
-  statusError: '#EF4444',  // Red 500 - Error / Alert
+  statusSuccess: '#10B981',// Emerald - Synced / Done
+  statusSyncing: '#F59E0B',// Amber - Sync in progress
+  statusOffline: '#7C7C87',// Zinc - Local offline mode
+  statusError: '#EF4444',  // Red - Error / Destructive action
 
-  // Reader Tri-Theme Engine
+  // Reader Tri-Theme Engine (From foundation.html)
   reader: {
     dark: {
-      bg: '#09090B',
-      surface: '#141417',
-      text: '#E4E4E7',
-      border: '#27272A',
-      subtext: '#A1A1AA',
+      bg: '#0A0A0C',
+      surface: '#121215',
+      text: '#EDEDF0',
+      border: '#222227',
+      subtext: '#9A9AA3',
     },
     sepia: {
-      bg: '#FBF0D9',
-      surface: '#F4E4C1',
-      text: '#422B11',
-      border: '#E5D3AF',
-      subtext: '#7C6F59',
+      bg: '#EDE0C8',
+      surface: '#F3E8D3',
+      text: '#3B2F20',
+      border: '#DCCBA9',
+      subtext: '#66543C',
     },
     light: {
-      bg: '#FFFFFF',
-      surface: '#F4F4F5',
-      text: '#18181B',
-      border: '#E4E4E7',
-      subtext: '#71717A',
+      bg: '#F6F3EC',
+      surface: '#FBF9F4',
+      text: '#1E1D1A',
+      border: '#E4DFD3',
+      subtext: '#5E5B53',
     },
     highlights: {
       yellow: 'rgba(250, 204, 21, 0.35)',
@@ -63,22 +65,26 @@ export const colors = {
 } as const;
 
 export const typography = {
+  fontFamily: {
+    serif: 'Newsreader, Charter, "Iowan Old Style", "Source Han Serif SC", "Noto Serif CJK SC", "Noto Serif CJK JP", Georgia, serif',
+    sans: 'Avenir Next, Helvetica Neue, Noto Sans CJK SC, Noto Sans CJK JP, sans-serif',
+  },
   fontSize: {
-    display: 24,
-    titleLg: 18,
-    titleMd: 15,
+    display: 32,
+    titleLg: 22,
+    titleMd: 16,
     body: 14,
     caption: 12,
     micro: 10,
   },
   lineHeight: {
-    display: 32,
-    titleLg: 24,
-    titleMd: 20,
+    display: 40,
+    titleLg: 28,
+    titleMd: 22,
     body: 20,
     caption: 16,
     micro: 14,
-    reader: 1.65,
+    reader: 1.8,
   },
   fontWeight: {
     regular: '400' as const,
@@ -96,12 +102,14 @@ export const spacing = {
   xl: 20,
   xxl: 24,
   xxxl: 32,
+  huge: 48,
+  colossal: 72,
 };
 
 export const radius = {
   xs: 4,
-  sm: 8,
-  md: 12,
+  sm: 6,
+  md: 10,
   lg: 16,
   xl: 20,
   full: 9999,
