@@ -500,11 +500,24 @@ Following an adversarial code review of Folium's synchronization pipeline, sever
   - If a client requests incremental changes with `since > 0 && since < gc_watermark_seq`, the server returns `HTTP 410 Gone` with code `CURSOR_EXPIRED`.
   - Client automatically resets `sync_cursor = 0` upon receiving HTTP 410 and requests a clean full resync (`since = 0`), preventing zombie record resurrection.
 
-#### 4. Architecture Boundary & Quality Verification
+#### 4. Pull Snapshot Consistency Invariant (`packages/worker/src/index.ts`)
+- **Torn Read Defense via Strict Snapshot Boundaries**:
+  - Bound all 5 entity SELECT queries in `GET /api/sync/pull` with an explicit upper-bound sequence: `WHERE user_id = ? AND sync_seq > ? AND sync_seq <= ?` matching `snapshotSeq = currentServerSeq`.
+  - Guarantees strict snapshot isolation: `since < record.sync_seq <= snapshotSeq`.
+  - Mid-flight concurrent writes committed at `sync_seq > snapshotSeq` during pull query execution are cleanly quarantined for the subsequent pull, completely eliminating torn reads between entity tables.
+
+#### 5. Architecture Boundary & Comprehensive Stress Testing
 - **Documentation & Scope Alignment**:
   - Updated `cryptoService.ts` module documentation detailing the cryptographic boundary between Phase 8 TLS-in-transit sync and Phase 9 End-to-End Envelope sync.
-- **Automated Test Suite Expansion (`tests/security/sync_engine_lww.test.mjs`)**:
-  - Added 4 comprehensive test cases verifying LWW rejection of older timestamps, acceptance of newer timestamps, contiguous cursor gap detection, and HTTP 410 GC watermark rejection.
-  - Test suite expanded from 41 to **45/45 passing** tests (100% pass rate).
+- **Automated Test Suite Expansion (`sync_engine_lww.test.mjs`, `sync_integration_stress.test.mjs`)**:
+  - Added 8 comprehensive test cases across two test suites:
+    1. LWW rejection of older timestamps and acceptance of newer timestamps on SQLite.
+    2. Contiguous cursor gap detection and dynamic pull invocation.
+    3. Stale client cursor rejection via HTTP 410 GC watermark.
+    4. Pull Snapshot Consistency under concurrent mid-flight writes.
+    5. Real end-to-end gap recovery lifecycle in local SQLite (B writes seq 11, A pushes seq 12, gap detected, pulls both, applies local, cursor=12).
+    6. 50 concurrent push stress test verifying 0 dropped mutations, strictly monotonic sequence, and full convergence.
+    7. Stale client 410 full resync convergence lifecycle.
+  - Test suite expanded to **49/49 passing** tests (100% pass rate).
   - TypeScript typecheck: **0 errors** across all monorepo packages.
 

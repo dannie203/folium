@@ -929,32 +929,36 @@ app.get('/api/sync/pull', async (c) => {
       return c.json(emptyResponse, 200);
     }
 
-    // Parallel queries for changed items
+    const snapshotSeq = currentServerSeq;
+
+    // Parallel queries for changed items bounded by snapshotSeq:
+    // Ensures strict snapshot isolation (since < sync_seq <= snapshotSeq).
+    // Any concurrent writes committed at > snapshotSeq are excluded and left for subsequent pull.
     const [booksRes, progressRes, bookmarksRes, highlightsRes, notesRes] = await Promise.all([
       db
-        .prepare('SELECT * FROM books WHERE user_id = ? AND sync_seq > ?')
-        .bind(userId, since)
+        .prepare('SELECT * FROM books WHERE user_id = ? AND sync_seq > ? AND sync_seq <= ?')
+        .bind(userId, since, snapshotSeq)
         .all<Book>(),
       db
-        .prepare('SELECT * FROM reading_progress WHERE user_id = ? AND sync_seq > ?')
-        .bind(userId, since)
+        .prepare('SELECT * FROM reading_progress WHERE user_id = ? AND sync_seq > ? AND sync_seq <= ?')
+        .bind(userId, since, snapshotSeq)
         .all<ReadingProgress>(),
       db
-        .prepare('SELECT * FROM bookmarks WHERE user_id = ? AND sync_seq > ?')
-        .bind(userId, since)
+        .prepare('SELECT * FROM bookmarks WHERE user_id = ? AND sync_seq > ? AND sync_seq <= ?')
+        .bind(userId, since, snapshotSeq)
         .all<Bookmark>(),
       db
-        .prepare('SELECT * FROM highlights WHERE user_id = ? AND sync_seq > ?')
-        .bind(userId, since)
+        .prepare('SELECT * FROM highlights WHERE user_id = ? AND sync_seq > ? AND sync_seq <= ?')
+        .bind(userId, since, snapshotSeq)
         .all<Highlight>(),
       db
-        .prepare('SELECT * FROM notes WHERE user_id = ? AND sync_seq > ?')
-        .bind(userId, since)
+        .prepare('SELECT * FROM notes WHERE user_id = ? AND sync_seq > ? AND sync_seq <= ?')
+        .bind(userId, since, snapshotSeq)
         .all<Note>(),
     ]);
 
     const response: SyncPullResponse = {
-      server_sync_seq: currentServerSeq,
+      server_sync_seq: snapshotSeq,
       books: (booksRes.results || []).map((r: any) => ({
         ...r,
         is_deleted: Boolean(r.is_deleted),
