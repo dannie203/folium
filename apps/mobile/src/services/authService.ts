@@ -129,17 +129,24 @@ export function onAuthStateChanged(callback: (user: AuthUser | null) => void): (
 }
 
 /**
- * Sign in using Google OAuth with expo-auth-session.
+ * Retrieve active Google Client ID from environment variables.
  */
-export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> {
-  const clientId =
+export function getGoogleClientId(): string | null {
+  const id =
     process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
     (Platform.OS === 'web'
       ? process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
       : process.env.EXPO_PUBLIC_GOOGLE_MOBILE_CLIENT_ID);
 
-  // If in demo mode or no Client ID is provided, generate a simulated authenticated session
-  if (!clientId || demoFallback) {
+  return id?.trim() || null;
+}
+
+/**
+ * Sign in using Google OAuth with expo-auth-session.
+ */
+export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> {
+  // Sandbox mode is strictly restricted to development (__DEV__)
+  if (__DEV__ && demoFallback) {
     console.log('[AuthService] Using developer sandbox Google OAuth session.');
     const demoUser: AuthUser = {
       id: 'demo-google-user-001',
@@ -151,6 +158,17 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
     };
     persistUser(demoUser);
     return demoUser;
+  }
+
+  const clientId = getGoogleClientId();
+
+  // If real Google login requested but no Client ID is configured, fail with environment-appropriate guidance
+  if (!clientId) {
+    throw new Error(
+      __DEV__
+        ? 'Google Client ID chưa được cấu hình cho ứng dụng. Vui lòng cấu hình EXPO_PUBLIC_GOOGLE_CLIENT_ID trong biến môi trường hoặc chọn "Chế độ Sandbox (Dev Mode)" để dùng thử.'
+        : 'Google Client ID chưa được cấu hình cho ứng dụng. Vui lòng liên hệ quản trị viên của deployment này.'
+    );
   }
 
   const redirectUri = AuthSession.makeRedirectUri({
@@ -170,10 +188,12 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
   const result = await request.promptAsync(discovery);
 
   if (result.type !== 'success' || !result.params.access_token) {
+    const params = 'params' in result ? (result.params as any) : undefined;
+    const errorDetail = params?.error_description || params?.error || result.type;
     throw new Error(
       result.type === 'cancel'
-        ? 'Google sign-in was cancelled.'
-        : `Sign-in failed: ${result.type}`
+        ? 'Đăng nhập Google đã bị hủy.'
+        : `Đăng nhập Google thất bại: ${errorDetail}`
     );
   }
 
