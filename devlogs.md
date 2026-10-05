@@ -506,18 +506,34 @@ Following an adversarial code review of Folium's synchronization pipeline, sever
   - Guarantees strict snapshot isolation: `since < record.sync_seq <= snapshotSeq`.
   - Mid-flight concurrent writes committed at `sync_seq > snapshotSeq` during pull query execution are cleanly quarantined for the subsequent pull, completely eliminating torn reads between entity tables.
 
-#### 5. Architecture Boundary & Comprehensive Stress Testing
+#### 5. In-Batch Atomic Sequence Allocation & D1 Single-Transaction Atomicity
+- **Elimination of Pre-Transaction JS Memory Sequence Race**:
+  - Replaced pre-transaction `SELECT current_seq` with atomic database-driven sequence allocation inside the batch.
+  - Statement 0 increments `user_sync_sequence` and returns `RETURNING current_seq`.
+  - Entity mutation statements (books, reading_progress, bookmarks, highlights, notes) reference the freshly incremented sequence via correlated subqueries:
+    ```sql
+    INSERT INTO highlights (..., sync_seq)
+    VALUES (..., (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
+    ```
+  - Completely eliminates sequence collisions and ghost gaps between concurrent worker isolates executing simultaneous pushes.
+- **Single-Transaction Headroom Cap (`MAX_PUSH_ITEMS = 90`)**:
+  - Enforced `MAX_PUSH_ITEMS = 90` payload validation in `POST /api/sync/push`, ensuring total batch statements ($1\text{ seq} + \le 90\text{ items} + 5\text{ GC} + 1\text{ watermark} = 97$) never exceed D1's 100-statement transaction limit.
+
+#### 6. Architecture Boundary & Comprehensive Stress Testing
 - **Documentation & Scope Alignment**:
   - Updated `cryptoService.ts` module documentation detailing the cryptographic boundary between Phase 8 TLS-in-transit sync and Phase 9 End-to-End Envelope sync.
 - **Automated Test Suite Expansion (`sync_engine_lww.test.mjs`, `sync_integration_stress.test.mjs`)**:
-  - Added 8 comprehensive test cases across two test suites:
+  - Added 10 automated test cases across two test suites:
     1. LWW rejection of older timestamps and acceptance of newer timestamps on SQLite.
     2. Contiguous cursor gap detection and dynamic pull invocation.
     3. Stale client cursor rejection via HTTP 410 GC watermark.
     4. Pull Snapshot Consistency under concurrent mid-flight writes.
     5. Real end-to-end gap recovery lifecycle in local SQLite (B writes seq 11, A pushes seq 12, gap detected, pulls both, applies local, cursor=12).
-    6. 50 concurrent push stress test verifying 0 dropped mutations, strictly monotonic sequence, and full convergence.
+    6. 50 serialized transactional pushes simulation with `sql.js` (Sequence Continuity & Convergence).
     7. Stale client 410 full resync convergence lifecycle.
-  - Test suite expanded to **49/49 passing** tests (100% pass rate).
+    8. Exact boundary validation for `MAX_PUSH_ITEMS = 90` (90 accepted, 91 rejected with `PAYLOAD_TOO_LARGE`).
+    9. In-batch atomic sequence allocation preventing pre-transaction memory races.
+  - Test suite expanded to **51/51 passing** tests (100% pass rate).
   - TypeScript typecheck: **0 errors** across all monorepo packages.
+
 

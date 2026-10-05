@@ -514,28 +514,23 @@ app.post('/api/sync/push', async (c) => {
 
     const now = Date.now();
 
-    // 1. Calculate next monotonic sequence for this user
-    const seqRow = await db
-      .prepare('SELECT current_seq FROM user_sync_sequence WHERE user_id = ?')
-      .bind(userId)
-      .first<{ current_seq: number }>();
-
-    const newSeq = (seqRow?.current_seq ?? 0) + 1;
-
     const statements: D1PreparedStatement[] = [];
     let acceptedCount = 0;
 
-    // Advance user sequence atomically inside the same batch
+    // 1. In-Batch Atomic Sequence Allocation:
+    // Advance user sequence directly inside the database transaction (UPSERT with +1).
+    // RETURNING current_seq gives the exact committed sequence without pre-transaction JS race conditions.
     statements.push(
       db
         .prepare(
           `INSERT INTO user_sync_sequence (user_id, current_seq, updated_at)
-           VALUES (?, ?, ?)
+           VALUES (?, 1, ?)
            ON CONFLICT(user_id) DO UPDATE SET
-             current_seq = CASE WHEN excluded.current_seq > user_sync_sequence.current_seq THEN excluded.current_seq ELSE user_sync_sequence.current_seq + 1 END,
-             updated_at = excluded.updated_at`
+             current_seq = user_sync_sequence.current_seq + 1,
+             updated_at = excluded.updated_at
+           RETURNING current_seq`
         )
-        .bind(userId, newSeq, now)
+        .bind(userId, now)
     );
 
     // Batch upsert books metadata
@@ -553,7 +548,7 @@ app.post('/api/sync/push', async (c) => {
           db
             .prepare(
               `INSERT INTO books (id, user_id, title, author, cover_url, file_type, file_size, drive_file_id, is_deleted, deleted_at, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
                ON CONFLICT(id) DO UPDATE SET
                  title = CASE WHEN excluded.is_deleted = 0 AND excluded.title != 'Chưa có tiêu đề' THEN excluded.title ELSE books.title END,
                  author = CASE WHEN excluded.is_deleted = 0 AND excluded.author != 'Tác giả không rõ' THEN excluded.author ELSE books.author END,
@@ -577,7 +572,7 @@ app.post('/api/sync/push', async (c) => {
               b.drive_file_id ?? null,
               isDeleted,
               deletedAt,
-              newSeq
+              userId
             )
         );
         acceptedCount++;
@@ -598,7 +593,7 @@ app.post('/api/sync/push', async (c) => {
           db
             .prepare(
               `INSERT INTO reading_progress (id, user_id, book_id, cfi, percentage, client_updated_at, is_deleted, deleted_at, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
                ON CONFLICT(user_id, book_id) DO UPDATE SET
                  cfi = CASE WHEN excluded.is_deleted = 0 AND excluded.cfi != '' THEN excluded.cfi ELSE reading_progress.cfi END,
                  percentage = CASE WHEN excluded.is_deleted = 0 THEN excluded.percentage ELSE reading_progress.percentage END,
@@ -617,7 +612,7 @@ app.post('/api/sync/push', async (c) => {
               clientUpdatedAt,
               isDeleted,
               deletedAt,
-              newSeq
+              userId
             )
         );
         acceptedCount++;
@@ -639,7 +634,7 @@ app.post('/api/sync/push', async (c) => {
           db
             .prepare(
               `INSERT INTO bookmarks (id, user_id, book_id, cfi, title, client_created_at, is_deleted, deleted_at, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
                ON CONFLICT(id) DO UPDATE SET
                  book_id = CASE WHEN excluded.is_deleted = 0 AND excluded.book_id != '' THEN excluded.book_id ELSE bookmarks.book_id END,
                  title = CASE WHEN excluded.is_deleted = 0 AND excluded.title != '' THEN excluded.title ELSE bookmarks.title END,
@@ -659,7 +654,7 @@ app.post('/api/sync/push', async (c) => {
               clientCreatedAt,
               isDeleted,
               deletedAt,
-              newSeq
+              userId
             )
         );
         acceptedCount++;
@@ -682,7 +677,7 @@ app.post('/api/sync/push', async (c) => {
           db
             .prepare(
               `INSERT INTO highlights (id, user_id, book_id, cfi_range, text, color, note, client_created_at, is_deleted, deleted_at, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
                ON CONFLICT(id) DO UPDATE SET
                  book_id = CASE WHEN excluded.is_deleted = 0 AND excluded.book_id != '' THEN excluded.book_id ELSE highlights.book_id END,
                  cfi_range = CASE WHEN excluded.is_deleted = 0 AND excluded.cfi_range != '' THEN excluded.cfi_range ELSE highlights.cfi_range END,
@@ -706,7 +701,7 @@ app.post('/api/sync/push', async (c) => {
               clientCreatedAt,
               isDeleted,
               deletedAt,
-              newSeq
+              userId
             )
         );
         acceptedCount++;
@@ -727,7 +722,7 @@ app.post('/api/sync/push', async (c) => {
           db
             .prepare(
               `INSERT INTO notes (id, user_id, book_id, highlight_id, content, client_created_at, is_deleted, deleted_at, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
                ON CONFLICT(id) DO UPDATE SET
                  book_id = CASE WHEN excluded.is_deleted = 0 AND excluded.book_id != '' THEN excluded.book_id ELSE notes.book_id END,
                  highlight_id = CASE WHEN excluded.is_deleted = 0 THEN COALESCE(excluded.highlight_id, notes.highlight_id) ELSE notes.highlight_id END,
@@ -747,7 +742,7 @@ app.post('/api/sync/push', async (c) => {
               clientCreatedAt,
               isDeleted,
               deletedAt,
-              newSeq
+              userId
             )
         );
         acceptedCount++;
@@ -801,15 +796,32 @@ app.post('/api/sync/push', async (c) => {
     );
 
     const D1_BATCH_LIMIT = 100;
+    let committedSeq = 0;
+
     for (let i = 0; i < statements.length; i += D1_BATCH_LIMIT) {
       const chunk = statements.slice(i, i + D1_BATCH_LIMIT);
       if (chunk.length > 0) {
-        await db.batch(chunk);
+        const batchResults = await db.batch(chunk);
+        // Statement 0 in the first chunk returns the newly allocated sequence
+        if (i === 0 && batchResults?.[0]?.results?.[0]) {
+          const row = batchResults[0].results[0] as { current_seq?: number };
+          if (row.current_seq) {
+            committedSeq = Number(row.current_seq);
+          }
+        }
       }
     }
 
+    if (!committedSeq) {
+      const fallbackRow = await db
+        .prepare('SELECT current_seq FROM user_sync_sequence WHERE user_id = ?')
+        .bind(userId)
+        .first<{ current_seq: number }>();
+      committedSeq = fallbackRow?.current_seq ?? 1;
+    }
+
     const response: SyncPushResponse = {
-      committed_sync_seq: newSeq,
+      committed_sync_seq: committedSeq,
       accepted_count: acceptedCount,
     };
 

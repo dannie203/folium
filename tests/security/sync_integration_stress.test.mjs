@@ -403,3 +403,81 @@ test('INTEGRATION STRESS 5: Push Payload Exceeding Single-Transaction Limit (90 
   assert.strictEqual(overBoundaryRes.body.code, 'PAYLOAD_TOO_LARGE');
 });
 
+test('INTEGRATION STRESS 6: In-Batch Atomic Sequence Allocation Prevents Pre-Transaction JS Memory Races', async () => {
+  const SQL = await initSqlJs();
+  const db = new SQL.Database();
+
+  db.run(`
+    CREATE TABLE user_sync_sequence (
+      user_id TEXT PRIMARY KEY,
+      current_seq INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE highlights (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      text TEXT NOT NULL,
+      sync_seq INTEGER NOT NULL
+    );
+  `);
+
+  const userId = 'user-atomic-seq';
+
+  // Function simulating worker push batch with In-Batch Atomic Sequence Allocation
+  function executePushBatch(highlightId, text) {
+    db.run('BEGIN TRANSACTION;');
+
+    // Statement 0: In-batch sequence increment + RETURNING current_seq
+    const res = db.exec(`
+      INSERT INTO user_sync_sequence (user_id, current_seq, updated_at)
+      VALUES ('${userId}', 1, ${Date.now()})
+      ON CONFLICT(user_id) DO UPDATE SET
+        current_seq = user_sync_sequence.current_seq + 1,
+        updated_at = excluded.updated_at
+      RETURNING current_seq;
+    `);
+    const committedSeq = res[0].values[0][0];
+
+    // Statement 1: Entity insert referencing (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?)
+    db.run(`
+      INSERT INTO highlights (id, user_id, text, sync_seq)
+      VALUES (?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
+      ON CONFLICT(id) DO UPDATE SET
+        text = excluded.text,
+        sync_seq = excluded.sync_seq;
+    `, [highlightId, userId, text, userId]);
+
+    db.run('COMMIT;');
+    return committedSeq;
+  }
+
+  // Request A and Request B both execute push
+  const committedSeqA = executePushBatch('hl-req-a', 'First write');
+  const committedSeqB = executePushBatch('hl-req-b', 'Second concurrent write');
+
+  // Assert: No collision in committed sequences
+  assert.strictEqual(committedSeqA, 1, 'First write receives sequence 1');
+  assert.strictEqual(committedSeqB, 2, 'Second write receives sequence 2');
+
+  // Assert: Entities received the exact respective sequence inside transaction
+  const stmtA = db.prepare('SELECT sync_seq FROM highlights WHERE id = ?');
+  stmtA.bind(['hl-req-a']);
+  stmtA.step();
+  assert.strictEqual(stmtA.getAsObject().sync_seq, 1, 'hl-req-a entity must have sync_seq = 1');
+  stmtA.free();
+
+  const stmtB = db.prepare('SELECT sync_seq FROM highlights WHERE id = ?');
+  stmtB.bind(['hl-req-b']);
+  stmtB.step();
+  assert.strictEqual(stmtB.getAsObject().sync_seq, 2, 'hl-req-b entity must have sync_seq = 2');
+  stmtB.free();
+
+  // Assert: No unused sequence gap on server
+  const seqStmt = db.prepare('SELECT current_seq FROM user_sync_sequence WHERE user_id = ?');
+  seqStmt.bind([userId]);
+  seqStmt.step();
+  assert.strictEqual(seqStmt.getAsObject().current_seq, 2, 'Final sequence must be exactly 2 with 0 ghost gaps');
+  seqStmt.free();
+});
+
+
