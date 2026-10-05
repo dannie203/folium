@@ -33,7 +33,7 @@ export default function SecurityProofScreen() {
       const res = await verifyCryptoVault();
       setProofResult(res);
     } catch (err: any) {
-      alert(`Kiểm tra thất bại: ${err.message}`);
+      alert(`${t('common.error')}: ${err.message}`);
     } finally {
       setIsRunningProof(false);
     }
@@ -45,7 +45,7 @@ export default function SecurityProofScreen() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } else {
-      alert('Đã chọn đoạn mã kiểm toán bên dưới.');
+      alert(t('security.copyFallback'));
     }
   };
 
@@ -83,15 +83,12 @@ export default function SecurityProofScreen() {
           <View style={styles.header}>
             <View style={styles.badgeRow}>
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>MÃ NGUỒN MỞ • NGUYÊN LÝ KERCKHOFFS</Text>
+                <Text style={styles.badgeText}>{t('security.badge')}</Text>
               </View>
-              <Text style={styles.metaText}>Cập nhật: 19/09/2026</Text>
+              <Text style={styles.metaText}>{t('security.updated')}</Text>
             </View>
-            <Text style={styles.title}>Kiến Trúc Bảo Mật & Chứng Minh Mật Mã</Text>
-            <Text style={styles.subtitle}>
-              Bảo mật thực thụ không đến từ sự giấu giếm (Security through Obscurity), mà đến từ toán học
-              và thiết kế mở. Folium công khai toàn bộ thuật toán để cộng đồng kỹ sư kiểm toán độc lập.
-            </Text>
+            <Text style={styles.title}>{t('security.title')}</Text>
+            <Text style={styles.subtitle}>{t('security.subtitle')}</Text>
           </View>
 
           {/* Section 1: Live Benchmark */}
@@ -100,12 +97,9 @@ export default function SecurityProofScreen() {
               <View style={styles.sectionNumber}>
                 <Text style={styles.sectionNumberText}>01</Text>
               </View>
-              <Text style={styles.sectionTitle}>Kiểm Tra Mật Mã Thời Gian Thực (Live Inspector)</Text>
+              <Text style={styles.sectionTitle}>{t('security.section1Title')}</Text>
             </View>
-            <Text style={styles.paragraph}>
-              Bấm nút bên dưới để trình duyệt của bạn trực tiếp thực thi thuật toán dẫn xuất khoá PBKDF2
-              (100.000 vòng lặp SHA-256) và mã hoá AES-256-GCM qua WebCrypto SubtleCrypto API chuẩn W3C:
-            </Text>
+            <Text style={styles.paragraph}>{t('security.section1Paragraph')}</Text>
 
             <TouchableOpacity
               style={[styles.benchmarkBtn, isRunningProof && styles.btnDisabled]}
@@ -116,19 +110,17 @@ export default function SecurityProofScreen() {
               {isRunningProof ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.benchmarkBtnText}>⚡ Chạy Kiểm Tra Mã Hoá Ngay</Text>
+                <Text style={styles.benchmarkBtnText}>{t('security.runProof')}</Text>
               )}
             </TouchableOpacity>
 
             {proofResult && (
               <View style={styles.proofCard}>
                 <View style={styles.proofHeaderRow}>
-                  <Text style={styles.proofBadgePass}>✓ XÁC THỰC THÀNH CÔNG (PASSED)</Text>
+                  <Text style={styles.proofBadgePass}>{t('security.proofPassed')}</Text>
                   <Text style={styles.proofTime}>{proofResult.durationMs} ms</Text>
                 </View>
-                <Text style={styles.proofDesc}>
-                  Dữ liệu truyền lên Cloudflare D1 là chuỗi Base64 mã hoá hoàn toàn mù (Blind Ciphertext):
-                </Text>
+                <Text style={styles.proofDesc}>{t('security.proofDescription')}</Text>
                 <Text style={styles.codeSnippet}>
                   {JSON.stringify(proofResult.samplePayload, null, 2)}
                 </Text>
@@ -142,32 +134,23 @@ export default function SecurityProofScreen() {
               <View style={styles.sectionNumber}>
                 <Text style={styles.sectionNumberText}>02</Text>
               </View>
-              <Text style={styles.sectionTitle}>Ma Trận Phòng Vệ Mối Đe Dọa (Threat Model)</Text>
+              <Text style={styles.sectionTitle}>{t('security.section2Title')}</Text>
             </View>
 
             <View style={styles.threatList}>
               <View style={styles.threatItem}>
-                <Text style={styles.threatName}>Máy chủ Cloudflare bị thâm nhập</Text>
-                <Text style={styles.threatDefense}>
-                  Kẻ tấn công chỉ thu được các khối Ciphertext rác vô nghĩa. Không có khoá giải mã (Khoá mã hoá
-                  chỉ lưu cục bộ trên thiết bị của bạn).
-                </Text>
+                <Text style={styles.threatName}>{t('security.threatServer')}</Text>
+                <Text style={styles.threatDefense}>{t('security.threatServerDefense')}</Text>
               </View>
 
               <View style={styles.threatItem}>
-                <Text style={styles.threatName}>Mã độc JS nhúng trong sách EPUB</Text>
-                <Text style={styles.threatDefense}>
-                  Reader WebView / Iframe được cô lập nghiêm ngặt với Content Security Policy (CSP) chặt chẽ, chặn
-                  triệt để việc đọc IndexedDB hay token Google.
-                </Text>
+                <Text style={styles.threatName}>{t('security.threatEpub')}</Text>
+                <Text style={styles.threatDefense}>{t('security.threatEpubDefense')}</Text>
               </View>
 
               <View style={styles.threatItem}>
-                <Text style={styles.threatName}>Trát lệnh pháp lý / Yêu cầu dữ liệu</Text>
-                <Text style={styles.threatDefense}>
-                  Không thể tuân thủ vì nhà phát triển không sở hữu khoá giải mã hay bản rõ nội dung sách của người
-                  dùng (Zero-Knowledge tuyệt đối).
-                </Text>
+                <Text style={styles.threatName}>{t('security.threatLegal')}</Text>
+                <Text style={styles.threatDefense}>{t('security.threatLegalDefense')}</Text>
               </View>
             </View>
           </View>
@@ -179,17 +162,15 @@ export default function SecurityProofScreen() {
                 <View style={styles.sectionNumber}>
                   <Text style={styles.sectionNumberText}>03</Text>
                 </View>
-                <Text style={styles.sectionTitle}>Đoạn Mã Kiểm Toán Độc Lập (Audit Snippet)</Text>
+                <Text style={styles.sectionTitle}>{t('security.section3Title')}</Text>
               </View>
 
               <TouchableOpacity style={styles.copyBtn} onPress={handleCopySnippet} activeOpacity={0.8}>
-                <Text style={styles.copyBtnText}>{copied ? '✓ Đã sao chép' : 'Sao chép mã'}</Text>
+                <Text style={styles.copyBtnText}>{copied ? t('security.copied') : t('security.copyCode')}</Text>
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.paragraph}>
-              Bất kỳ kỹ sư nào cũng có thể mở DevTools Console (F12) trên Chrome/Firefox hoặc chạy trong Node.js để tự kiểm chứng:
-            </Text>
+            <Text style={styles.paragraph}>{t('security.section3Paragraph')}</Text>
 
             <ScrollView
               style={styles.codeBlock}

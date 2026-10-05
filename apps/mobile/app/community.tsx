@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   TextInput,
   ActivityIndicator,
   Image,
+  Platform,
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import type { OpdsBookEntry, CommunityCatalogSource } from '@folium/shared';
@@ -33,6 +34,7 @@ import {
   CheckIcon,
   FolderIcon,
   ChevronLeftIcon,
+  SearchIcon,
 } from '../src/components/icons/Icons';
 import { useI18n } from '../src/i18n';
 
@@ -42,6 +44,7 @@ export default function CommunityBookshelfScreen() {
   const router = useRouter();
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<CommunityTab>('opds');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // OPDS State
   const [selectedCatalog, setSelectedCatalog] = useState<CommunityCatalogSource>(
@@ -64,17 +67,38 @@ export default function CommunityBookshelfScreen() {
   const [isFetchingCustom, setIsFetchingCustom] = useState(false);
   const [customBooks, setCustomBooks] = useState<OpdsBookEntry[]>([]);
 
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
+  const filteredCatalogBooks = useMemo(
+    () => catalogBooks.filter((book) => matchesSearch([book.title, book.author, book.summary])),
+    [catalogBooks, normalizedSearch]
+  );
+  const filteredCustomBooks = useMemo(
+    () => customBooks.filter((book) => matchesSearch([book.title, book.author, book.summary])),
+    [customBooks, normalizedSearch]
+  );
+  const filteredDriveBooks = useMemo(
+    () => scannedDriveBooks.filter((book) => matchesSearch([book.title, book.categoryPath, book.format])),
+    [scannedDriveBooks, normalizedSearch]
+  );
+
+  function matchesSearch(values: Array<string | undefined>): boolean {
+    if (!normalizedSearch) return true;
+    return values.some((value) => value?.toLocaleLowerCase().includes(normalizedSearch));
+  }
+
   useEffect(() => {
     if (activeTab === 'opds') {
-      loadCatalog(selectedCatalog);
+      const delay = searchQuery.trim() ? 350 : 0;
+      const timer = setTimeout(() => loadCatalog(selectedCatalog, searchQuery), delay);
+      return () => clearTimeout(timer);
     }
-  }, [selectedCatalog, activeTab]);
+  }, [selectedCatalog, activeTab, searchQuery]);
 
-  const loadCatalog = async (source: CommunityCatalogSource) => {
+  const loadCatalog = async (source: CommunityCatalogSource, query = '') => {
     try {
       setIsLoadingCatalog(true);
       setCatalogError(null);
-      const books = await fetchOpdsCatalog(source);
+      const books = await fetchOpdsCatalog(source, query);
       setCatalogBooks(books);
     } catch (err: any) {
       console.warn('Failed to load OPDS catalog:', err);
@@ -222,6 +246,19 @@ export default function CommunityBookshelfScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.communitySearchBox}>
+          <SearchIcon size={16} color={colors.textSecondary} />
+          <TextInput
+            style={styles.communitySearchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder={t('community.searchPlaceholder')}
+            placeholderTextColor={colors.textMuted}
+            clearButtonMode="while-editing"
+            accessibilityLabel={t('community.searchPlaceholder')}
+          />
+        </View>
+
         {/* ================= TAB 1: OPDS PUBLIC DOMAIN ================= */}
         {activeTab === 'opds' && (
           <View>
@@ -255,14 +292,18 @@ export default function CommunityBookshelfScreen() {
                 <Text style={styles.emptyStateTitle}>{t('community.errorLoadingCatalog')}</Text>
                 <Text style={styles.emptyStateText}>{catalogError}</Text>
               </View>
-            ) : catalogBooks.length === 0 ? (
+            ) : filteredCatalogBooks.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyStateTitle}>{t('community.emptyCatalog')}</Text>
-                <Text style={styles.emptyStateText}>{t('community.emptyCatalogDesc')}</Text>
+                <Text style={styles.emptyStateTitle}>
+                  {catalogBooks.length === 0 ? t('community.emptyCatalog') : t('community.noSearchResults')}
+                </Text>
+                <Text style={styles.emptyStateText}>
+                  {catalogBooks.length === 0 ? t('community.emptyCatalogDesc') : t('community.searchPlaceholder')}
+                </Text>
               </View>
             ) : (
               <View style={styles.bookList}>
-                {catalogBooks.map((b) => {
+                {filteredCatalogBooks.map((b) => {
                   const isImported = importedBookIds.has(b.id);
                   const isImporting = importingBookId === b.id;
 
@@ -356,12 +397,12 @@ export default function CommunityBookshelfScreen() {
             </View>
 
             {/* Scanned Books List */}
-            {scannedDriveBooks.length > 0 && (
+            {filteredDriveBooks.length > 0 && (
               <View style={styles.scannedList}>
                 <Text style={styles.scannedTitle}>
                   {t('community.driveFoundCount', { count: scannedDriveBooks.length })}
                 </Text>
-                {scannedDriveBooks.map((b) => {
+                  {filteredDriveBooks.map((b) => {
                   const isImported = importedBookIds.has(b.driveFileId);
                   const isImporting = importingBookId === b.driveFileId;
 
@@ -441,9 +482,9 @@ export default function CommunityBookshelfScreen() {
               </View>
             </View>
 
-            {customBooks.length > 0 && (
+            {filteredCustomBooks.length > 0 && (
               <View style={styles.bookList}>
-                {customBooks.map((b) => (
+                {filteredCustomBooks.map((b) => (
                   <View key={b.id} style={styles.bookCard}>
                     <View style={styles.bookMeta}>
                       <Text style={styles.bookTitle}>{b.title}</Text>
@@ -499,9 +540,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   navTitle: {
+    fontFamily: Platform.select({ web: typography.fontFamily.serif, default: 'serif' }),
     color: colors.textSecondary,
-    fontSize: typography.fontSize.caption,
-    fontWeight: typography.fontWeight.semibold,
+    fontSize: typography.fontSize.titleMd,
+    fontWeight: typography.fontWeight.regular,
   },
   navRight: {
     width: 60,
@@ -529,7 +571,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
   },
   tabItemActive: {
-    borderBottomColor: colors.accentPrimary,
+    borderBottomColor: colors.accentBookmark,
   },
   tabText: {
     color: colors.textSecondary,
@@ -546,6 +588,25 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '100%',
   },
+  communitySearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.bgSurface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: radius.md,
+    minHeight: 42,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  communitySearchInput: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.body,
+    minHeight: 40,
+    outlineStyle: 'none',
+  } as any,
   catalogChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -561,8 +622,8 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSubtle,
   },
   chipActive: {
-    backgroundColor: colors.accentPrimary,
-    borderColor: colors.accentPrimary,
+    backgroundColor: colors.bgElevated,
+    borderColor: colors.accentBookmark,
   },
   chipText: {
     color: colors.textSecondary,
@@ -570,7 +631,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
   },
   chipTextActive: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontWeight: typography.fontWeight.bold,
   },
   catalogDesc: {
@@ -616,7 +677,7 @@ const styles = StyleSheet.create({
   bookCard: {
     flexDirection: 'row',
     backgroundColor: colors.bgSurface,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
@@ -631,20 +692,21 @@ const styles = StyleSheet.create({
   coverPlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E1B4B',
+    backgroundColor: '#20262D',
   },
   bookMeta: {
     flex: 1,
     justifyContent: 'center',
   },
   bookTitle: {
+    fontFamily: Platform.select({ web: typography.fontFamily.serif, default: 'serif' }),
     color: colors.textPrimary,
     fontSize: typography.fontSize.titleMd,
     fontWeight: typography.fontWeight.bold,
     marginBottom: 4,
   },
   bookAuthor: {
-    color: '#A5B4FC',
+    color: colors.accentBookmark,
     fontSize: typography.fontSize.caption,
     marginBottom: 6,
   },
@@ -656,8 +718,10 @@ const styles = StyleSheet.create({
   },
   importBtn: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.accentPrimary,
+    backgroundColor: colors.bgElevated,
     borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.borderMedium,
     paddingHorizontal: 14,
     paddingVertical: 7,
   },
@@ -670,7 +734,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   importBtnText: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: typography.fontSize.caption,
     fontWeight: typography.fontWeight.semibold,
   },
@@ -682,7 +746,7 @@ const styles = StyleSheet.create({
   },
   driveHeaderCard: {
     backgroundColor: colors.bgSurface,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
@@ -779,13 +843,15 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.micro,
   },
   addScannedBtn: {
-    backgroundColor: colors.accentPrimary,
+    backgroundColor: colors.bgElevated,
     borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.borderMedium,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   addScannedBtnText: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: typography.fontSize.caption,
     fontWeight: typography.fontWeight.semibold,
   },
@@ -794,7 +860,7 @@ const styles = StyleSheet.create({
   },
   customCard: {
     backgroundColor: colors.bgSurface,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.borderSubtle,

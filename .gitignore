@@ -13,6 +13,7 @@ build/
 notes*
 review.md
 post-fix-review.md
+design/
 
 # Agent Rules & Directives (Local)
 AGENTS.md

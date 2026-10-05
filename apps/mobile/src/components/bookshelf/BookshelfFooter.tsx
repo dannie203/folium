@@ -25,7 +25,7 @@ export function BookshelfFooter({ onNavigate }: BookshelfFooterProps) {
         </TouchableOpacity>
       </View>
       <Text style={styles.footerCopyright}>
-        Folium 🍃 Local-First & Zero-Knowledge E-Reader
+        {t('branding.footer')}
       </Text>
     </View>
   );

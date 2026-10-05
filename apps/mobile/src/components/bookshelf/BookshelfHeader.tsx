@@ -68,10 +68,10 @@ export function BookshelfHeader({
             accessibilityLabel={t('header.addBook')}
           >
             {isImporting ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={colors.bgBase} />
             ) : (
               <>
-                <PlusIcon size={14} color="#FFFFFF" />
+                <PlusIcon size={14} color={colors.bgBase} />
                 {isDesktop && <Text style={styles.importButtonText}>{t('header.addBook')}</Text>}
               </>
             )}
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   importButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.accentPrimary,
+    backgroundColor: '#F7F7F8',
     paddingHorizontal: 14,
     height: 38,
     borderRadius: radius.md,
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   importButtonText: {
-    color: '#FFFFFF',
+    color: colors.bgBase,
     fontWeight: typography.fontWeight.semibold,
     fontSize: typography.fontSize.body,
   },

@@ -397,10 +397,18 @@ export async function pushPendingMutations(): Promise<{
     );
   }
 
-  // Advance local cursor if server sequence is higher
+  // Advance local cursor if contiguous, or pull intervening gap if remote writes occurred
   const currentCursor = await getLastSyncedSeq();
-  if (committedSeq > currentCursor) {
+  if (committedSeq === currentCursor + 1) {
+    // Contiguous sequence: safe to advance local cursor directly
     await setLastSyncedSeq(committedSeq);
+  } else if (committedSeq > currentCursor + 1) {
+    // Remote sequence gap detected (intervening remote writes from another device)!
+    // Safely pull the intervening sequence window to prevent data loss.
+    console.log(
+      `[SyncService] Remote sequence gap detected (local: ${currentCursor}, committed: ${committedSeq}). Pulling intervening changes...`
+    );
+    await pullRemoteChanges();
   }
 
   await refreshPendingCount();
@@ -445,6 +453,13 @@ export async function pullRemoteChanges(): Promise<{
     return { pulledCount: 0, serverSeq: cursor };
   }
 
+  // Stale Cursor Defense: If server purged tombstones beyond this cursor, reset to 0 for full resync
+  if (res.status === 410) {
+    console.warn('[SyncService] Sync cursor expired on server (HTTP 410). Resetting cursor for full resync.');
+    await setLastSyncedSeq(0);
+    return pullRemoteChanges();
+  }
+
   if (!res.ok) {
     const errorText = await res.text().catch(() => '');
     throw new Error(`Sync pull failed (${res.status}): ${errorText}`);
@@ -485,7 +500,10 @@ export async function pullRemoteChanges(): Promise<{
   if (data.bookmarks && data.bookmarks.length > 0) {
     for (const b of data.bookmarks) {
       if (b.is_deleted) {
-        await db.runAsync('UPDATE bookmarks SET is_deleted = 1 WHERE id = ?', [b.id]);
+        await db.runAsync(
+          'UPDATE bookmarks SET is_deleted = 1, sync_seq = ? WHERE id = ? AND ? >= client_created_at',
+          [b.sync_seq, b.id, b.client_created_at]
+        );
       } else {
         await db.runAsync(
           `INSERT INTO bookmarks (id, book_id, cfi, title, client_created_at, is_deleted, sync_seq)
@@ -493,8 +511,10 @@ export async function pullRemoteChanges(): Promise<{
            ON CONFLICT(id) DO UPDATE SET
              title = excluded.title,
              cfi = excluded.cfi,
+             client_created_at = excluded.client_created_at,
              is_deleted = excluded.is_deleted,
-             sync_seq = excluded.sync_seq`,
+             sync_seq = excluded.sync_seq
+           WHERE excluded.client_created_at >= bookmarks.client_created_at`,
           [b.id, b.book_id, b.cfi, b.title, b.client_created_at, 0, b.sync_seq]
         );
       }
@@ -506,7 +526,10 @@ export async function pullRemoteChanges(): Promise<{
   if (data.highlights && data.highlights.length > 0) {
     for (const h of data.highlights) {
       if (h.is_deleted) {
-        await db.runAsync('UPDATE highlights SET is_deleted = 1 WHERE id = ?', [h.id]);
+        await db.runAsync(
+          'UPDATE highlights SET is_deleted = 1, sync_seq = ? WHERE id = ? AND ? >= client_created_at',
+          [h.sync_seq, h.id, h.client_created_at]
+        );
       } else {
         await db.runAsync(
           `INSERT INTO highlights (id, book_id, cfi_range, text, color, note, client_created_at, is_deleted, sync_seq)
@@ -514,8 +537,10 @@ export async function pullRemoteChanges(): Promise<{
            ON CONFLICT(id) DO UPDATE SET
              note = excluded.note,
              color = excluded.color,
+             client_created_at = excluded.client_created_at,
              is_deleted = excluded.is_deleted,
-             sync_seq = excluded.sync_seq`,
+             sync_seq = excluded.sync_seq
+           WHERE excluded.client_created_at >= highlights.client_created_at`,
           [
             h.id,
             h.book_id,
@@ -537,15 +562,20 @@ export async function pullRemoteChanges(): Promise<{
   if (data.notes && data.notes.length > 0) {
     for (const n of data.notes) {
       if (n.is_deleted) {
-        await db.runAsync('UPDATE notes SET is_deleted = 1 WHERE id = ?', [n.id]);
+        await db.runAsync(
+          'UPDATE notes SET is_deleted = 1, sync_seq = ? WHERE id = ? AND ? >= client_created_at',
+          [n.sync_seq, n.id, n.client_created_at]
+        );
       } else {
         await db.runAsync(
           `INSERT INTO notes (id, book_id, highlight_id, content, client_created_at, is_deleted, sync_seq)
            VALUES (?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              content = excluded.content,
+             client_created_at = excluded.client_created_at,
              is_deleted = excluded.is_deleted,
-             sync_seq = excluded.sync_seq`,
+             sync_seq = excluded.sync_seq
+           WHERE excluded.client_created_at >= notes.client_created_at`,
           [
             n.id,
             n.book_id,
@@ -631,11 +661,11 @@ export async function performFullSync(): Promise<{ pushed: number; pulled: numbe
   notifyListeners();
 
   try {
-    // 1. Push pending local mutations
-    const pushRes = await pushPendingMutations();
-
-    // 2. Pull incremental updates from edge
+    // 1. Pull incremental updates from edge first to ensure local DB has latest remote state
     const pullRes = await pullRemoteChanges();
+
+    // 2. Push pending local mutations
+    const pushRes = await pushPendingMutations();
 
     // 3. Mark success
     currentStatus = 'idle';

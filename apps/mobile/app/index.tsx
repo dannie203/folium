@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
+  Text,
+  Image,
+  TouchableOpacity,
   StyleSheet,
   FlatList,
   SafeAreaView,
@@ -23,7 +26,7 @@ import { BookCard } from '../src/components/BookCard';
 import { DriveSyncModal } from '../src/components/DriveSyncModal';
 import { MetadataEditModal } from '../src/components/MetadataEditModal';
 import { performFullSync, initSyncLifecycle } from '../src/services/syncService';
-import { colors, spacing } from '../src/theme/tokens';
+import { colors, spacing, typography, radius } from '../src/theme/tokens';
 import { BookshelfHeader } from '../src/components/bookshelf/BookshelfHeader';
 import { ShelfFilterChips, type FilterType } from '../src/components/bookshelf/ShelfFilterChips';
 import { EmptyBookshelf } from '../src/components/bookshelf/EmptyBookshelf';
@@ -144,6 +147,84 @@ export default function BookshelfScreen() {
     });
   }, [books, searchQuery, activeFilter, selectedShelf]);
 
+  // Derive genuinely active reading book from database (0 mock data!)
+  const activeBook = useMemo(() => {
+    if (searchQuery.trim() !== '' || activeFilter !== 'all' || selectedShelf !== 'all') {
+      return null;
+    }
+    return (
+      books.find(
+        (b) => (b.progress_percentage ?? 0) > 0 && (b.progress_percentage ?? 0) < 100
+      ) || null
+    );
+  }, [books, searchQuery, activeFilter, selectedShelf]);
+
+  const renderReadingDesk = useCallback(() => {
+    if (!activeBook) return null;
+    const progressPercent = Math.round(activeBook.progress_percentage || 0);
+
+    return (
+      <View style={styles.deskWrapper}>
+        <Text style={styles.deskHeadingLabel}>
+          {t('bookshelf.currentlyReading')}
+        </Text>
+        <TouchableOpacity
+          style={styles.deskCard}
+          activeOpacity={0.88}
+          onPress={() => handleOpenBook(activeBook)}
+        >
+          <View style={styles.deskCoverWrap}>
+            {activeBook.cover_url ? (
+              <Image
+                source={{ uri: activeBook.cover_url }}
+                style={styles.deskCoverImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.deskCoverPlaceholder}>
+                <Text style={styles.deskPlaceholderText} numberOfLines={2}>
+                  {activeBook.title}
+                </Text>
+              </View>
+            )}
+            <View style={styles.deskSpineHighlight} />
+            <View style={styles.deskSpineShadow} />
+            <View style={styles.deskProgressTrack}>
+              <View
+                style={[styles.deskProgressFill, { width: `${progressPercent}%` }]}
+              />
+            </View>
+          </View>
+
+          <View style={styles.deskDetails}>
+            <Text style={styles.deskTitle} numberOfLines={2}>
+              {activeBook.title}
+            </Text>
+            <Text style={styles.deskAuthor} numberOfLines={1}>
+              {activeBook.author || t('common.unknownAuthor')}
+            </Text>
+
+            <View style={styles.deskMetaRow}>
+              <Text style={styles.deskProgressText}>
+                {t('bookshelf.readProgress', { percent: progressPercent })}
+              </Text>
+              <Text style={styles.deskDot}>·</Text>
+              <Text style={styles.deskFormatText}>
+                {activeBook.file_type.toUpperCase()}
+              </Text>
+            </View>
+
+            <View style={styles.deskActionBtn}>
+              <Text style={styles.deskActionBtnText}>
+                {t('bookshelf.continueReading')}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  }, [activeBook, t]);
+
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
@@ -169,6 +250,7 @@ export default function BookshelfScreen() {
         activeFilter={activeFilter}
         onSelectShelf={setSelectedShelf}
         onSelectFilter={setActiveFilter}
+        isDesktop={isDesktop}
       />
 
       {filteredBooks.length === 0 ? (
@@ -176,6 +258,8 @@ export default function BookshelfScreen() {
           isLibraryEmpty={books.length === 0}
           isImporting={isImporting}
           onImport={handleImport}
+          onOpenCommunity={() => router.push('/community' as any)}
+          onOpenDriveModal={() => setIsDriveModalOpen(true)}
         />
       ) : (
         <FlatList
@@ -183,6 +267,7 @@ export default function BookshelfScreen() {
           data={filteredBooks}
           keyExtractor={(item) => item.id}
           numColumns={isDesktop ? 4 : 2}
+          ListHeaderComponent={renderReadingDesk}
           renderItem={({ item }) => (
             <BookCard
               book={item}
@@ -200,7 +285,9 @@ export default function BookshelfScreen() {
             />
           }
           ListFooterComponent={
-            <BookshelfFooter onNavigate={(route) => router.push(route as any)} />
+            isDesktop ? undefined : (
+              <BookshelfFooter onNavigate={(route) => router.push(route as any)} />
+            )
           }
         />
       )}
@@ -208,6 +295,7 @@ export default function BookshelfScreen() {
       {!isDesktop && (
         <BottomTabBar
           activeTab="shelf"
+          onOpenShelf={() => setSelectedShelf('all')}
           onOpenCommunity={() => router.push('/community' as any)}
           onOpenSettings={() => router.push('/settings' as any)}
         />
@@ -283,5 +371,141 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
     paddingBottom: 72,
+  },
+  deskWrapper: {
+    paddingHorizontal: 8,
+    marginBottom: spacing.xl,
+    marginTop: spacing.xs,
+  },
+  deskHeadingLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+  },
+  deskCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bgSurface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  deskCoverWrap: {
+    width: 72,
+    aspectRatio: 1 / 1.5,
+    borderTopLeftRadius: 2,
+    borderBottomLeftRadius: 2,
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
+    backgroundColor: '#1E202B',
+    position: 'relative',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.borderHairline,
+    boxShadow: '0 4px 14px rgba(0, 0, 0, 0.45)',
+  } as any,
+  deskCoverImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  deskCoverPlaceholder: {
+    flex: 1,
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deskPlaceholderText: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  deskSpineHighlight: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    zIndex: 5,
+  },
+  deskSpineShadow: {
+    position: 'absolute',
+    left: 2,
+    top: 0,
+    bottom: 0,
+    width: 5,
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
+    zIndex: 4,
+  },
+  deskProgressTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 3,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    zIndex: 8,
+  },
+  deskProgressFill: {
+    height: '100%',
+    backgroundColor: colors.accentBookmark,
+  },
+  deskDetails: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  deskTitle: {
+    fontFamily: Platform.select({ web: typography.fontFamily.serif, default: 'serif' }),
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: '400',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  deskAuthor: {
+    fontSize: 12.5,
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  deskMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  deskProgressText: {
+    fontSize: 12,
+    color: colors.accentBookmark,
+    fontWeight: '500',
+  },
+  deskDot: {
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  deskFormatText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: '600',
+  },
+  deskActionBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#F7F7F8',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: radius.sm,
+  },
+  deskActionBtnText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#0A0A0C',
   },
 });

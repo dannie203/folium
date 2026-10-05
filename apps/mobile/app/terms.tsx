@@ -11,7 +11,7 @@ import {
 import { useRouter, Stack } from 'expo-router';
 import { colors, typography, spacing, radius } from '../src/theme/tokens';
 import { ChevronLeftIcon, FoliumLeafIcon } from '../src/components/icons/Icons';
-import { useI18n } from '../src/i18n';
+import { useI18n, type TranslationKey } from '../src/i18n';
 
 export default function TermsAndDMCAScreen() {
   const router = useRouter();
@@ -51,15 +51,12 @@ export default function TermsAndDMCAScreen() {
           <View style={styles.header}>
             <View style={styles.badgeRow}>
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>PHÁP LÝ • DMCA § 512</Text>
+                <Text style={styles.badgeText}>{t('terms.badge')}</Text>
               </View>
-              <Text style={styles.metaText}>Cập nhật: 19/09/2026</Text>
+              <Text style={styles.metaText}>{t('terms.updated')}</Text>
             </View>
-            <Text style={styles.title}>Điều Khoản Dịch Vụ & Bản Quyền</Text>
-            <Text style={styles.subtitle}>
-              Folium là công cụ đọc sách điện tử mã nguồn mở, hoạt động theo mô hình Local-First và Zero-Knowledge.
-              Chúng tôi tôn trọng quyền tác giả và tuân thủ các quy chuẩn bảo vệ bản quyền quốc tế.
-            </Text>
+            <Text style={styles.title}>{t('terms.title')}</Text>
+            <Text style={styles.subtitle}>{t('terms.subtitle')}</Text>
           </View>
 
           {/* Section 1 */}
@@ -68,18 +65,11 @@ export default function TermsAndDMCAScreen() {
               <View style={styles.sectionNumber}>
                 <Text style={styles.sectionNumberText}>01</Text>
               </View>
-              <Text style={styles.sectionTitle}>Bản chất Phần mềm: Trình Đọc Trung Lập</Text>
+              <Text style={styles.sectionTitle}>{t('terms.section1Title')}</Text>
             </View>
-            <Text style={styles.paragraph}>
-              Folium hoạt động tương tự như một trình duyệt web (Chrome, Firefox) hoặc trình phát đa phương tiện
-              (VLC Media Player). Ứng dụng cung cấp giao diện hiển thị tài liệu cục bộ (EPUB, PDF) do người dùng
-              tự chọn nạp vào từ thiết bị cá nhân.
-            </Text>
+            <Text style={styles.paragraph}>{t('terms.section1Paragraph')}</Text>
             <View style={styles.calloutBox}>
-              <Text style={styles.calloutText}>
-                Đội ngũ Folium <Text style={styles.boldWhite}>KHÔNG sở hữu, KHÔNG phân phối, KHÔNG tải lên và KHÔNG lưu trữ</Text> bất
-                kỳ tác phẩm sách thương mại có bản quyền nào trên máy chủ của chúng tôi.
-              </Text>
+              <Text style={styles.calloutText}>{t('terms.section1Callout')}</Text>
             </View>
           </View>
 
@@ -89,16 +79,10 @@ export default function TermsAndDMCAScreen() {
               <View style={styles.sectionNumber}>
                 <Text style={styles.sectionNumberText}>02</Text>
               </View>
-              <Text style={styles.sectionTitle}>Miễn Trừ Trách Nhiệm DMCA (Safe Harbor)</Text>
+              <Text style={styles.sectionTitle}>{t('terms.section2Title')}</Text>
             </View>
-            <Text style={styles.paragraph}>
-              Căn cứ theo Đạo luật Bản quyền Kỹ thuật số Thiên niên kỷ (DMCA - 17 U.S.C. § 512) và các điều ước quốc tế liên quan:
-            </Text>
-            <Text style={styles.paragraph}>
-              Folium được miễn trừ trách nhiệm pháp lý đối với dữ liệu người dùng tự lưu trữ trên bộ nhớ máy hoặc
-              tài khoản Google Drive cá nhân của họ. Với kiến trúc Zero-Knowledge, toàn bộ dữ liệu đồng bộ được mã hoá
-              đầu cuối (E2EE), chúng tôi hoàn toàn không thể xem hoặc can thiệp vào nội dung sách của người dùng.
-            </Text>
+            <Text style={styles.paragraph}>{t('terms.section2Paragraph1')}</Text>
+            <Text style={styles.paragraph}>{t('terms.section2Paragraph2')}</Text>
           </View>
 
           {/* Section 3 */}
@@ -107,41 +91,36 @@ export default function TermsAndDMCAScreen() {
               <View style={styles.sectionNumber}>
                 <Text style={styles.sectionNumberText}>03</Text>
               </View>
-              <Text style={styles.sectionTitle}>Quy Trình Tiếp Nhận Khiếu Nại (Notice & Takedown)</Text>
+              <Text style={styles.sectionTitle}>{t('terms.section3Title')}</Text>
             </View>
-            <Text style={styles.paragraph}>
-              Nếu bạn là chủ sở hữu quyền tác giả hoặc đại diện pháp lý và phát hiện đường dẫn feed OPDS công khai
-              nào vi phạm bản quyền trên trang cộng đồng, vui lòng gửi văn bản yêu cầu gỡ bỏ bao gồm:
-            </Text>
+            <Text style={styles.paragraph}>{t('terms.section3Paragraph')}</Text>
 
             <View style={styles.bulletList}>
               <View style={styles.bulletItem}>
                 <View style={styles.bulletDot} />
-                <Text style={styles.bulletText}>Chữ ký điện tử hoặc chữ ký vật lý của người đại diện có thẩm quyền.</Text>
+                <Text style={styles.bulletText}>{t('terms.bullet1')}</Text>
               </View>
               <View style={styles.bulletItem}>
                 <View style={styles.bulletDot} />
-                <Text style={styles.bulletText}>Mô tả chi tiết tác phẩm có bản quyền bị nghi ngờ xâm phạm.</Text>
+                <Text style={styles.bulletText}>{t('terms.bullet2')}</Text>
               </View>
               <View style={styles.bulletItem}>
                 <View style={styles.bulletDot} />
-                <Text style={styles.bulletText}>Đường dẫn liên kết (URL / feed feed) cụ thể cần gỡ bỏ.</Text>
+                <Text style={styles.bulletText}>{t('terms.bullet3')}</Text>
               </View>
               <View style={styles.bulletItem}>
                 <View style={styles.bulletDot} />
-                <Text style={styles.bulletText}>Thông tin liên hệ xác thực (Email, điện thoại, địa chỉ pháp lý).</Text>
+                <Text style={styles.bulletText}>{t('terms.bullet4')}</Text>
               </View>
             </View>
 
             <View style={styles.contactCard}>
-              <Text style={styles.contactTitle}>Đầu mối tiếp nhận khiếu nại bản quyền:</Text>
+              <Text style={styles.contactTitle}>{t('terms.contactTitle')}</Text>
               <Text style={styles.contactEmail}>dmca@aki.is-a.dev</Text>
-              <Text style={styles.contactNote}>
-                Hoặc tạo Issue trực tiếp tại kho mã nguồn GitHub: github.com/dannie203/folium
-              </Text>
+              <Text style={styles.contactNote}>{t('terms.contactNote')}</Text>
             </View>
             <Text style={styles.paragraphFootnote}>
-              Chúng tôi cam kết rà soát và xử lý gỡ bỏ các liên kết vi phạm trong vòng 24–48 giờ làm việc.
+              {t('terms.footnote')}
             </Text>
           </View>
 
@@ -151,14 +130,28 @@ export default function TermsAndDMCAScreen() {
               <View style={styles.sectionNumber}>
                 <Text style={styles.sectionNumberText}>04</Text>
               </View>
-              <Text style={styles.sectionTitle}>Miễn Trừ Bảo Đảm (No Warranty)</Text>
+              <Text style={styles.sectionTitle}>{t('terms.section4Title')}</Text>
             </View>
-            <Text style={styles.paragraph}>
-              Phần mềm được phát hành theo giấy phép mã nguồn mở phi thương mại "NGUYÊN TRẠNG" (AS IS). Đội ngũ phát
-              triển không chịu trách nhiệm đối với bất kỳ sự cố mất mát dữ liệu hoặc tranh chấp quyền tác giả nào phát
-              sinh do phía người dùng tự cấu hình.
-            </Text>
+            <Text style={styles.paragraph}>{t('terms.section4Paragraph')}</Text>
           </View>
+
+          {/* Sections 5-8 */}
+          {[
+            ['05', 'terms.section5Title', 'terms.section5Paragraph'],
+            ['06', 'terms.section6Title', 'terms.section6Paragraph'],
+            ['07', 'terms.section7Title', 'terms.section7Paragraph'],
+            ['08', 'terms.section8Title', 'terms.section8Paragraph'],
+          ].map(([number, titleKey, paragraphKey]) => (
+            <View key={number} style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionNumber}>
+                  <Text style={styles.sectionNumberText}>{number}</Text>
+                </View>
+                <Text style={styles.sectionTitle}>{t(titleKey as TranslationKey)}</Text>
+              </View>
+              <Text style={styles.paragraph}>{t(paragraphKey as TranslationKey)}</Text>
+            </View>
+          ))}
 
           {/* Bottom Back Button */}
           <TouchableOpacity

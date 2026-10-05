@@ -291,11 +291,16 @@ const STANDARD_EBOOKS_FALLBACK_FEED = `<?xml version="1.0" encoding="utf-8"?>
 // Proxy only the allowlisted official OPDS feeds so web clients are not blocked by CORS.
 app.get('/api/community/opds', async (c) => {
   const source = c.req.query('source');
-  const feedUrl = source ? OFFICIAL_OPDS_FEEDS[source] : undefined;
-  if (!feedUrl) return c.json({ error: 'Unknown OPDS source' }, 400);
+  const query = c.req.query('q')?.trim() || '';
+  const configuredFeedUrl = source ? OFFICIAL_OPDS_FEEDS[source] : undefined;
+  if (!configuredFeedUrl) return c.json({ error: 'Unknown OPDS source' }, 400);
+  const feedUrl = new URL(configuredFeedUrl);
+  if (source === 'project_gutenberg' && query) {
+    feedUrl.searchParams.set('query', query);
+  }
 
   try {
-    const response = await fetch(feedUrl, {
+    const response = await fetch(feedUrl.toString(), {
       redirect: 'follow',
       headers: {
         Accept: 'application/atom+xml, application/xml, text/xml, */*',
@@ -619,7 +624,8 @@ app.post('/api/sync/push', async (c) => {
                  is_deleted = excluded.is_deleted,
                  deleted_at = excluded.deleted_at,
                  sync_seq = excluded.sync_seq
-               WHERE bookmarks.user_id = excluded.user_id`
+               WHERE bookmarks.user_id = excluded.user_id
+                 AND excluded.client_created_at >= bookmarks.client_created_at`
             )
             .bind(
               b.id,
@@ -663,7 +669,8 @@ app.post('/api/sync/push', async (c) => {
                  is_deleted = excluded.is_deleted,
                  deleted_at = excluded.deleted_at,
                  sync_seq = excluded.sync_seq
-               WHERE highlights.user_id = excluded.user_id`
+               WHERE highlights.user_id = excluded.user_id
+                 AND excluded.client_created_at >= highlights.client_created_at`
             )
             .bind(
               h.id,
@@ -705,7 +712,8 @@ app.post('/api/sync/push', async (c) => {
                  is_deleted = excluded.is_deleted,
                  deleted_at = excluded.deleted_at,
                  sync_seq = excluded.sync_seq
-               WHERE notes.user_id = excluded.user_id`
+               WHERE notes.user_id = excluded.user_id
+                 AND excluded.client_created_at >= notes.client_created_at`
             )
             .bind(
               n.id,
@@ -727,6 +735,39 @@ app.post('/api/sync/push', async (c) => {
     // Purges tombstones older than 30 days during sync cycles
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const gcThreshold = now - THIRTY_DAYS_MS;
+
+    try {
+      const maxPurged = await db
+        .prepare(`
+          SELECT MAX(seq) as max_seq FROM (
+            SELECT sync_seq as seq FROM books WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM reading_progress WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM bookmarks WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM highlights WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM notes WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+          )
+        `)
+        .bind(userId, gcThreshold, userId, gcThreshold, userId, gcThreshold, userId, gcThreshold, userId, gcThreshold)
+        .first<{ max_seq: number | null }>();
+
+      if (maxPurged?.max_seq && maxPurged.max_seq > 0) {
+        statements.push(
+          db
+            .prepare(
+              `UPDATE user_sync_sequence
+               SET gc_watermark_seq = CASE WHEN ? > COALESCE(gc_watermark_seq, 0) THEN ? ELSE gc_watermark_seq END
+               WHERE user_id = ?`
+            )
+            .bind(maxPurged.max_seq, maxPurged.max_seq, userId)
+        );
+      }
+    } catch {
+      // Column may not exist yet if migration 0003 is pending
+    }
 
     statements.push(
       db.prepare('DELETE FROM books WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
@@ -769,13 +810,51 @@ app.post('/api/sync/gc', async (c) => {
     const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
     const gcThreshold = now - THIRTY_DAYS_MS;
 
-    await db.batch([
+    let maxPurgedSeq = 0;
+    try {
+      const maxPurged = await db
+        .prepare(`
+          SELECT MAX(seq) as max_seq FROM (
+            SELECT sync_seq as seq FROM books WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM reading_progress WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM bookmarks WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM highlights WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+            UNION ALL
+            SELECT sync_seq as seq FROM notes WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?
+          )
+        `)
+        .bind(userId, gcThreshold, userId, gcThreshold, userId, gcThreshold, userId, gcThreshold, userId, gcThreshold)
+        .first<{ max_seq: number | null }>();
+      maxPurgedSeq = maxPurged?.max_seq ?? 0;
+    } catch {
+      // Column or table query fallback
+    }
+
+    const gcStatements: D1PreparedStatement[] = [];
+    if (maxPurgedSeq > 0) {
+      gcStatements.push(
+        db
+          .prepare(
+            `UPDATE user_sync_sequence
+             SET gc_watermark_seq = CASE WHEN ? > COALESCE(gc_watermark_seq, 0) THEN ? ELSE gc_watermark_seq END
+             WHERE user_id = ?`
+          )
+          .bind(maxPurgedSeq, maxPurgedSeq, userId)
+      );
+    }
+
+    gcStatements.push(
       db.prepare('DELETE FROM books WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
       db.prepare('DELETE FROM reading_progress WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
       db.prepare('DELETE FROM bookmarks WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
       db.prepare('DELETE FROM highlights WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
-      db.prepare('DELETE FROM notes WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold),
-    ]);
+      db.prepare('DELETE FROM notes WHERE user_id = ? AND is_deleted = 1 AND deleted_at IS NOT NULL AND deleted_at < ?').bind(userId, gcThreshold)
+    );
+
+    await db.batch(gcStatements);
 
     return c.json({
       status: 'ok',
@@ -799,12 +878,38 @@ app.get('/api/sync/pull', async (c) => {
     const since = parseInt(c.req.query('since') || '0', 10);
     const ifNoneMatch = c.req.header('if-none-match');
 
-    const seqRow = await db
-      .prepare('SELECT current_seq FROM user_sync_sequence WHERE user_id = ?')
-      .bind(userId)
-      .first<{ current_seq: number }>();
+    let seqRow: { current_seq: number; gc_watermark_seq?: number } | null = null;
+    try {
+      seqRow = await db
+        .prepare('SELECT current_seq, gc_watermark_seq FROM user_sync_sequence WHERE user_id = ?')
+        .bind(userId)
+        .first<{ current_seq: number; gc_watermark_seq?: number }>();
+    } catch {
+      seqRow = await db
+        .prepare('SELECT current_seq FROM user_sync_sequence WHERE user_id = ?')
+        .bind(userId)
+        .first<{ current_seq: number }>();
+    }
 
     const currentServerSeq = seqRow?.current_seq ?? 0;
+    const gcWatermarkSeq = seqRow?.gc_watermark_seq ?? 0;
+
+    // Stale Cursor Defense: If client cursor is older than GC watermark,
+    // tombstones prior to this cursor were permanently purged.
+    // Client cannot safely compute diff without risking data resurrection.
+    // Return HTTP 410 Gone to force a full re-sync.
+    if (gcWatermarkSeq > 0 && since > 0 && since < gcWatermarkSeq) {
+      return c.json(
+        {
+          error: 'Sync cursor expired. Tombstones older than cursor were purged.',
+          code: 'CURSOR_EXPIRED',
+          server_sync_seq: currentServerSeq,
+          gc_watermark_seq: gcWatermarkSeq,
+        },
+        410
+      );
+    }
+
     const etag = `W/"${currentServerSeq}"`;
 
     // 100k Writes/Day & Reads Quota Defense:
