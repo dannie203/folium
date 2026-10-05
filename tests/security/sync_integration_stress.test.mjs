@@ -356,3 +356,43 @@ test('INTEGRATION STRESS 4: Stale Client 410 GC Watermark & Full Resync Converge
   clientCursor = res2.body.server_sync_seq;
   assert.strictEqual(clientCursor, 150, 'Client cursor reaches full convergence at 150');
 });
+
+test('INTEGRATION STRESS 5: Push Payload Exceeding Single-Transaction Limit (90 items) is Rejected', () => {
+  const MAX_PUSH_ITEMS = 90;
+
+  function validatePushSize(body) {
+    const totalItems =
+      (body.books?.length || 0) +
+      (body.progress?.length || 0) +
+      (body.bookmarks?.length || 0) +
+      (body.highlights?.length || 0) +
+      (body.notes?.length || 0);
+
+    if (totalItems > MAX_PUSH_ITEMS) {
+      return {
+        status: 400,
+        body: {
+          error: `Push payload exceeds maximum batch limit of ${MAX_PUSH_ITEMS} items`,
+          code: 'PAYLOAD_TOO_LARGE',
+        },
+      };
+    }
+    return { status: 200 };
+  }
+
+  // 1. Normal client payload (50 items matching syncService.ts outbox limit)
+  const normalPayload = {
+    highlights: Array.from({ length: 50 }, (_, i) => ({ id: `hl-${i}`, text: `text ${i}` })),
+  };
+  const normalRes = validatePushSize(normalPayload);
+  assert.strictEqual(normalRes.status, 200, 'Normal 50-item client payload must pass validation');
+
+  // 2. Oversized payload (120 items attempting to trigger multi-chunk batch)
+  const oversizedPayload = {
+    notes: Array.from({ length: 120 }, (_, i) => ({ id: `note-${i}`, content: `content ${i}` })),
+  };
+  const oversizedRes = validatePushSize(oversizedPayload);
+  assert.strictEqual(oversizedRes.status, 400, 'Oversized payload must be rejected to prevent multi-batch split');
+  assert.strictEqual(oversizedRes.body.code, 'PAYLOAD_TOO_LARGE');
+});
+

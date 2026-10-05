@@ -489,6 +489,29 @@ app.post('/api/sync/push', async (c) => {
       return c.json({ error: 'Invalid JSON payload' }, 400);
     }
 
+    const totalItems =
+      (body.books?.length || 0) +
+      (body.progress?.length || 0) +
+      (body.bookmarks?.length || 0) +
+      (body.highlights?.length || 0) +
+      (body.notes?.length || 0);
+
+    // D1 Single-Transaction Atomicity Invariant:
+    // Cloudflare D1 executes each db.batch() in a separate transaction (limit 100 statements).
+    // Client outbox is hard-capped at 50 items (syncService.ts:215).
+    // Enforce MAX_PUSH_ITEMS = 90 so that sequence advance (1) + mutations (<=90) + GC (<=6)
+    // always sum to <= 97 statements, guaranteeing execution in a single atomic transaction.
+    const MAX_PUSH_ITEMS = 90;
+    if (totalItems > MAX_PUSH_ITEMS) {
+      return c.json(
+        {
+          error: `Push payload exceeds maximum batch limit of ${MAX_PUSH_ITEMS} items (${totalItems} received). Split into smaller batches.`,
+          code: 'PAYLOAD_TOO_LARGE',
+        },
+        400
+      );
+    }
+
     const now = Date.now();
 
     // 1. Calculate next monotonic sequence for this user
