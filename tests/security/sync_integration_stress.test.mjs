@@ -204,7 +204,7 @@ test('INTEGRATION STRESS 2: Real End-to-End Gap Recovery Lifecycle with SQLite',
   outboxStmt.free();
 });
 
-test('INTEGRATION STRESS 3: 50 Concurrent Push Operations Sequence & Convergence Stress', async () => {
+test('INTEGRATION STRESS 3: 50 Serialized Transactional Pushes Simulation with sql.js (Sequence Continuity & Convergence)', async () => {
   const SQL = await initSqlJs();
   const serverDb = new SQL.Database();
 
@@ -387,12 +387,19 @@ test('INTEGRATION STRESS 5: Push Payload Exceeding Single-Transaction Limit (90 
   const normalRes = validatePushSize(normalPayload);
   assert.strictEqual(normalRes.status, 200, 'Normal 50-item client payload must pass validation');
 
-  // 2. Oversized payload (120 items attempting to trigger multi-chunk batch)
-  const oversizedPayload = {
-    notes: Array.from({ length: 120 }, (_, i) => ({ id: `note-${i}`, content: `content ${i}` })),
+  // 2. Exact boundary payload (90 items — chosen safety margin headroom)
+  const boundaryPayload = {
+    notes: Array.from({ length: 90 }, (_, i) => ({ id: `note-${i}`, content: `content ${i}` })),
   };
-  const oversizedRes = validatePushSize(oversizedPayload);
-  assert.strictEqual(oversizedRes.status, 400, 'Oversized payload must be rejected to prevent multi-batch split');
-  assert.strictEqual(oversizedRes.body.code, 'PAYLOAD_TOO_LARGE');
+  const boundaryRes = validatePushSize(boundaryPayload);
+  assert.strictEqual(boundaryRes.status, 200, 'Exact boundary payload (90 items) must be accepted');
+
+  // 3. Boundary + 1 payload (91 items — exceeds chosen safety margin)
+  const overBoundaryPayload = {
+    notes: Array.from({ length: 91 }, (_, i) => ({ id: `note-${i}`, content: `content ${i}` })),
+  };
+  const overBoundaryRes = validatePushSize(overBoundaryPayload);
+  assert.strictEqual(overBoundaryRes.status, 400, 'Boundary + 1 payload (91 items) must be rejected');
+  assert.strictEqual(overBoundaryRes.body.code, 'PAYLOAD_TOO_LARGE');
 });
 
