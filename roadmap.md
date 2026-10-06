@@ -90,6 +90,10 @@
 
 - [x] **Inlined Mozilla `pdf.js` Engine**: Client-side blob worker rendering with CSP immunity.
 - [x] **High-DPI Canvas Rendering**: Automatic viewport scaling using `window.devicePixelRatio` compensation for razor-sharp text on Retina/4K displays.
+- [x] **PDF Annotation & Selection Parity**:
+  - Real-time text selection layer overlaying rendered PDF canvas.
+  - Scale-invariant normalized highlight overlays (`page:N:...`) matching EPUB capabilities.
+  - 5-color palette (Yellow, Green, Blue, Pink, Purple) and sticky notes integration in reader drawer.
 - [x] **Desktop Reading Ergonomics**:
   - Keyboard navigation: `←` / `→` or `Space` / `PageUp` / `PageDown` for instant page turns.
   - Dynamic zoom: `+` / `-` font and canvas scaling.
@@ -111,18 +115,18 @@
 
 ---
 
-### Phase 6: Bookmarks, Highlights, Notes & Full-Text Search (FTS5) ✅
+### Phase 6: Bookmarks, Highlights, Notes & Substring / Full-Text Search ✅
 *Status: Completed (`ee315f4`)*
 
-- [x] **Reader Annotation UI**:
-  - Selection toolbar on text highlight with 4 distinct color palettes (Yellow, Green, Blue, Pink).
-  - Inline sticky notes linked to EPUB CFI coordinates and PDF text positions.
+- [x] **Reader Annotation UI & Feature Parity**:
+  - Selection toolbar on text highlight across both EPUB and PDF engines with 5 distinct color palettes (Yellow `#FACC15`, Green `#4ADE80`, Blue `#60A5FA`, Pink `#F472B6`, Purple `#C084FC`).
+  - Inline sticky notes linked to EPUB CFI coordinates and PDF normalized page coordinates (`page:N:...`).
 - [x] **Visual Bookmark Manager**:
   - Instant bookmark toggle (`Ctrl+D` / ribbon button).
   - Drawer list of bookmarks with snippet quotes and timestamp history.
-- [x] **On-Device SQLite FTS5 Search**:
-  - Indexing user notes, highlights, and book metadata into SQLite FTS5 virtual tables.
-  - Instant sub-millisecond search across the entire personal annotation library.
+- [x] **On-Device Annotation Search**:
+  - Fast indexed SQLite search across user notes, highlights, bookmarks, and book metadata using substring queries (`LIKE '%query%'`).
+  - Architecture ready for SQLite FTS5 virtual tables for large library indexing.
 - [x] **On-Demand In-Book Text Search**:
   - Chunked chapter-by-chapter text search to prevent memory exhaustion on mobile devices.
 
@@ -160,10 +164,11 @@
   - Query Google Drive files to detect newly added or deleted book files across devices.
 - [x] **Chunked & Multipart Streaming**:
   - Multipart upload protocol for massive EPUBs and PDFs.
-- [x] **Folium Zero-Knowledge Information Locking ("Cơ Chế Khóa Thông Tin")**:
-  - **Client-Side AES-256-GCM Vault**: WebCrypto / PBKDF2 client-side encryption of user reading progress, bookmarks, private notes, and shelf metadata *before* network transmission.
-  - **Zero-Knowledge D1 Cloud Architecture**: Cloudflare D1 and sync workers store exclusively blind, opaque ciphertext blobs. The server never receives or holds decryption keys, guaranteeing zero exposure even under server breach or legal subpoena.
-  - **Sandboxed Reader Execution Shield**: Hardened iframe/WebView isolation with strict Content Security Policy (CSP) and restricted permissions (`sandbox="allow-same-origin"`), prohibiting untrusted embedded EPUB scripts from accessing OPFS, IndexedDB, local SQLite tokens, or making outbound network leaks.
+- [x] **Folium Cryptographic Vault & Privacy Architecture**:
+  - **Client-Side AES-256-GCM Primitives**: Standalone WebCrypto / PBKDF2 client-side vault foundation for encrypting sensitive user reading notes and personal data.
+  - **D1 Cloud Sync Security & Scope**: Cloudflare D1 edge synchronization operates over TLS-in-transit with server-side validation and account isolation (Google ID Token RS256 JWKS authentication). Note: Metadata (progress, bookmarks, highlights, notes) is stored in structured relational format on D1 to support LWW conflict resolution; full blind E2EE envelope encryption across D1 is designed for Phase 11.
+  - **Sandboxed Reader Execution Shield**: Hardened iframe/WebView isolation with strict Content Security Policy (`connect-src 'none'`) and restricted sandbox (`sandbox="allow-scripts"` exiled to null origin), prohibiting untrusted embedded scripts from accessing OPFS, IndexedDB, local SQLite tokens, or making outbound network leaks.
+  - **Google Drive Storage Isolation**: Uploads use opaque UUID filenames to prevent file-level snooping on storage buckets, with shelf/title metadata encapsulated in `appProperties`.
   - **Local Biometric & PIN App Lock**: On-device biometric authentication (`expo-local-authentication` - FaceID / Fingerprint / PIN) to lock private bookshelves and sensitive reading material.
 - [x] **Public Cryptographic Proof Snippet (Kerckhoffs's Principle)**:
   - Standalone, zero-dependency browser/Node audit snippet published publicly on `/security` and GitHub.

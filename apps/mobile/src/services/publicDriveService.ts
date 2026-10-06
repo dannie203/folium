@@ -185,3 +185,52 @@ export async function importScannedDriveBook(
 
   return newBook;
 }
+
+/**
+ * On-demand download and cache of a Google Drive book (resolves lazy `drive://` paths).
+ * Validates bytes via Storage Armor, stores in IndexedDB (Web) or local filesystem (Native),
+ * updates local SQLite record, and returns the resolved buffer/path.
+ */
+export async function downloadAndCacheDriveBook(book: Book): Promise<{ buffer?: ArrayBuffer; localPath: string }> {
+  const driveFileId = book.drive_file_id || (book.local_path?.startsWith('drive://') ? book.local_path.replace('drive://', '') : null);
+  if (!driveFileId) {
+    throw new Error('Không tìm thấy Google Drive File ID cho sách này.');
+  }
+
+  const user = getCurrentUser();
+  if (!user || user.accessToken.startsWith('demo_')) {
+    throw new Error('Cần đăng nhập Google thật để tải sách từ Google Drive.');
+  }
+
+  const downloadUrl = `${DRIVE_API_BASE}/files/${driveFileId}?alt=media`;
+  const resp = await fetch(downloadUrl, {
+    headers: { Authorization: `Bearer ${user.accessToken}` },
+  });
+
+  if (!resp.ok) {
+    throw new Error(`Lỗi tải sách từ Google Drive (${resp.status}): ${resp.statusText}`);
+  }
+
+  const buffer = await resp.arrayBuffer();
+  validateBookBytes(buffer, book.file_type);
+
+  let newLocalPath: string;
+  if (Platform.OS === 'web') {
+    await saveWebBook(book.id, buffer);
+    newLocalPath = `indexeddb://${book.id}`;
+  } else {
+    const blob = new Blob([buffer]);
+    const blobUrl = URL.createObjectURL(blob);
+    newLocalPath = await saveBookFile(book.id, blobUrl, book.file_type);
+  }
+
+  const db = await getDatabase();
+  await db.runAsync('UPDATE books SET local_path = ?, updated_at = ? WHERE id = ?', [
+    newLocalPath,
+    Date.now(),
+    book.id,
+  ]);
+
+  return { buffer, localPath: newLocalPath };
+}
+
