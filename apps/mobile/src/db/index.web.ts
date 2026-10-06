@@ -125,6 +125,9 @@ export class WebSqliteDatabase implements SQLiteDatabaseLike {
     try {
       this.db.run("ALTER TABLE books ADD COLUMN deleted_at INTEGER;");
     } catch {}
+    try {
+      this.db.run("ALTER TABLE books ADD COLUMN sync_seq INTEGER NOT NULL DEFAULT 0;");
+    } catch {}
 
     // Register beforeunload and visibilitychange listeners to prevent data loss on tab close/switch
     if (typeof window !== 'undefined') {

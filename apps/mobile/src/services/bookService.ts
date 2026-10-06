@@ -136,6 +136,7 @@ export async function getBooksWithProgress(): Promise<BookWithProgress[]> {
     `SELECT b.*, COALESCE(p.percentage, 0) as progress_percentage, p.cfi as last_cfi
      FROM books b
      LEFT JOIN reading_progress p ON b.id = p.book_id AND p.is_deleted = 0
+     WHERE b.is_deleted = 0
      ORDER BY b.updated_at DESC`
   );
 
@@ -231,6 +232,7 @@ export async function deleteBook(
   options?: { skipDriveTrash?: boolean }
 ): Promise<void> {
   const db = await getDatabase();
+  const now = Date.now();
 
   const book = await db.getFirstAsync<{
     local_path: string | null;
@@ -239,7 +241,8 @@ export async function deleteBook(
     file_type?: string;
     file_size?: number;
     drive_file_id?: string | null;
-  }>('SELECT local_path, title, author, file_type, file_size, drive_file_id FROM books WHERE id = ?', [bookId]);
+    updated_at?: number;
+  }>('SELECT local_path, title, author, file_type, file_size, drive_file_id, updated_at FROM books WHERE id = ?', [bookId]);
 
   const progressRows = await db.getAllAsync<{ id: string; book_id: string }>(
     'SELECT id, book_id FROM reading_progress WHERE book_id = ?',
@@ -269,14 +272,17 @@ export async function deleteBook(
     );
   }
 
-  // Delete records in SQLite
-  await db.runAsync('DELETE FROM reading_progress WHERE book_id = ?', [bookId]);
-  await db.runAsync('DELETE FROM bookmarks WHERE book_id = ?', [bookId]);
-  await db.runAsync('DELETE FROM highlights WHERE book_id = ?', [bookId]);
-  await db.runAsync('DELETE FROM notes WHERE book_id = ?', [bookId]);
-  await db.runAsync('DELETE FROM books WHERE id = ?', [bookId]);
+  // Soft delete records in SQLite with LWW clock advance to prevent resurrection
+  await db.runAsync('UPDATE reading_progress SET is_deleted = 1, client_updated_at = ? WHERE book_id = ?', [now, bookId]);
+  await db.runAsync('UPDATE bookmarks SET is_deleted = 1 WHERE book_id = ?', [bookId]);
+  await db.runAsync('UPDATE highlights SET is_deleted = 1 WHERE book_id = ?', [bookId]);
+  await db.runAsync('UPDATE notes SET is_deleted = 1 WHERE book_id = ?', [bookId]);
+  await db.runAsync(
+    'UPDATE books SET is_deleted = 1, deleted_at = ?, updated_at = ? WHERE id = ? AND ? >= updated_at',
+    [now, now, bookId, now]
+  );
 
-  // Track deletion in sync_outbox for future D1 synchronization
+  // Track deletion in sync_outbox with explicit logical timestamps
   await queueMutation('book', bookId, {
     id: bookId,
     title: book?.title || 'Untitled',
@@ -284,12 +290,17 @@ export async function deleteBook(
     file_type: book?.file_type || 'epub',
     file_size: book?.file_size || 0,
     is_deleted: true,
+    deleted_at: now,
+    updated_at: now,
+    client_updated_at: now,
   });
   for (const row of progressRows) {
     await queueMutation('progress', row.id, {
       id: row.id,
       book_id: row.book_id,
       is_deleted: true,
+      client_updated_at: now,
+      deleted_at: now,
     });
   }
   for (const row of bookmarkRows) {
@@ -297,6 +308,7 @@ export async function deleteBook(
       id: row.id,
       book_id: row.book_id,
       is_deleted: true,
+      deleted_at: now,
     });
   }
   for (const row of highlightRows) {
@@ -304,6 +316,7 @@ export async function deleteBook(
       id: row.id,
       book_id: row.book_id,
       is_deleted: true,
+      deleted_at: now,
     });
   }
   for (const row of noteRows) {
@@ -311,6 +324,7 @@ export async function deleteBook(
       id: row.id,
       book_id: row.book_id,
       is_deleted: true,
+      deleted_at: now,
     });
   }
   triggerDebouncedSync(30000);

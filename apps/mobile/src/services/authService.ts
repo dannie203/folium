@@ -157,6 +157,10 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
       expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
     };
     persistUser(demoUser);
+    try {
+      const { handleAccountLifecycleSwitch } = require('./syncService');
+      await handleAccountLifecycleSwitch(demoUser.id);
+    } catch {}
     return demoUser;
   }
 
@@ -225,13 +229,17 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
   };
 
   persistUser(user);
+  try {
+    const { handleAccountLifecycleSwitch } = require('./syncService');
+    await handleAccountLifecycleSwitch(user.id);
+  } catch {}
   return user;
 }
 
 /**
  * Sign out and clear stored session.
  */
-export async function signOut(): Promise<void> {
+export async function signOut(options?: { clearLocalData?: boolean }): Promise<void> {
   const user = getCurrentUser();
   if (user && user.accessToken && discovery.revocationEndpoint && !user.accessToken.startsWith('demo_')) {
     try {
@@ -252,7 +260,12 @@ export async function signOut(): Promise<void> {
     clearGoogleDriveCache();
   } catch {}
   try {
-    const { resetSyncSessionState } = require('./syncService');
+    const { resetSyncSessionState, purgeSyncOutbox, detachAccountLocalState } = require('./syncService');
     resetSyncSessionState();
+    // Always purge pending outbox on sign-out to prevent mutation leakage across accounts
+    await purgeSyncOutbox();
+    if (options?.clearLocalData) {
+      await detachAccountLocalState();
+    }
   } catch {}
 }

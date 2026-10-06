@@ -646,7 +646,7 @@ Fresh off the high of "fixing" OAuth with one line of code in PR #16, a comprehe
   * Worker sent `410`.
   * Client pulled server records from `0`. Since Book A's tombstone was gone, the server never told the client Book A was deleted.
   * Result: Book A remained on the client forever. An automated garbage collection mechanism that actively prevented garbage from being collected.
-* **The Fix:** Implemented active snapshot reconciliation on `410`: when an expired cursor triggers a full resync, local database state is diffed against the server snapshot, safely pruning records that were GC'd on the cloud while preserving unpushed mutations in the local outbox.
+* **The Fix:** Implemented active snapshot reconciliation on `410`: when an expired cursor triggers a full resync, local database state is diffed against the server snapshot for all cloud-synced records (`sync_seq > 0`), safely pruning records that were GC'd on the cloud while preserving unpushed mutations in the local outbox.
 
 #### 3. Zombie Books: Who Needs Timestamps Anyway?
 * **The Grand Illusion:** We spent days refining Last-Write-Wins (LWW) conflict resolution with millisecond timestamps across bookmarks, highlights, and reading progress.
@@ -656,9 +656,8 @@ Fresh off the high of "fixing" OAuth with one line of code in PR #16, a comprehe
     ON CONFLICT(id) DO UPDATE SET title = excluded.title, is_deleted = excluded.is_deleted...
     ```
     There was no `WHERE excluded.updated_at >= books.updated_at`. Zero timestamp validation.
-  * If Device A went offline, edited a title at $T=100$, and Device B deleted the book at $T=200$, Device A would reconnect at $T=300$, push its stale update, and the server would cheerfully resurrect the book by setting `is_deleted = 0`.
-  * SQLite on the client had the exact same amnesia: remote book deletions were executed with unconditional `DELETE FROM books WHERE id = ?`.
-* **The Fix:** Added `client_updated_at` to Cloudflare D1 schema (`0004_book_lww.sql`), updated `@folium/shared`, and added strict timestamp comparison guards on both server D1 and client SQLite.
+  * Worse, `deleteBook()` queued mutations with no timestamps, leaving the server to improvise with `Date.now()`, and `pullRemoteChanges()` updated `is_deleted = 1` without advancing `updated_at`. If a book was created at $T=1000$, deleted at $T=2000$, its local `updated_at` remained $1000$. A stale offline edit from $T=1500$ would check $1500 \ge 1000$, pass with flying colors, and resurrect the book!
+* **The Fix:** Added `client_updated_at` to Cloudflare D1 schema (`0004_book_lww.sql`), attached explicit client deletion timestamps in `deleteBook()`, advanced `updated_at` on tombstone application (`SET is_deleted = 1, deleted_at = ?, updated_at = ? WHERE ? >= updated_at`), and added strict LWW guards on both D1 and SQLite.
 
 #### 4. Multi-User Amnesia: "All Your Folders Belong to User A"
 * **The Punchline:** In `googleDriveService.ts`:
@@ -668,11 +667,12 @@ Fresh off the high of "fixing" OAuth with one line of code in PR #16, a comprehe
   User A logs in -> Folium folder created -> `cachedFolderId = "folder_A"`.
   User A logs out. User B logs in on the same browser.
   `getOrCreateFoliumFolder()` checks `cachedFolderId`: *"Oh look, I already have a folder ID!"* and attempts to sync User B's library into User A's Google Drive. Google APIs promptly returned 404/403, baffling everyone involved.
-* **The Fix:** Scoped the cache to `{ userId, folderId }`, and wired `clearGoogleDriveCache()` and `resetSyncSessionState()` directly into `authService.signOut()`.
+  Meanwhile, local SQLite had zero user isolation: User B's fresh login would inherit User A's books and pending outbox mutations!
+* **The Fix:** Scoped Drive folder cache to `{ userId, folderId }`, cleared sync session and purged outbox on `signOut()`, and implemented deterministic `handleAccountLifecycleSwitch()` to detach previous user's cloud-synced entities whenever an account switch occurs.
 
 #### 5. Verification
 * Typecheck across all monorepo packages: **0 errors**.
-* Security & Distributed Test Suite: **53/53 passing** (including new automated regression tests for LWW zombie book defense and 410 GC watermark reconciliation).
+* Security & Distributed Test Suite: **54/54 passing** against real `sql.js` SQLite databases (including full multi-node D1/SQLite LWW anti-resurrection lifecycle, 410 GC watermark reconciliation, and account switch isolation).
 * CI: Added `pnpm test` as a mandatory blocking gate in `.github/workflows/deploy.yml`.
 
 
