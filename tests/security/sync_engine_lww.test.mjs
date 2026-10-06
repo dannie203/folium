@@ -688,10 +688,11 @@ test('SYNC PUSH LWW CANONICAL RECONCILIATION: Client pulls canonical tombstone a
   const match = schemaContent.match(/export const INIT_SQL = \x60([\s\S]*?)\x60;/);
   clientDb.run(match[1]);
 
-  const workerSchema1 = fs.readFileSync('packages/worker/migrations/0001_init.sql', 'utf-8');
-  const workerSchema2 = fs.readFileSync('packages/worker/migrations/0002_tombstone_gc.sql', 'utf-8');
-  serverDb.run(workerSchema1);
-  serverDb.run(workerSchema2);
+  const workerMigrations = ['0001_init.sql', '0002_tombstone_gc.sql', '0003_gc_watermark.sql', '0004_book_lww.sql'];
+  for (const m of workerMigrations) {
+    const sql = fs.readFileSync(`packages/worker/migrations/${m}`, 'utf-8');
+    serverDb.run(sql);
+  }
 
   const userId = 'user-recon-test';
   const bookId = 'book-recon-1';

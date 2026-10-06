@@ -153,9 +153,8 @@ export async function uploadBookToDrive(book: Book): Promise<string> {
     }
   }
 
-  // Zero-Knowledge metadata protection:
-  // Use UUID filename `${book.id}.${book.file_type}` instead of plaintext book title
-  // to prevent cloud storage providers from fingerprinting user reading libraries.
+  // Opaque UUID filename `${book.id}.${book.file_type}` is used on Drive storage
+  // to index book files by unique identifier rather than arbitrary local file names.
   const filename = `${book.id}.${book.file_type}`;
   const mimeType = book.file_type === 'pdf' ? 'application/pdf' : 'application/epub+zip';
 

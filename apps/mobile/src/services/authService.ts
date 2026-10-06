@@ -237,8 +237,9 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
 /**
  * Sign out and clear stored session.
  */
-export async function signOut(options?: { clearLocalData?: boolean }): Promise<void> {
+export async function signOut(options?: { clearLocalData?: boolean; keepLocalData?: boolean }): Promise<void> {
   const user = getCurrentUser();
+  const userId = user?.id || null;
   if (user && user.accessToken && discovery.revocationEndpoint && !user.accessToken.startsWith('demo_')) {
     try {
       await fetch(`${discovery.revocationEndpoint}?token=${user.accessToken}`, {
@@ -265,8 +266,9 @@ export async function signOut(options?: { clearLocalData?: boolean }): Promise<v
     resetSyncSessionState();
     // Always purge pending outbox on sign-out to prevent mutation leakage across accounts
     await purgeSyncOutbox();
-    if (options?.clearLocalData) {
-      await detachAccountLocalState();
+    // Default to strict privacy isolation: detach signed-in account data unless explicitly requested to keep
+    if (!options?.keepLocalData) {
+      await detachAccountLocalState(userId);
     }
   } catch (err) {
     console.warn('[AuthService] Failed to reset sync state on signOut:', err);

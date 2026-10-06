@@ -28,7 +28,6 @@ CREATE TABLE IF NOT EXISTS books (
     file_size INTEGER NOT NULL,
     drive_file_id TEXT,
     is_deleted INTEGER NOT NULL DEFAULT 0,
-    client_updated_at INTEGER NOT NULL DEFAULT 0,
     sync_seq INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_books_sync ON books(user_id, sync_seq);

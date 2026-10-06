@@ -705,10 +705,53 @@ Fresh off the high of "fixing" OAuth with one line of code in PR #16, a comprehe
   4. Updated `detachAccountLocalState(targetUserId)` and `reconcileSnapshotEntities()` to query by `user_id` and cloud markers, cleanly detaching legacy books on account switch while strictly isolating guests.
   5. Refactored `signInWithGoogle()`: enforced `handleAccountLifecycleSwitch()` *before* calling `persistUser()`, ensuring any isolation failures abort login immediately rather than swallowing errors in an empty `catch {}` block.
 
-#### 7. Verification
+#### 7. The Broken Migration Chain: "Why Not Alter What Already Exists?"
+* **The Punchline:** In our rush to introduce `client_updated_at`, we did the cardinal database sin:
+  * We edited `0001_init.sql` to add `client_updated_at INTEGER NOT NULL DEFAULT 0` directly to `CREATE TABLE books`.
+  * Then we proudly created `0004_book_lww.sql`: `ALTER TABLE books ADD COLUMN client_updated_at...`.
+  * Any fresh database attempting to boot from scratch ran `0001` (column created) $\to$ `0002` $\to$ `0003` $\to$ `0004` (ALTER TABLE fails with `duplicate column name: client_updated_at`).
+  * A release candidate that literally could not deploy to a fresh D1 instance.
+* **The Fix:** Restored `0001_init.sql` to its immutable historical state. `0004_book_lww.sql` is now the single canonical migration that adds `client_updated_at`, ensuring sequential migrations succeed cleanly on both brand-new and pre-existing production databases. Verified by automated tests.
+
+#### 8. The "Zero-Knowledge" Fiction: We Swear We Don't Know the Book Title (Except We Just Sent It to Google)
+* **The Punchline:** Comments in `googleDriveService.ts` proudly proclaimed:
+  ```typescript
+  // Zero-Knowledge metadata protection:
+  // Use UUID filename `${book.id}.${book.file_type}` instead of plaintext book title
+  // to prevent cloud storage providers from fingerprinting user reading libraries.
+  ```
+  Meanwhile, thirty lines down in the exact same file:
+  ```typescript
+  appProperties: {
+    foliumTitle: book.title,
+    foliumShelf: book.shelf,
+  }
+  ```
+  *"We protected your privacy by hiding the filename, and then we emailed Google the book title and genre in JSON."*
+* **The Fix:** Killed the pretentious "Zero-Knowledge" claim. Clarified code and documentation to state what it actually is: opaque UUID file naming on Drive storage.
+
+#### 9. Edge Fortification: SSRF Resource Limits & Runtime Schema Gatekeeping
+* **The Punchline:** Our `/api/community/download` proxy checked URLs against an allowlist, but would gladly stream a 10 GB file or hang indefinitely if upstream decided to slowloris the Worker. And `/api/sync/push` took `c.req.json<SyncPushPayload>()` on blind faith without validating runtime types or string lengths.
+* **The Fix:**
+  * Enforced a strict 50 MB payload cap and a 15-second `AbortSignal.timeout(15000)` on upstream OPDS downloads.
+  * Built `validateSyncPushPayload()` to strictly validate arrays, string lengths (title $\le 500$, note $\le 10,000$), numeric bounds (progress percentage $0 \dots 100$), and format enums at the Worker edge before database execution.
+
+#### 10. Automated CI/CD Architecture: PR Quality Gate & Deterministic Deployment
+* **The Fix:**
+  * Created `.github/workflows/ci.yml` as a mandatory PR gate (running typechecks, 60/60 tests, migration verification, and Expo web build on every pull request).
+  * Structured `.github/workflows/deploy.yml` with deterministic release order:
+    1. Schema first: Apply D1 migrations (`d1:migrate:prod`).
+    2. API second: Deploy Cloudflare Worker (`wrangler deploy`).
+    3. Client last: Build & deploy Web SPA to GitHub Pages (`aki.is-a.dev`).
+
+#### 11. Verification
 * Typecheck across all monorepo packages: **0 errors**.
-* Security & Distributed Test Suite: **56/56 passing** against real `sql.js` SQLite databases (including full multi-node D1/SQLite LWW anti-resurrection lifecycle, push-then-pull canonical reconciliation, accurate worker `accepted_count` row inspection, 410 GC watermark reconciliation, and strict legacy account isolation).
-* CI: `pnpm test` and `pnpm typecheck` gating every PR and deployment.
+* Security & Distributed Test Suite: **60/60 passing** against real `sql.js` SQLite databases:
+  * Full migration chain (`0001` $\to$ `0004`) verified on fresh and legacy databases.
+  * Push-then-pull canonical reconciliation verifying winning tombstones over stale writes.
+  * Strict account isolation with legacy data attribution and default detachment on `signOut()`.
+  * Runtime push payload schema validation and SSRF resource limits.
+* CI: Gated across PRs and production deployments.
 
 
 

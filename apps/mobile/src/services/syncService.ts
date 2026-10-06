@@ -213,6 +213,9 @@ export async function handleAccountLifecycleSwitch(newUserId: string | null): Pr
 
   if (previousUserId && newUserId && previousUserId !== newUserId) {
     console.log(`[SyncService] Account switch detected: ${previousUserId} -> ${newUserId}. Detaching previous account state.`);
+    const db = await getDatabase();
+    // Attribute any lingering legacy unassigned books to previous user so they are detached cleanly
+    await db.runAsync('UPDATE books SET user_id = ? WHERE user_id IS NULL', [previousUserId]);
     await detachAccountLocalState(previousUserId);
     resetSyncSessionState();
   }
