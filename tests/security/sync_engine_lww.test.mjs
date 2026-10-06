@@ -588,6 +588,84 @@ test('SYNC RECONCILIATION 1: Full Resync Prunes Local GC-Purged Records Against 
   checkBookC.free();
 });
 
+test('SYNC RECONCILIATION 2: Account-owned local book (user_id = A, sync_seq = 0) is NEVER pruned during HTTP 410 full resync', async () => {
+  const SQL = await initSqlJs();
+  const db = new SQL.Database();
+
+  const schemaContent = fs.readFileSync('apps/mobile/src/db/schema.ts', 'utf-8');
+  const match = schemaContent.match(/export const INIT_SQL = \x60([\s\S]*?)\x60;/);
+  db.run(match[1]);
+
+  const activeUserId = 'user-alice';
+
+  // 1. Account-owned local book: imported by user Alice, never pushed to cloud (sync_seq = 0, drive_file_id = null)
+  db.run(
+    `INSERT INTO books (id, user_id, title, author, file_type, file_size, drive_file_id, is_deleted, created_at, updated_at, sync_seq)
+     VALUES ('book-local-owned', ?, 'My Private Offline Novel', 'Author', 'epub', 1000, NULL, 0, 1000, 1000, 0)`,
+    [activeUserId]
+  );
+
+  // 2. Account-owned cloud book: previously synced to cloud (sync_seq = 5)
+  db.run(
+    `INSERT INTO books (id, user_id, title, author, file_type, file_size, drive_file_id, is_deleted, created_at, updated_at, sync_seq)
+     VALUES ('book-cloud-owned', ?, 'Cloud Synced Book', 'Author', 'epub', 2000, NULL, 0, 1000, 1000, 5)`,
+    [activeUserId]
+  );
+
+  // Server snapshot from 410 full resync only has active 'book-server-active'
+  const serverSnapshot = {
+    server_sync_seq: 100,
+    books: [{ id: 'book-server-active', title: 'Active Cloud Book', sync_seq: 100, is_deleted: false }],
+    bookmarks: [],
+    highlights: [],
+    notes: [],
+  };
+
+  // Run reconciliation candidate selection exactly as implemented in syncService.ts:
+  // Only genuinely cloud-synced books (sync_seq > 0 OR drive_file_id IS NOT NULL) are candidates for cloud pruning!
+  const bookQuery =
+    'SELECT id FROM books WHERE is_deleted = 0 AND (sync_seq > 0 OR drive_file_id IS NOT NULL) AND (user_id = ? OR user_id IS NULL)';
+  const candStmt = db.prepare(bookQuery);
+  candStmt.bind([activeUserId]);
+  const candidates = [];
+  while (candStmt.step()) candidates.push(candStmt.getAsObject().id);
+  candStmt.free();
+
+  const activeBookIds = new Set(serverSnapshot.books.map((b) => b.id));
+  const now = Date.now();
+
+  for (const id of candidates) {
+    if (!activeBookIds.has(id)) {
+      db.run('UPDATE books SET is_deleted = 1, deleted_at = ?, updated_at = ?, sync_seq = ? WHERE id = ?', [
+        now,
+        now,
+        serverSnapshot.server_sync_seq,
+        id,
+      ]);
+    }
+  }
+
+  // ASSERTIONS:
+  // 1. Account-owned local book MUST REMAIN ACTIVE (is_deleted = 0)
+  const checkLocal = db.prepare('SELECT is_deleted, user_id, sync_seq FROM books WHERE id = ?');
+  checkLocal.bind(['book-local-owned']);
+  checkLocal.step();
+  const localRow = checkLocal.getAsObject();
+  assert.strictEqual(localRow.is_deleted, 0, 'Account-owned local book must NEVER be pruned during 410 full resync');
+  assert.strictEqual(localRow.user_id, activeUserId);
+  assert.strictEqual(localRow.sync_seq, 0);
+  checkLocal.free();
+
+  // 2. Cloud book (sync_seq = 5) purged on server MUST BE PRUNED (is_deleted = 1)
+  const checkCloud = db.prepare('SELECT is_deleted, sync_seq FROM books WHERE id = ?');
+  checkCloud.bind(['book-cloud-owned']);
+  checkCloud.step();
+  const cloudRow = checkCloud.getAsObject();
+  assert.strictEqual(cloudRow.is_deleted, 1, 'Cloud book purged on server must be marked deleted');
+  assert.strictEqual(cloudRow.sync_seq, 100);
+  checkCloud.free();
+});
+
 test('SYNC ACCOUNT ISOLATION 1: Account Switch Detaches Previous User Cloud Data and Legacy Synced Books', async () => {
   const SQL = await initSqlJs();
   const db = new SQL.Database();

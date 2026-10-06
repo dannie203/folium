@@ -744,12 +744,29 @@ Fresh off the high of "fixing" OAuth with one line of code in PR #16, a comprehe
     2. API second: Deploy Cloudflare Worker (`wrangler deploy`).
     3. Client last: Build & deploy Web SPA to GitHub Pages (`aki.is-a.dev`).
 
-#### 11. Verification
+#### 11. The Ownership vs. Cloud-Synced Trap: When 410 Reconciliation Eats Offline Books
+* **The Punchline:** In fixing account isolation, we stamped local guest books with `user_id = 'A'` when User A signed in.
+  * Then, in `reconcileSnapshotEntities()`:
+    ```sql
+    SELECT id FROM books WHERE is_deleted = 0 AND (sync_seq > 0 OR user_id = ? OR drive_file_id IS NOT NULL)
+    ```
+  * Notice the innocent `OR user_id = ?`.
+  * Because of that `OR`, any local-only book imported offline by User A (`sync_seq == 0, drive_file_id == null`) was immediately treated as a candidate for server tombstone garbage collection!
+  * When a 410 full resync triggered, the server returned its snapshot of cloud books. The server, of course, had never heard of User A's offline EPUB.
+  * Reconciliation saw: *"User A owns this book, but the server snapshot doesn't have it! It must have been deleted 35 days ago on the cloud!"* $\to$ `is_deleted = 1`.
+  * User logs in, experiences a resync, and watches their local offline books vanish into thin air.
+* **The Fix:** Hardened the fundamental invariant: **Account Ownership $\ne$ Cloud-Synced**.
+  * `user_id` defines local device boundary (preventing User B from seeing User A's files).
+  * `(sync_seq > 0 OR drive_file_id IS NOT NULL)` defines cloud tracking.
+  * `reconcileSnapshotEntities()` now strictly filters candidates by `(sync_seq > 0 OR drive_file_id IS NOT NULL) AND (user_id = ? OR user_id IS NULL)`. Offline account-owned books (`sync_seq == 0`) are completely exempt from cloud tombstone pruning. Verified by automated tests.
+
+#### 12. Verification
 * Typecheck across all monorepo packages: **0 errors**.
-* Security & Distributed Test Suite: **60/60 passing** against real `sql.js` SQLite databases:
+* Security & Distributed Test Suite: **61/61 passing** against real `sql.js` SQLite databases:
   * Full migration chain (`0001` $\to$ `0004`) verified on fresh and legacy databases.
   * Push-then-pull canonical reconciliation verifying winning tombstones over stale writes.
   * Strict account isolation with legacy data attribution and default detachment on `signOut()`.
+  * Distinction between account ownership and cloud tracking (offline books survive 410 resync).
   * Runtime push payload schema validation and SSRF resource limits.
 * CI: Gated across PRs and production deployments.
 

@@ -801,10 +801,12 @@ export async function reconcileSnapshotEntities(
   const prunedHighlights: string[] = [];
   const prunedNotes: string[] = [];
 
-  // Prune orphaned local books that have been synced to cloud (sync_seq > 0 or user_id or drive_file_id)
+  // Prune only genuinely cloud-synced books (sync_seq > 0 OR drive_file_id IS NOT NULL).
+  // Local-only books (sync_seq == 0 AND drive_file_id IS NULL) are NEVER pruned during 410 cloud reconciliation,
+  // even if claimed by the active account (ownership != cloud-synced).
   const bookQuery = activeUserId
-    ? 'SELECT id FROM books WHERE is_deleted = 0 AND (sync_seq > 0 OR user_id = ? OR drive_file_id IS NOT NULL)'
-    : 'SELECT id FROM books WHERE is_deleted = 0 AND (sync_seq > 0 OR user_id IS NOT NULL OR drive_file_id IS NOT NULL)';
+    ? 'SELECT id FROM books WHERE is_deleted = 0 AND (sync_seq > 0 OR drive_file_id IS NOT NULL) AND (user_id = ? OR user_id IS NULL)'
+    : 'SELECT id FROM books WHERE is_deleted = 0 AND (sync_seq > 0 OR drive_file_id IS NOT NULL)';
   const bookParams = activeUserId ? [activeUserId] : [];
   const localBooks = await db.getAllAsync<{ id: string }>(bookQuery, bookParams);
 
@@ -818,11 +820,9 @@ export async function reconcileSnapshotEntities(
     }
   }
 
-  // Prune orphaned bookmarks, highlights, and notes
-  const bmQuery = activeUserId
-    ? 'SELECT id FROM bookmarks WHERE is_deleted = 0 AND (sync_seq > 0 OR book_id IN (SELECT id FROM books WHERE user_id = ? OR drive_file_id IS NOT NULL))'
-    : 'SELECT id FROM bookmarks WHERE is_deleted = 0 AND sync_seq > 0';
-  const localBookmarks = await db.getAllAsync<{ id: string }>(bmQuery, activeUserId ? [activeUserId] : []);
+  // Prune orphaned bookmarks, highlights, and notes only if they were cloud-synced (sync_seq > 0)
+  const bmQuery = 'SELECT id FROM bookmarks WHERE is_deleted = 0 AND sync_seq > 0';
+  const localBookmarks = await db.getAllAsync<{ id: string }>(bmQuery);
   for (const bm of localBookmarks) {
     if (!activeBookmarkIds.has(bm.id) && !pendingOutbox.has(`bookmark:${bm.id}`)) {
       await db.runAsync('UPDATE bookmarks SET is_deleted = 1, sync_seq = ? WHERE id = ?', [serverSyncSeq, bm.id]);
@@ -830,10 +830,8 @@ export async function reconcileSnapshotEntities(
     }
   }
 
-  const hlQuery = activeUserId
-    ? 'SELECT id FROM highlights WHERE is_deleted = 0 AND (sync_seq > 0 OR book_id IN (SELECT id FROM books WHERE user_id = ? OR drive_file_id IS NOT NULL))'
-    : 'SELECT id FROM highlights WHERE is_deleted = 0 AND sync_seq > 0';
-  const localHighlights = await db.getAllAsync<{ id: string }>(hlQuery, activeUserId ? [activeUserId] : []);
+  const hlQuery = 'SELECT id FROM highlights WHERE is_deleted = 0 AND sync_seq > 0';
+  const localHighlights = await db.getAllAsync<{ id: string }>(hlQuery);
   for (const hl of localHighlights) {
     if (!activeHighlightIds.has(hl.id) && !pendingOutbox.has(`highlight:${hl.id}`)) {
       await db.runAsync('UPDATE highlights SET is_deleted = 1, sync_seq = ? WHERE id = ?', [serverSyncSeq, hl.id]);
@@ -841,10 +839,8 @@ export async function reconcileSnapshotEntities(
     }
   }
 
-  const noteQuery = activeUserId
-    ? 'SELECT id FROM notes WHERE is_deleted = 0 AND (sync_seq > 0 OR book_id IN (SELECT id FROM books WHERE user_id = ? OR drive_file_id IS NOT NULL))'
-    : 'SELECT id FROM notes WHERE is_deleted = 0 AND sync_seq > 0';
-  const localNotes = await db.getAllAsync<{ id: string }>(noteQuery, activeUserId ? [activeUserId] : []);
+  const noteQuery = 'SELECT id FROM notes WHERE is_deleted = 0 AND sync_seq > 0';
+  const localNotes = await db.getAllAsync<{ id: string }>(noteQuery);
   for (const n of localNotes) {
     if (!activeNoteIds.has(n.id) && !pendingOutbox.has(`note:${n.id}`)) {
       await db.runAsync('UPDATE notes SET is_deleted = 1, sync_seq = ? WHERE id = ?', [serverSyncSeq, n.id]);
