@@ -588,7 +588,7 @@ test('SYNC RECONCILIATION 1: Full Resync Prunes Local GC-Purged Records Against 
   checkBookC.free();
 });
 
-test('SYNC ACCOUNT ISOLATION 1: Account Switch Detaches Previous User Cloud Data and Purges Outbox', async () => {
+test('SYNC ACCOUNT ISOLATION 1: Account Switch Detaches Previous User Cloud Data and Legacy Synced Books', async () => {
   const SQL = await initSqlJs();
   const db = new SQL.Database();
 
@@ -599,8 +599,8 @@ test('SYNC ACCOUNT ISOLATION 1: Account Switch Detaches Previous User Cloud Data
   // User A state:
   // 1. Synced book from Google Drive
   db.run(
-    `INSERT INTO books (id, title, author, file_type, file_size, drive_file_id, is_deleted, created_at, updated_at, sync_seq)
-     VALUES ('book-user-a', 'User A Private Novel', 'Author', 'epub', 5000, 'drive-file-user-a', 0, 1000, 1000, 5)`
+    `INSERT INTO books (id, user_id, title, author, file_type, file_size, drive_file_id, is_deleted, created_at, updated_at, sync_seq)
+     VALUES ('book-user-a', 'user-a', 'User A Private Novel', 'Author', 'epub', 5000, 'drive-file-user-a', 0, 1000, 1000, 5)`
   );
   db.run(
     `INSERT INTO reading_progress (id, book_id, cfi, percentage, client_updated_at, is_deleted, sync_seq)
@@ -611,15 +611,25 @@ test('SYNC ACCOUNT ISOLATION 1: Account Switch Detaches Previous User Cloud Data
      VALUES ('outbox-user-a', 'progress', 'prog-a', '{"percentage": 50}', 1000)`
   );
 
-  // 2. Pure local un-synced book
+  // 2. Legacy synced book belonging to User A (sync_seq = 0, drive_file_id = NULL, but tagged with user_id)
   db.run(
-    `INSERT INTO books (id, title, author, file_type, file_size, drive_file_id, is_deleted, created_at, updated_at, sync_seq)
-     VALUES ('book-local-guest', 'Guest Public Book', 'Author', 'epub', 2000, NULL, 0, 1000, 1000, 0)`
+    `INSERT INTO books (id, user_id, title, author, file_type, file_size, drive_file_id, is_deleted, created_at, updated_at, sync_seq)
+     VALUES ('book-legacy-a', 'user-a', 'User A Legacy Cloud Book', 'Author', 'epub', 3000, NULL, 0, 1000, 1000, 0)`
   );
 
-  // User A logs out and User B logs in -> Account switch lifecycle triggers detachAccountLocalState() & purgeSyncOutbox()
-  // Detach synced books:
-  const syncedBooksStmt = db.prepare('SELECT id FROM books WHERE sync_seq > 0 OR drive_file_id IS NOT NULL');
+  // 3. Pure local un-synced guest book (user_id IS NULL, sync_seq = 0, drive_file_id IS NULL)
+  db.run(
+    `INSERT INTO books (id, user_id, title, author, file_type, file_size, drive_file_id, is_deleted, created_at, updated_at, sync_seq)
+     VALUES ('book-local-guest', NULL, 'Guest Public Book', 'Author', 'epub', 2000, NULL, 0, 1000, 1000, 0)`
+  );
+
+  // User A logs out and User B logs in -> Account switch lifecycle triggers detachAccountLocalState('user-a') & purgeSyncOutbox()
+  // Detach query using user_id and cloud markers:
+  const targetUserId = 'user-a';
+  const syncedBooksStmt = db.prepare(
+    'SELECT id FROM books WHERE user_id = ? OR (user_id IS NOT NULL AND user_id != ?) OR sync_seq > 0 OR drive_file_id IS NOT NULL'
+  );
+  syncedBooksStmt.bind([targetUserId, targetUserId]);
   const syncedBookIds = [];
   while (syncedBooksStmt.step()) syncedBookIds.push(syncedBooksStmt.getAsObject().id);
   syncedBooksStmt.free();
@@ -640,6 +650,11 @@ test('SYNC ACCOUNT ISOLATION 1: Account Switch Detaches Previous User Cloud Data
   assert.strictEqual(checkUserABook.step(), false, 'User A cloud book must be detached on account switch');
   checkUserABook.free();
 
+  const checkLegacyBook = db.prepare('SELECT * FROM books WHERE id = ?');
+  checkLegacyBook.bind(['book-legacy-a']);
+  assert.strictEqual(checkLegacyBook.step(), false, 'User A legacy synced book must be detached on account switch even if sync_seq=0');
+  checkLegacyBook.free();
+
   const checkUserAProgress = db.prepare('SELECT * FROM reading_progress WHERE id = ?');
   checkUserAProgress.bind(['prog-a']);
   assert.strictEqual(checkUserAProgress.step(), false, 'User A progress must be detached on account switch');
@@ -652,6 +667,138 @@ test('SYNC ACCOUNT ISOLATION 1: Account Switch Detaches Previous User Cloud Data
 
   const checkLocalBook = db.prepare('SELECT * FROM books WHERE id = ?');
   checkLocalBook.bind(['book-local-guest']);
-  assert.strictEqual(checkLocalBook.step(), true, 'Pure local book must be preserved on account switch');
+  assert.strictEqual(checkLocalBook.step(), true, 'Pure local guest book must be preserved on account switch');
   checkLocalBook.free();
+
+  // User B claims guest books
+  db.run('UPDATE books SET user_id = ? WHERE user_id IS NULL', ['user-b']);
+  const checkClaimedBook = db.prepare('SELECT user_id FROM books WHERE id = ?');
+  checkClaimedBook.bind(['book-local-guest']);
+  checkClaimedBook.step();
+  assert.strictEqual(checkClaimedBook.getAsObject().user_id, 'user-b', 'Guest book claimed by User B');
+  checkClaimedBook.free();
+});
+
+test('SYNC PUSH LWW CANONICAL RECONCILIATION: Client pulls canonical tombstone after server rejects stale push', async () => {
+  const SQL = await initSqlJs();
+  const serverDb = new SQL.Database();
+  const clientDb = new SQL.Database();
+
+  const schemaContent = fs.readFileSync('apps/mobile/src/db/schema.ts', 'utf-8');
+  const match = schemaContent.match(/export const INIT_SQL = \x60([\s\S]*?)\x60;/);
+  clientDb.run(match[1]);
+
+  const workerSchema1 = fs.readFileSync('packages/worker/migrations/0001_init.sql', 'utf-8');
+  const workerSchema2 = fs.readFileSync('packages/worker/migrations/0002_tombstone_gc.sql', 'utf-8');
+  serverDb.run(workerSchema1);
+  serverDb.run(workerSchema2);
+
+  const userId = 'user-recon-test';
+  const bookId = 'book-recon-1';
+
+  // Seed user sync sequence on server
+  serverDb.run('INSERT INTO user_sync_sequence (user_id, current_seq, updated_at) VALUES (?, 1, 1000)', [userId]);
+
+  // Step 1: Book was deleted on Server at T = 2000 (sync_seq = 1)
+  serverDb.run(
+    `INSERT INTO books (id, user_id, title, author, file_type, file_size, drive_file_id, is_deleted, deleted_at, client_updated_at, sync_seq)
+     VALUES (?, ?, 'Original Title', 'Author', 'epub', 1000, NULL, 1, 2000, 2000, 1)`,
+    [bookId, userId]
+  );
+
+  // Step 2: Client was offline at cursor = 0, and has an active book locally with stale edit at T = 1500
+  clientDb.run(
+    `INSERT INTO books (id, user_id, title, author, file_type, file_size, is_deleted, created_at, updated_at, sync_seq)
+     VALUES (?, ?, 'Stale Local Title', 'Author', 'epub', 1000, 0, 1000, 1500, 0)`,
+    [bookId, userId]
+  );
+  let clientCursor = 0;
+
+  // Step 3: Client pushes stale mutation at T = 1500
+  // Worker simulation:
+  // Worker increments sequence to 2
+  serverDb.run('UPDATE user_sync_sequence SET current_seq = current_seq + 1 WHERE user_id = ?', [userId]);
+  const committedSeq = 2;
+
+  // Worker executes upsert statement with LWW guard:
+  // WHERE books.user_id = excluded.user_id AND excluded.client_updated_at >= COALESCE(books.client_updated_at, 0)
+  serverDb.run(
+    `INSERT INTO books (id, user_id, title, author, file_type, file_size, drive_file_id, is_deleted, deleted_at, client_updated_at, sync_seq)
+     VALUES (?, ?, 'Stale Local Title', 'Author', 'epub', 1000, NULL, 0, NULL, 1500, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       title = excluded.title,
+       is_deleted = excluded.is_deleted,
+       client_updated_at = excluded.client_updated_at,
+       sync_seq = excluded.sync_seq
+     WHERE books.user_id = excluded.user_id
+       AND excluded.client_updated_at >= COALESCE(books.client_updated_at, 0)`,
+    [bookId, userId, committedSeq]
+  );
+
+  // Check server: book MUST remain deleted (1500 < 2000, mutation rejected)
+  const serverStmt = serverDb.prepare('SELECT is_deleted, title, client_updated_at FROM books WHERE id = ?');
+  serverStmt.bind([bookId]);
+  serverStmt.step();
+  const serverBook = serverStmt.getAsObject();
+  assert.strictEqual(serverBook.is_deleted, 1, 'Server must reject stale push');
+  assert.strictEqual(serverBook.title, 'Original Title');
+  serverStmt.free();
+
+  // In the FIXED code, client unconditionally calls pullRemoteChanges() instead of blindly advancing cursor:
+  // Worker returns pull payload for since = clientCursor (0):
+  const pullStmt = serverDb.prepare('SELECT * FROM books WHERE user_id = ? AND sync_seq > ?');
+  pullStmt.bind([userId, clientCursor]);
+  const remoteBooks = [];
+  while (pullStmt.step()) remoteBooks.push(pullStmt.getAsObject());
+  pullStmt.free();
+
+  assert.strictEqual(remoteBooks.length, 1);
+  const canonicalRemoteBook = remoteBooks[0];
+  assert.strictEqual(canonicalRemoteBook.is_deleted, 1);
+
+  // Client applies pullRemoteChanges() LWW logic:
+  if (canonicalRemoteBook.is_deleted) {
+    clientDb.run(
+      'UPDATE books SET is_deleted = 1, deleted_at = ?, updated_at = ? WHERE id = ? AND ? >= updated_at',
+      [canonicalRemoteBook.deleted_at, canonicalRemoteBook.client_updated_at, canonicalRemoteBook.id, canonicalRemoteBook.client_updated_at]
+    );
+  }
+  clientCursor = committedSeq;
+
+  // Step 4: Verify client local SQLite now CONVERGES with canonical server state
+  const clientStmt = clientDb.prepare('SELECT is_deleted, updated_at FROM books WHERE id = ?');
+  clientStmt.bind([bookId]);
+  clientStmt.step();
+  const clientBook = clientStmt.getAsObject();
+  assert.strictEqual(clientBook.is_deleted, 1, 'Client local SQLite must be reconciled to deleted state');
+  assert.strictEqual(clientBook.updated_at, 2000, 'Client local updated_at must advance to winning timestamp 2000');
+  assert.strictEqual(clientCursor, 2, 'Client cursor advances to committedSeq after successful pull');
+  clientStmt.free();
+});
+
+test('SYNC WORKER ACCEPTED COUNT: Worker accepted_count accurately reflects SQL LWW affected rows', () => {
+  // Simulate D1 batch results where one statement succeeded and one failed the LWW WHERE condition
+  const mockBatchResults = [
+    { results: [{ current_seq: 3 }] }, // Sequence increment
+    { meta: { changes: 1 } },          // Book 1: accepted write (changes = 1)
+    { meta: { changes: 0 } },          // Book 2: rejected by WHERE timestamp guard (changes = 0)
+    { results: [{ count: 0 }] },       // Tombstone GC check
+  ];
+
+  const entityStatementsCount = 2;
+  let acceptedCount = 0;
+
+  for (let j = 0; j < mockBatchResults.length; j++) {
+    const globalIdx = j;
+    if (globalIdx >= 1 && globalIdx <= entityStatementsCount) {
+      const meta = mockBatchResults[j]?.meta;
+      if (typeof meta?.changes === 'number') {
+        if (meta.changes > 0) acceptedCount++;
+      } else {
+        acceptedCount++;
+      }
+    }
+  }
+
+  assert.strictEqual(acceptedCount, 1, 'Only statements with meta.changes > 0 must count as accepted');
 });

@@ -27,6 +27,9 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   try {
     await db.execAsync("ALTER TABLE books ADD COLUMN sync_seq INTEGER NOT NULL DEFAULT 0;");
   } catch {}
+  try {
+    await db.execAsync("ALTER TABLE books ADD COLUMN user_id TEXT;");
+  } catch {}
 
   dbInstance = db;
   return db;

@@ -668,11 +668,47 @@ Fresh off the high of "fixing" OAuth with one line of code in PR #16, a comprehe
   User A logs out. User B logs in on the same browser.
   `getOrCreateFoliumFolder()` checks `cachedFolderId`: *"Oh look, I already have a folder ID!"* and attempts to sync User B's library into User A's Google Drive. Google APIs promptly returned 404/403, baffling everyone involved.
   Meanwhile, local SQLite had zero user isolation: User B's fresh login would inherit User A's books and pending outbox mutations!
-* **The Fix:** Scoped Drive folder cache to `{ userId, folderId }`, cleared sync session and purged outbox on `signOut()`, and implemented deterministic `handleAccountLifecycleSwitch()` to detach previous user's cloud-synced entities whenever an account switch occurs.
+#### 5. The Cursor Fast-Forward Delusion: "We Don't Need to Pull, We're Contiguous!"
+* **The Grand Illusion:** When pushing mutations to D1, the client tracked its local sequence cursor:
+  ```typescript
+  if (committedSeq === currentCursor + 1) {
+    await setLastSyncedSeq(committedSeq);
+  } else if (committedSeq > currentCursor + 1) {
+    await pullRemoteChanges();
+  }
+  ```
+  The logic seemed so clever: *"If the sequence is contiguous ($N \to N+1$), no other device wrote anything in between, so we don't need to waste a network request pulling!"*
+* **The Punchline:** Distributed systems called, and they're laughing.
+  * Server had Book A deleted at $T=2000$ (`current_seq = 1`).
+  * Client A reconnected from offline and pushed a stale title edit for Book A at $T=1500$.
+  * Worker bumped `current_seq` to 2, executed the upsert with our shiny new LWW guard `WHERE excluded.client_updated_at >= books.client_updated_at`, and D1 promptly rejected the mutation (`meta.changes === 0`).
+  * Worker returned `committed_sync_seq = 2`.
+  * Client saw: `committedSeq (2) === currentCursor (1) + 1`!
+  * Client went: *"Hooray! Contiguous sequence! Cursor = 2!"* and **DID NOT PULL**.
+  * Result: Server had Book A marked deleted. Client had Book A marked active. Client cursor was now 2. Client would never receive the tombstone because it skipped right past sequence 2 without reading the server's canonical state!
+* **The Fix:** Completely ripped out the conditional fast-forward. After draining outbox mutations, the client **always** executes `await pullRemoteChanges()`. If the server rejected a stale write, the pull immediately retrieves the server's winning canonical tombstone and reconciles local SQLite before the cursor advances.
+* **Bonus Fix (Accurate Worker `accepted_count`):** The Worker was incrementing `acceptedCount++` while queuing SQL strings into an in-memory batch, before D1 even touched them. We replaced this vanity counter with actual inspection of `(batchResults[j]?.meta as any)?.changes > 0`. If D1 rejects a mutation due to LWW timestamp conflict, `accepted_count` is 0. Radical honesty at the edge.
 
-#### 5. Verification
+#### 6. The Legacy Migration Blindspot: When `sync_seq = 0` Means Everything and Nothing
+* **The Punchline:** In our first pass, we attempted to isolate accounts with:
+  ```sql
+  SELECT id FROM books WHERE sync_seq > 0 OR drive_file_id IS NOT NULL
+  ```
+  The idea was: `sync_seq > 0` or Drive file ID means "cloud data," and anything else is "local guest data."
+  * Except `sync_seq` was literally just introduced with `DEFAULT 0`.
+  * Any user who had books synced to D1 before PR17 now had `sync_seq = 0`. If they didn't have a Google Drive file ID, their books had `sync_seq = 0` and `drive_file_id = NULL`.
+  * When User A logged out and User B logged in, `detachAccountLocalState()` looked at User A's legacy synced books, went *"Looks like a guest book to me!"*, and left them right there in SQLite for User B to read. A complete account isolation breach masquerading as guest preservation.
+* **The Fix:**
+  1. Added `user_id TEXT` column to `books` in SQLite and shared data contracts.
+  2. Stamped `user_id` explicitly during book imports and pull upserts.
+  3. Scoped `getBooksWithProgress()` and `getAvailableShelves()` queries to `(user_id = ? OR user_id IS NULL)` (defense-in-depth at query time).
+  4. Updated `detachAccountLocalState(targetUserId)` and `reconcileSnapshotEntities()` to query by `user_id` and cloud markers, cleanly detaching legacy books on account switch while strictly isolating guests.
+  5. Refactored `signInWithGoogle()`: enforced `handleAccountLifecycleSwitch()` *before* calling `persistUser()`, ensuring any isolation failures abort login immediately rather than swallowing errors in an empty `catch {}` block.
+
+#### 7. Verification
 * Typecheck across all monorepo packages: **0 errors**.
-* Security & Distributed Test Suite: **54/54 passing** against real `sql.js` SQLite databases (including full multi-node D1/SQLite LWW anti-resurrection lifecycle, 410 GC watermark reconciliation, and account switch isolation).
-* CI: Added `pnpm test` as a mandatory blocking gate in `.github/workflows/deploy.yml`.
+* Security & Distributed Test Suite: **56/56 passing** against real `sql.js` SQLite databases (including full multi-node D1/SQLite LWW anti-resurrection lifecycle, push-then-pull canonical reconciliation, accurate worker `accepted_count` row inspection, 410 GC watermark reconciliation, and strict legacy account isolation).
+* CI: `pnpm test` and `pnpm typecheck` gating every PR and deployment.
+
 
 

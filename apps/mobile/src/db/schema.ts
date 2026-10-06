@@ -2,6 +2,7 @@ export const INIT_SQL = `
 -- Books table
 CREATE TABLE IF NOT EXISTS books (
     id TEXT PRIMARY KEY,
+    user_id TEXT,
     title TEXT NOT NULL,
     author TEXT NOT NULL,
     cover_url TEXT,

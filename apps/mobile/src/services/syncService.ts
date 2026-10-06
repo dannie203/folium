@@ -170,14 +170,30 @@ export async function purgeSyncOutbox(): Promise<void> {
 }
 
 /**
- * Detach all cloud-synced books and associated metadata from local SQLite.
- * Keeps purely local books (sync_seq == 0 AND drive_file_id IS NULL).
+ * Detach all cloud-synced or account-owned books and associated metadata from local SQLite.
+ * Keeps purely local guest books (user_id IS NULL AND sync_seq == 0 AND drive_file_id IS NULL).
  */
-export async function detachAccountLocalState(): Promise<void> {
+export async function detachAccountLocalState(targetUserId?: string | null): Promise<void> {
   const db = await getDatabase();
-  const syncedBooks = await db.getAllAsync<{ id: string }>(
-    'SELECT id FROM books WHERE sync_seq > 0 OR drive_file_id IS NOT NULL'
-  );
+  let sql: string;
+  let params: any[] = [];
+
+  if (targetUserId) {
+    // Detach books belonging to the specific target user OR any cloud-synced records
+    sql = 'SELECT id FROM books WHERE user_id = ? OR (user_id IS NOT NULL AND user_id != ?) OR sync_seq > 0 OR drive_file_id IS NOT NULL';
+    params = [targetUserId, targetUserId];
+  } else {
+    // Detach all account-bound / cloud records (e.g. on full signOut with clearLocalData)
+    const activeUserId = getCurrentUser()?.id || (await getSyncMeta(META_KEYS.ACTIVE_USER_ID));
+    if (activeUserId) {
+      sql = 'SELECT id FROM books WHERE user_id = ? OR user_id IS NOT NULL OR sync_seq > 0 OR drive_file_id IS NOT NULL';
+      params = [activeUserId];
+    } else {
+      sql = 'SELECT id FROM books WHERE user_id IS NOT NULL OR sync_seq > 0 OR drive_file_id IS NOT NULL';
+    }
+  }
+
+  const syncedBooks = await db.getAllAsync<{ id: string }>(sql, params);
   for (const b of syncedBooks) {
     await db.runAsync('DELETE FROM reading_progress WHERE book_id = ?', [b.id]);
     await db.runAsync('DELETE FROM bookmarks WHERE book_id = ?', [b.id]);
@@ -197,11 +213,30 @@ export async function handleAccountLifecycleSwitch(newUserId: string | null): Pr
 
   if (previousUserId && newUserId && previousUserId !== newUserId) {
     console.log(`[SyncService] Account switch detected: ${previousUserId} -> ${newUserId}. Detaching previous account state.`);
-    await detachAccountLocalState();
+    await detachAccountLocalState(previousUserId);
     resetSyncSessionState();
   }
 
   if (newUserId) {
+    const db = await getDatabase();
+    // Claim unassigned guest books for the newly authenticated account
+    if (!previousUserId) {
+      await db.runAsync('UPDATE books SET user_id = ? WHERE user_id IS NULL', [newUserId]);
+    }
+
+    // Ensure strict isolation against foreign account artifacts
+    const foreignBooks = await db.getAllAsync<{ id: string }>(
+      'SELECT id FROM books WHERE user_id IS NOT NULL AND user_id != ?',
+      [newUserId]
+    );
+    for (const b of foreignBooks) {
+      await db.runAsync('DELETE FROM reading_progress WHERE book_id = ?', [b.id]);
+      await db.runAsync('DELETE FROM bookmarks WHERE book_id = ?', [b.id]);
+      await db.runAsync('DELETE FROM highlights WHERE book_id = ?', [b.id]);
+      await db.runAsync('DELETE FROM notes WHERE book_id = ?', [b.id]);
+      await db.runAsync('DELETE FROM books WHERE id = ?', [b.id]);
+    }
+
     await setSyncMeta(META_KEYS.ACTIVE_USER_ID, newUserId);
   }
 }
@@ -472,19 +507,14 @@ export async function pushPendingMutations(): Promise<{
     );
   }
 
-  // Advance local cursor if contiguous, or pull intervening gap if remote writes occurred
-  const currentCursor = await getLastSyncedSeq();
-  if (committedSeq === currentCursor + 1) {
-    // Contiguous sequence: safe to advance local cursor directly
-    await setLastSyncedSeq(committedSeq);
-  } else if (committedSeq > currentCursor + 1) {
-    // Remote sequence gap detected (intervening remote writes from another device)!
-    // Safely pull the intervening sequence window to prevent data loss.
-    console.log(
-      `[SyncService] Remote sequence gap detected (local: ${currentCursor}, committed: ${committedSeq}). Pulling intervening changes...`
-    );
-    await pullRemoteChanges();
-  }
+  // Canonical state reconciliation:
+  // After pushing mutations, ALWAYS pull remote changes to reconcile canonical server state.
+  // 1. If any mutations were rejected by server-side LWW (e.g. stale title edits on deleted books),
+  //    pulling immediately applies the canonical winning state (tombstones) to local SQLite.
+  // 2. If mutations were accepted, pulling stamps the official sync_seq on local records.
+  // 3. If intervening remote writes occurred (committedSeq > currentCursor + 1), pulling closes the sequence gap.
+  // 4. pullRemoteChanges() automatically advances local sequence cursor to server_sync_seq upon success.
+  await pullRemoteChanges();
 
   await refreshPendingCount();
 
@@ -682,9 +712,10 @@ export async function pullRemoteChanges(isFullResync = false): Promise<{
       } else {
         // Upsert metadata into books table with LWW guard and sync_seq
         await db.runAsync(
-          `INSERT INTO books (id, title, author, cover_url, file_type, file_size, drive_file_id, created_at, updated_at, sync_seq)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO books (id, user_id, title, author, cover_url, file_type, file_size, drive_file_id, created_at, updated_at, sync_seq)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
+             user_id = COALESCE(excluded.user_id, books.user_id),
              title = excluded.title,
              author = excluded.author,
              cover_url = COALESCE(excluded.cover_url, books.cover_url),
@@ -698,6 +729,7 @@ export async function pullRemoteChanges(isFullResync = false): Promise<{
            WHERE excluded.updated_at >= books.updated_at`,
           [
             b.id,
+            b.user_id || user.id,
             b.title,
             b.author,
             b.cover_url ?? null,
@@ -717,7 +749,7 @@ export async function pullRemoteChanges(isFullResync = false): Promise<{
   // 6. Full Resync Reconciliation (when triggered by HTTP 410):
   // Prunes local synced entities whose server tombstones were purged by garbage collection.
   if (isFullResync) {
-    await reconcileSnapshotEntities(db, data, data.server_sync_seq);
+    await reconcileSnapshotEntities(db, data, data.server_sync_seq, user.id);
   }
 
   // Update server sequence cursor
@@ -741,7 +773,8 @@ export interface SyncDatabaseAdapter {
 export async function reconcileSnapshotEntities(
   db: SyncDatabaseAdapter,
   data: SyncPullResponse,
-  serverSyncSeq: number
+  serverSyncSeq: number,
+  activeUserId?: string | null
 ): Promise<{
   prunedBooks: string[];
   prunedBookmarks: string[];
@@ -765,10 +798,13 @@ export async function reconcileSnapshotEntities(
   const prunedHighlights: string[] = [];
   const prunedNotes: string[] = [];
 
-  // Prune orphaned local books that have been synced to cloud (sync_seq > 0)
-  const localBooks = await db.getAllAsync<{ id: string }>(
-    'SELECT id FROM books WHERE is_deleted = 0 AND sync_seq > 0'
-  );
+  // Prune orphaned local books that have been synced to cloud (sync_seq > 0 or user_id or drive_file_id)
+  const bookQuery = activeUserId
+    ? 'SELECT id FROM books WHERE is_deleted = 0 AND (sync_seq > 0 OR user_id = ? OR drive_file_id IS NOT NULL)'
+    : 'SELECT id FROM books WHERE is_deleted = 0 AND (sync_seq > 0 OR user_id IS NOT NULL OR drive_file_id IS NOT NULL)';
+  const bookParams = activeUserId ? [activeUserId] : [];
+  const localBooks = await db.getAllAsync<{ id: string }>(bookQuery, bookParams);
+
   for (const b of localBooks) {
     if (!activeBookIds.has(b.id) && !pendingOutbox.has(`book:${b.id}`)) {
       await db.runAsync(
@@ -780,9 +816,10 @@ export async function reconcileSnapshotEntities(
   }
 
   // Prune orphaned bookmarks, highlights, and notes
-  const localBookmarks = await db.getAllAsync<{ id: string }>(
-    'SELECT id FROM bookmarks WHERE is_deleted = 0 AND sync_seq > 0'
-  );
+  const bmQuery = activeUserId
+    ? 'SELECT id FROM bookmarks WHERE is_deleted = 0 AND (sync_seq > 0 OR book_id IN (SELECT id FROM books WHERE user_id = ? OR drive_file_id IS NOT NULL))'
+    : 'SELECT id FROM bookmarks WHERE is_deleted = 0 AND sync_seq > 0';
+  const localBookmarks = await db.getAllAsync<{ id: string }>(bmQuery, activeUserId ? [activeUserId] : []);
   for (const bm of localBookmarks) {
     if (!activeBookmarkIds.has(bm.id) && !pendingOutbox.has(`bookmark:${bm.id}`)) {
       await db.runAsync('UPDATE bookmarks SET is_deleted = 1, sync_seq = ? WHERE id = ?', [serverSyncSeq, bm.id]);
@@ -790,9 +827,10 @@ export async function reconcileSnapshotEntities(
     }
   }
 
-  const localHighlights = await db.getAllAsync<{ id: string }>(
-    'SELECT id FROM highlights WHERE is_deleted = 0 AND sync_seq > 0'
-  );
+  const hlQuery = activeUserId
+    ? 'SELECT id FROM highlights WHERE is_deleted = 0 AND (sync_seq > 0 OR book_id IN (SELECT id FROM books WHERE user_id = ? OR drive_file_id IS NOT NULL))'
+    : 'SELECT id FROM highlights WHERE is_deleted = 0 AND sync_seq > 0';
+  const localHighlights = await db.getAllAsync<{ id: string }>(hlQuery, activeUserId ? [activeUserId] : []);
   for (const hl of localHighlights) {
     if (!activeHighlightIds.has(hl.id) && !pendingOutbox.has(`highlight:${hl.id}`)) {
       await db.runAsync('UPDATE highlights SET is_deleted = 1, sync_seq = ? WHERE id = ?', [serverSyncSeq, hl.id]);
@@ -800,9 +838,10 @@ export async function reconcileSnapshotEntities(
     }
   }
 
-  const localNotes = await db.getAllAsync<{ id: string }>(
-    'SELECT id FROM notes WHERE is_deleted = 0 AND sync_seq > 0'
-  );
+  const noteQuery = activeUserId
+    ? 'SELECT id FROM notes WHERE is_deleted = 0 AND (sync_seq > 0 OR book_id IN (SELECT id FROM books WHERE user_id = ? OR drive_file_id IS NOT NULL))'
+    : 'SELECT id FROM notes WHERE is_deleted = 0 AND sync_seq > 0';
+  const localNotes = await db.getAllAsync<{ id: string }>(noteQuery, activeUserId ? [activeUserId] : []);
   for (const n of localNotes) {
     if (!activeNoteIds.has(n.id) && !pendingOutbox.has(`note:${n.id}`)) {
       await db.runAsync('UPDATE notes SET is_deleted = 1, sync_seq = ? WHERE id = ?', [serverSyncSeq, n.id]);

@@ -156,11 +156,9 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
       accessToken: 'demo_access_token_folium_sandbox',
       expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
     };
+    const { handleAccountLifecycleSwitch } = require('./syncService');
+    await handleAccountLifecycleSwitch(demoUser.id);
     persistUser(demoUser);
-    try {
-      const { handleAccountLifecycleSwitch } = require('./syncService');
-      await handleAccountLifecycleSwitch(demoUser.id);
-    } catch {}
     return demoUser;
   }
 
@@ -228,11 +226,11 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
     expiresAt: Date.now() + expiresIn * 1000,
   };
 
+  // Enforce account isolation lifecycle BEFORE persisting new user identity (Fail-Closed Security Boundary)
+  const { handleAccountLifecycleSwitch } = require('./syncService');
+  await handleAccountLifecycleSwitch(user.id);
+
   persistUser(user);
-  try {
-    const { handleAccountLifecycleSwitch } = require('./syncService');
-    await handleAccountLifecycleSwitch(user.id);
-  } catch {}
   return user;
 }
 
@@ -258,7 +256,10 @@ export async function signOut(options?: { clearLocalData?: boolean }): Promise<v
   try {
     const { clearGoogleDriveCache } = require('./googleDriveService');
     clearGoogleDriveCache();
-  } catch {}
+  } catch (err) {
+    console.warn('[AuthService] Failed to clear Drive cache on signOut:', err);
+  }
+
   try {
     const { resetSyncSessionState, purgeSyncOutbox, detachAccountLocalState } = require('./syncService');
     resetSyncSessionState();
@@ -267,5 +268,7 @@ export async function signOut(options?: { clearLocalData?: boolean }): Promise<v
     if (options?.clearLocalData) {
       await detachAccountLocalState();
     }
-  } catch {}
+  } catch (err) {
+    console.warn('[AuthService] Failed to reset sync state on signOut:', err);
+  }
 }

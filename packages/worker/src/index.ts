@@ -581,7 +581,6 @@ app.post('/api/sync/push', async (c) => {
               userId
             )
         );
-        acceptedCount++;
       }
     }
 
@@ -621,7 +620,6 @@ app.post('/api/sync/push', async (c) => {
               userId
             )
         );
-        acceptedCount++;
       }
     }
 
@@ -663,7 +661,6 @@ app.post('/api/sync/push', async (c) => {
               userId
             )
         );
-        acceptedCount++;
       }
     }
 
@@ -710,7 +707,6 @@ app.post('/api/sync/push', async (c) => {
               userId
             )
         );
-        acceptedCount++;
       }
     }
 
@@ -751,9 +747,10 @@ app.post('/api/sync/push', async (c) => {
               userId
             )
         );
-        acceptedCount++;
       }
     }
+
+    const entityStatementsCount = statements.length - 1;
 
     // 30-Day Tombstone Retention & Auto Garbage Collection
     // Purges tombstones older than 30 days during sync cycles
@@ -813,6 +810,19 @@ app.post('/api/sync/push', async (c) => {
           const row = batchResults[0].results[0] as { current_seq?: number };
           if (row.current_seq) {
             committedSeq = Number(row.current_seq);
+          }
+        }
+
+        // Count accepted mutations based on actual affected rows (LWW acceptance)
+        for (let j = 0; j < batchResults.length; j++) {
+          const globalIdx = i + j;
+          if (globalIdx >= 1 && globalIdx <= entityStatementsCount) {
+            const meta = (batchResults[j] as any)?.meta;
+            if (typeof meta?.changes === 'number') {
+              if (meta.changes > 0) acceptedCount++;
+            } else {
+              acceptedCount++;
+            }
           }
         }
       }
