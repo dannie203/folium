@@ -3,7 +3,7 @@ import type { Book } from '@folium/shared';
 import { getCurrentUser } from './authService';
 import { getDatabase } from '../db';
 import { generateUUID } from './bookService';
-import { saveWebBook, saveBookFile } from './storage';
+import { saveWebBook, saveBookFile, saveBookBuffer } from './storage';
 import { validateBookBytes } from './fileValidator';
 import { queueMutation, triggerDebouncedSync } from './syncService';
 
@@ -214,20 +214,11 @@ export async function downloadAndCacheDriveBook(book: Book): Promise<{ buffer?: 
   const buffer = await resp.arrayBuffer();
   validateBookBytes(buffer, book.file_type);
 
-  let newLocalPath: string;
-  if (Platform.OS === 'web') {
-    await saveWebBook(book.id, buffer);
-    newLocalPath = `indexeddb://${book.id}`;
-  } else {
-    const blob = new Blob([buffer]);
-    const blobUrl = URL.createObjectURL(blob);
-    newLocalPath = await saveBookFile(book.id, blobUrl, book.file_type);
-  }
+  const newLocalPath = await saveBookBuffer(book.id, buffer, book.file_type);
 
   const db = await getDatabase();
-  await db.runAsync('UPDATE books SET local_path = ?, updated_at = ? WHERE id = ?', [
+  await db.runAsync('UPDATE books SET local_path = ? WHERE id = ?', [
     newLocalPath,
-    Date.now(),
     book.id,
   ]);
 

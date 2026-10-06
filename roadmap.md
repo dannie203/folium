@@ -197,7 +197,7 @@
   - **Drop-Box Root Inbox**: Root `/Folium` directory acts as a smart intake folder; users can drop EPUBs/PDFs from any PC/browser, and Folium automatically ingests them into `Inbox` upon sync.
   - **Subfolder Mirroring (Shelves/Tags)**: Subfolders inside `/Folium` (e.g. `/Folium/Văn Học/`, `/Folium/Kỹ Thuật/`) automatically map to Shelves / Collection Tabs in the app UI.
   - **Recursive Public Folder Traversal**: Deep recursive scanning (`scanPublicFolderRecursive`) traversing multi-level nested folders in shared community Google Drive links.
-  - **On-Demand Lazy Caching**: Ingests metadata and covers without mass-downloading gigabytes; streams and caches full book binaries only upon first reader open.
+  - **On-Demand Lazy Caching**: Ingests metadata and covers without mass-downloading gigabytes; downloads and caches full book binaries only upon first reader open.
 - [x] **User-Centric Classification & Metadata Editor (EPUB & PDF)**:
   - **Zero Unsolicited Auto-Sorting**: Eliminates incorrect machine guesses from messy community metadata (uploader tags, generic titles, scan numbers). The user retains 100% agency over their library hierarchy.
   - **Universal Smart Inbox ("📥 Hộp thư đến")**: Newly imported or dropped books default to an Unsorted Inbox buffer with horizontal shelf filter chips (`Tất cả`, `📥 Hộp thư đến`, dynamic shelves, `EPUB`, `PDF`).
@@ -275,10 +275,10 @@
 - [x] **Smart Voice Selection & Settings**:
   - In-app Voice Picker modal categorizing recommended voices matching current app/book language, plus audio sample preview testing.
   - Speech rate controls (0.75x - 2.0x), pitch, and auto-sentence advance toggle persisted to SQLite `sync_meta`.
-- [x] **Synchronized Reading UI & Reader Bridge**:
+- [x] **Reader Audio Player Bar & Text Extraction Bridge**:
   - `TTSPlayerBar` floating playback controller (play, pause, next sentence, previous sentence, speed cycling, sentence counter).
   - Sentence segmentation engine with Vietnamese title and honorific abbreviation protection.
-  - Reader bridge text extraction (`GET_CURRENT_TEXT` -> `TEXT_EXTRACTED`) across both EPUB and PDF reader frames.
+  - Reader bridge text extraction (`GET_CURRENT_TEXT` -> `TEXT_EXTRACTED`) across both EPUB and PDF reader frames feeding the floating audio playback bar (note: sentence-level synchronized visual CFI/PDF rect highlighting is deferred to a future phase).
 - [x] **Accessibility & Localization**:
   - Complete i18n support across 7 languages (`vi`, `en`, `ja`, `zh`, `fr`, `es`, `de`).
   - Unit test suite verifying sentence segmentation, decimal protection, and voice priority filtering.
@@ -311,9 +311,9 @@
 | **Zero-CDN PDF Reader & Ergonomics** | 4 | ✅ Done | 🟡 In Dev | 🟡 In Dev | N/A |
 | **Production Web Deployment** | 5 | ✅ Done | N/A | N/A | N/A |
 | **Bookmarks, Highlights & Notes** | 6 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
-| **FTS5 Full-Text Search** | 6 | ✅ Done | ✅ Done | ✅ Done | N/A |
+| **Annotation Search (SQLite)** | 6 | ✅ Done | ✅ Done | ✅ Done | N/A |
 | **D1 Sync & Quota Defense** | 7 | ✅ Done | ✅ Done | ✅ Done | ✅ Live |
-| **Google Drive & Info Lock (E2EE)** | 8 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
+| **Google Drive & Crypto Vault** | 8 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
 | **Privacy, DMCA & Security Portal** | 8 | ✅ Done | ✅ Done | ✅ Done | N/A |
 | **Community Bookshelf & OPDS** | 8.5 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
 | **30-Day GC & Bi-Delete Sync** | 8.6 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
