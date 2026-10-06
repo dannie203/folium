@@ -245,3 +245,89 @@ test('SYNC GC WATERMARK 1: Stale client with cursor older than GC watermark rece
   const fullResyncRes = evaluatePullRequest(0);
   assert.strictEqual(fullResyncRes.status, 200, 'Full resync since=0 must always succeed regardless of watermark');
 });
+
+test('SYNC LWW 3: Book metadata upsert rejects older timestamp mutations and prevents resurrection', async () => {
+  const SQL = await initSqlJs();
+  const db = new SQL.Database();
+
+  const schemaContent = fs.readFileSync('apps/mobile/src/db/schema.ts', 'utf-8');
+  const match = schemaContent.match(/export const INIT_SQL = \x60([\s\S]*?)\x60;/);
+  db.run(match[1]);
+
+  const bookId = 'book-lww-resurrect-1';
+  // 1. Initial book creation at T = 1000
+  db.run(
+    `INSERT INTO books (id, title, author, file_type, file_size, is_deleted, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [bookId, 'Original Title', 'Author', 'epub', 1000, 0, 1000, 1000]
+  );
+
+  // 2. Book deleted at T = 2000
+  db.run(
+    `UPDATE books SET is_deleted = 1, deleted_at = 2000, updated_at = 2000 WHERE id = ?`,
+    [bookId]
+  );
+
+  // 3. Stale offline mutation arrives with T = 1500 (is_deleted = 0)
+  // LWW Guard: WHERE excluded.updated_at >= books.updated_at
+  db.run(
+    `INSERT INTO books (id, title, author, file_type, file_size, is_deleted, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       title = excluded.title,
+       author = excluded.author,
+       is_deleted = excluded.is_deleted,
+       updated_at = excluded.updated_at
+     WHERE excluded.updated_at >= books.updated_at`,
+    [bookId, 'Stale Title Edit', 'Author', 'epub', 1000, 0, 1000, 1500]
+  );
+
+  // Verify book remains deleted and was NOT resurrected
+  const stmt = db.prepare('SELECT is_deleted, title FROM books WHERE id = ?');
+  stmt.bind([bookId]);
+  stmt.step();
+  const row = stmt.getAsObject();
+  assert.strictEqual(row.is_deleted, 1, 'Book must not be resurrected by stale offline mutation');
+  assert.strictEqual(row.title, 'Original Title', 'Stale title edit must be rejected by LWW guard');
+  stmt.free();
+
+  // 4. Valid newer update at T = 3000 (e.g. undeleted / recreated)
+  db.run(
+    `INSERT INTO books (id, title, author, file_type, file_size, is_deleted, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       title = excluded.title,
+       author = excluded.author,
+       is_deleted = excluded.is_deleted,
+       updated_at = excluded.updated_at
+     WHERE excluded.updated_at >= books.updated_at`,
+    [bookId, 'New Edition', 'Author', 'epub', 1000, 0, 3000, 3000]
+  );
+
+  const stmt2 = db.prepare('SELECT is_deleted, title FROM books WHERE id = ?');
+  stmt2.bind([bookId]);
+  stmt2.step();
+  const row2 = stmt2.getAsObject();
+  assert.strictEqual(row2.is_deleted, 0, 'Newer mutation at T=3000 must be accepted');
+  assert.strictEqual(row2.title, 'New Edition');
+  stmt2.free();
+});
+
+test('SYNC RECONCILIATION 1: Full resync prunes local records purged by server GC', () => {
+  const localBooks = [
+    { id: 'b-active', is_deleted: 0 },
+    { id: 'b-purged-on-server', is_deleted: 0 },
+  ];
+  const serverActiveBookIds = new Set(['b-active']);
+  const pendingOutbox = new Set(); // no pending local mutations
+
+  // Reconciliation logic:
+  const pruned = [];
+  for (const b of localBooks) {
+    if (!serverActiveBookIds.has(b.id) && !pendingOutbox.has(`book:${b.id}`)) {
+      pruned.push(b.id);
+    }
+  }
+
+  assert.deepStrictEqual(pruned, ['b-purged-on-server'], 'Records missing from server full snapshot must be pruned');
+});

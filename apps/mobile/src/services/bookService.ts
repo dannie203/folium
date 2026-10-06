@@ -178,8 +178,12 @@ export async function updateBookMetadata(
   const title = updates.title ?? existing.title;
   const author = updates.author ?? existing.author;
   const cover_url = updates.cover_url !== undefined ? updates.cover_url : existing.cover_url;
-  const shelf = updates.shelf !== undefined ? updates.shelf : existing.shelf ?? 'Inbox';
-  const tags = updates.tags !== undefined ? updates.tags : (existing.tags || []);
+  const shelf = updates.shelf !== undefined ? updates.shelf : existing.shelf;
+  const rawExistingTags = existing.tags as unknown;
+  const existingTags = typeof rawExistingTags === 'string'
+    ? (rawExistingTags as string).split(',').filter(Boolean)
+    : (Array.isArray(rawExistingTags) ? (rawExistingTags as string[]) : []);
+  const tags = updates.tags !== undefined ? updates.tags : existingTags;
   const tagsStr = Array.isArray(tags) ? tags.join(',') : '';
   const now = Date.now();
 

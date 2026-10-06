@@ -543,12 +543,15 @@ app.post('/api/sync/push', async (c) => {
         const fileSize = typeof b.file_size === 'number' && !isNaN(b.file_size) ? b.file_size : 0;
         const isDeleted = b.is_deleted ? 1 : 0;
         const deletedAt = isDeleted ? (b.deleted_at || now) : null;
+        const clientUpdatedAt = typeof b.updated_at === 'number' && !isNaN(b.updated_at)
+          ? b.updated_at
+          : (typeof b.client_updated_at === 'number' && !isNaN(b.client_updated_at) ? b.client_updated_at : (deletedAt || now));
 
         statements.push(
           db
             .prepare(
-              `INSERT INTO books (id, user_id, title, author, cover_url, file_type, file_size, drive_file_id, is_deleted, deleted_at, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
+              `INSERT INTO books (id, user_id, title, author, cover_url, file_type, file_size, drive_file_id, is_deleted, deleted_at, client_updated_at, sync_seq)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
                ON CONFLICT(id) DO UPDATE SET
                  title = CASE WHEN excluded.is_deleted = 0 AND excluded.title != 'Chưa có tiêu đề' THEN excluded.title ELSE books.title END,
                  author = CASE WHEN excluded.is_deleted = 0 AND excluded.author != 'Tác giả không rõ' THEN excluded.author ELSE books.author END,
@@ -558,8 +561,10 @@ app.post('/api/sync/push', async (c) => {
                  drive_file_id = CASE WHEN excluded.is_deleted = 0 THEN COALESCE(excluded.drive_file_id, books.drive_file_id) ELSE books.drive_file_id END,
                  is_deleted = excluded.is_deleted,
                  deleted_at = excluded.deleted_at,
+                 client_updated_at = excluded.client_updated_at,
                  sync_seq = excluded.sync_seq
-               WHERE books.user_id = excluded.user_id`
+               WHERE books.user_id = excluded.user_id
+                 AND excluded.client_updated_at >= COALESCE(books.client_updated_at, 0)`
             )
             .bind(
               b.id,
@@ -572,6 +577,7 @@ app.post('/api/sync/push', async (c) => {
               b.drive_file_id ?? null,
               isDeleted,
               deletedAt,
+              clientUpdatedAt,
               userId
             )
         );

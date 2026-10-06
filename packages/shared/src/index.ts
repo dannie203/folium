@@ -19,6 +19,7 @@ export interface Book {
   tags?: string[] | null;
   created_at: number;
   updated_at: number;
+  client_updated_at?: number;
   is_deleted?: boolean;
   deleted_at?: number | null;
   sync_seq?: number;

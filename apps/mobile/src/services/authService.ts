@@ -245,4 +245,14 @@ export async function signOut(): Promise<void> {
   }
 
   persistUser(null);
+
+  // Invalidate user-scoped session caches
+  try {
+    const { clearGoogleDriveCache } = require('./googleDriveService');
+    clearGoogleDriveCache();
+  } catch {}
+  try {
+    const { resetSyncSessionState } = require('./syncService');
+    resetSyncSessionState();
+  } catch {}
 }

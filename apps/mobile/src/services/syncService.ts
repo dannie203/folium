@@ -126,12 +126,37 @@ export async function setSyncMeta(key: string, value: string): Promise<void> {
 }
 
 export async function getLastSyncedSeq(): Promise<number> {
-  const val = await getSyncMeta(META_KEYS.CURSOR);
+  const user = getCurrentUser();
+  const key = user?.id ? `${META_KEYS.CURSOR}:${user.id}` : META_KEYS.CURSOR;
+  const val = await getSyncMeta(key);
   return val ? parseInt(val, 10) || 0 : 0;
 }
 
 export async function setLastSyncedSeq(seq: number): Promise<void> {
-  await setSyncMeta(META_KEYS.CURSOR, String(seq));
+  const user = getCurrentUser();
+  const key = user?.id ? `${META_KEYS.CURSOR}:${user.id}` : META_KEYS.CURSOR;
+  await setSyncMeta(key, String(seq));
+}
+
+/**
+ * Reset in-memory sync session state and timers upon user sign-out.
+ */
+export function resetSyncSessionState(): void {
+  currentStatus = 'idle';
+  currentLastSyncedAt = null;
+  currentPendingCount = 0;
+  currentErrorMessage = null;
+  isSyncing = false;
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+  retryAttempt = 0;
+  notifyListeners();
 }
 
 export async function getSyncServerUrl(): Promise<string> {
@@ -234,10 +259,13 @@ export async function drainAndCompactOutbox(): Promise<{
 
       switch (row.entity_type) {
         case 'book': {
-          booksMap.set(row.entity_id, {
-            ...(booksMap.get(row.entity_id) || ({} as Book)),
-            ...data,
-          });
+          const existing = booksMap.get(row.entity_id);
+          if (!existing || (data.updated_at || 0) >= (existing.updated_at || 0)) {
+            booksMap.set(row.entity_id, {
+              ...(existing || ({} as Book)),
+              ...data,
+            });
+          }
           break;
         }
         case 'progress': {
@@ -424,7 +452,7 @@ export async function pushPendingMutations(): Promise<{
 /**
  * Pull incremental changes newer than local sequence cursor from Cloudflare D1.
  */
-export async function pullRemoteChanges(): Promise<{
+export async function pullRemoteChanges(isFullResync = false): Promise<{
   pulledCount: number;
   serverSeq: number;
 }> {
@@ -457,7 +485,7 @@ export async function pullRemoteChanges(): Promise<{
   if (res.status === 410) {
     console.warn('[SyncService] Sync cursor expired on server (HTTP 410). Resetting cursor for full resync.');
     await setLastSyncedSeq(0);
-    return pullRemoteChanges();
+    return pullRemoteChanges(true);
   }
 
   if (!res.ok) {
@@ -591,13 +619,20 @@ export async function pullRemoteChanges(): Promise<{
     }
   }
 
-  // 5. Apply Books Metadata
+  // 5. Apply Books Metadata (LWW by updated_at)
   if (data.books && data.books.length > 0) {
     for (const b of data.books) {
+      const bookUpdatedAt = typeof b.updated_at === 'number' && !isNaN(b.updated_at)
+        ? b.updated_at
+        : (typeof (b as any).client_updated_at === 'number' && !isNaN((b as any).client_updated_at) ? (b as any).client_updated_at : Date.now());
+
       if (b.is_deleted) {
-        await db.runAsync('DELETE FROM books WHERE id = ?', [b.id]);
+        await db.runAsync(
+          'UPDATE books SET is_deleted = 1, deleted_at = ? WHERE id = ? AND ? >= updated_at',
+          [b.deleted_at || Date.now(), b.id, bookUpdatedAt]
+        );
       } else {
-        // Upsert metadata into books table
+        // Upsert metadata into books table with LWW guard
         await db.runAsync(
           `INSERT INTO books (id, title, author, cover_url, file_type, file_size, drive_file_id, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -608,7 +643,10 @@ export async function pullRemoteChanges(): Promise<{
              file_type = excluded.file_type,
              file_size = excluded.file_size,
              drive_file_id = COALESCE(excluded.drive_file_id, books.drive_file_id),
-             updated_at = excluded.updated_at`,
+             is_deleted = 0,
+             deleted_at = NULL,
+             updated_at = excluded.updated_at
+           WHERE excluded.updated_at >= books.updated_at`,
           [
             b.id,
             b.title,
@@ -618,11 +656,64 @@ export async function pullRemoteChanges(): Promise<{
             b.file_size,
             b.drive_file_id ?? null,
             b.created_at || Date.now(),
-            b.updated_at || Date.now(),
+            bookUpdatedAt,
           ]
         );
       }
       pulledCount++;
+    }
+  }
+
+  // 6. Full Resync Reconciliation (when triggered by HTTP 410):
+  // Prunes local synced entities whose server tombstones were purged by garbage collection.
+  if (isFullResync) {
+    const activeBookIds = new Set((data.books || []).filter((b) => !b.is_deleted).map((b) => b.id));
+    const activeBookmarkIds = new Set((data.bookmarks || []).filter((bm) => !bm.is_deleted).map((bm) => bm.id));
+    const activeHighlightIds = new Set((data.highlights || []).filter((h) => !h.is_deleted).map((h) => h.id));
+    const activeNoteIds = new Set((data.notes || []).filter((n) => !n.is_deleted).map((n) => n.id));
+
+    // Preserve any mutations currently queued in outbox
+    const outboxRows = await db.getAllAsync<{ entity_type: string; entity_id: string }>(
+      'SELECT entity_type, entity_id FROM sync_outbox'
+    );
+    const pendingOutbox = new Set(outboxRows.map((r) => `${r.entity_type}:${r.entity_id}`));
+
+    // Prune orphaned local books that have been synced or indexed from Drive
+    const localBooks = await db.getAllAsync<{ id: string }>(
+      'SELECT id FROM books WHERE is_deleted = 0 AND drive_file_id IS NOT NULL'
+    );
+    for (const b of localBooks) {
+      if (!activeBookIds.has(b.id) && !pendingOutbox.has(`book:${b.id}`)) {
+        await db.runAsync('UPDATE books SET is_deleted = 1, deleted_at = ? WHERE id = ?', [Date.now(), b.id]);
+      }
+    }
+
+    // Prune orphaned bookmarks, highlights, and notes
+    const localBookmarks = await db.getAllAsync<{ id: string }>(
+      'SELECT id FROM bookmarks WHERE is_deleted = 0 AND sync_seq > 0'
+    );
+    for (const bm of localBookmarks) {
+      if (!activeBookmarkIds.has(bm.id) && !pendingOutbox.has(`bookmark:${bm.id}`)) {
+        await db.runAsync('UPDATE bookmarks SET is_deleted = 1, sync_seq = ? WHERE id = ?', [data.server_sync_seq, bm.id]);
+      }
+    }
+
+    const localHighlights = await db.getAllAsync<{ id: string }>(
+      'SELECT id FROM highlights WHERE is_deleted = 0 AND sync_seq > 0'
+    );
+    for (const hl of localHighlights) {
+      if (!activeHighlightIds.has(hl.id) && !pendingOutbox.has(`highlight:${hl.id}`)) {
+        await db.runAsync('UPDATE highlights SET is_deleted = 1, sync_seq = ? WHERE id = ?', [data.server_sync_seq, hl.id]);
+      }
+    }
+
+    const localNotes = await db.getAllAsync<{ id: string }>(
+      'SELECT id FROM notes WHERE is_deleted = 0 AND sync_seq > 0'
+    );
+    for (const n of localNotes) {
+      if (!activeNoteIds.has(n.id) && !pendingOutbox.has(`note:${n.id}`)) {
+        await db.runAsync('UPDATE notes SET is_deleted = 1, sync_seq = ? WHERE id = ?', [data.server_sync_seq, n.id]);
+      }
     }
   }
 

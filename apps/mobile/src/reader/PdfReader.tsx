@@ -45,7 +45,7 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
     if (Platform.OS === 'web') {
       const iframe = webIframeRef.current;
       if (iframe?.contentWindow) {
-        iframe.contentWindow.postMessage(message, window.location.origin);
+        iframe.contentWindow.postMessage(message, '*');
       }
     } else {
       nativeWebViewRef.current?.postMessage(JSON.stringify(message));
@@ -213,7 +213,7 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
         {React.createElement('iframe', {
           ref: webIframeRef,
           srcDoc: PDF_VIEWER_HTML,
-          sandbox: 'allow-scripts allow-same-origin',
+          sandbox: 'allow-scripts',
           onLoad: () => {
             console.log('[PdfReader] iframe onLoad fired');
             isViewerReadyRef.current = true;
