@@ -760,15 +760,43 @@ Fresh off the high of "fixing" OAuth with one line of code in PR #16, a comprehe
   * `(sync_seq > 0 OR drive_file_id IS NOT NULL)` defines cloud tracking.
   * `reconcileSnapshotEntities()` now strictly filters candidates by `(sync_seq > 0 OR drive_file_id IS NOT NULL) AND (user_id = ? OR user_id IS NULL)`. Offline account-owned books (`sync_seq == 0`) are completely exempt from cloud tombstone pruning. Verified by automated tests.
 
-#### 12. Verification
-* Typecheck across all monorepo packages: **0 errors**.
-* Security & Distributed Test Suite: **61/61 passing** against real `sql.js` SQLite databases:
+#### 12. Cross-Account Annotation Quarantine: Why Bob's Bookmarks Vanished During Alice's Resync
+* **The Punchline:** In fixing book reconciliation, we patted ourselves on the back for properly scoping books by `user_id`. But someone forgot to look at `bookmarks`, `highlights`, and `notes`.
+  * In Folium's SQLite schema, annotation tables don't have a `user_id` column—they only reference `book_id`.
+  * So how were orphaned annotations pruned during HTTP 410 full resync?
+    ```sql
+    SELECT id FROM bookmarks WHERE is_deleted = 0 AND sync_seq > 0
+    ```
+    Global. Blind. Zero account boundary whatsoever.
+  * Imagine Alice and Bob share a tablet or test on the same browser:
+    * Alice has Book A with Bookmark A1 (`sync_seq = 5`).
+    * Bob has Book B with Bookmark B1 (`sync_seq = 7`).
+    * Alice encounters HTTP 410 and triggers a full cloud resync.
+    * The Cloudflare Worker returns Alice's cloud snapshot. Naturally, Alice's snapshot contains zero trace of Bob's entities.
+    * The reconciliation code dutifully queries `WHERE sync_seq > 0`, grabs Bob's Bookmark B1, notices it's absent from Alice's server snapshot, and concludes: *"Aha! This cloud bookmark isn't in the snapshot! It must have been purged from the cloud!"*
+    * `UPDATE bookmarks SET is_deleted = 1 WHERE id = 'bm-bob'`.
+    * Alice resyncs her reading list, and Bob's years of highlights and annotations are quietly massacred in the background. Peak multi-user safety.
+* **The Fix:**
+  * Joined annotations to parent `books` via `JOIN books b ON b.id = entity.book_id`.
+  * Enforced dual invariant filtering:
+    ```sql
+    WHERE entity.is_deleted = 0 AND entity.sync_seq > 0
+      AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)
+      AND (b.user_id = ? OR b.user_id IS NULL)
+    ```
+  * Alice's 410 resync is now quarantined strictly to annotations belonging to Alice's own cloud-tracked books (or unassigned guest books). Bob's annotations remain completely untouched.
+  * Added `SYNC RECONCILIATION 3` in `tests/security/sync_engine_lww.test.mjs`, verifying cross-account isolation across books, bookmarks, highlights, and notes under 410 resync.
+
+#### 13. Verification & Test Metrics
+* Typecheck across all monorepo packages: **0 errors** (`pnpm -r exec tsc --noEmit`).
+* Security & Distributed Test Suite: **62/62 passing** against real `sql.js` SQLite databases:
   * Full migration chain (`0001` $\to$ `0004`) verified on fresh and legacy databases.
   * Push-then-pull canonical reconciliation verifying winning tombstones over stale writes.
   * Strict account isolation with legacy data attribution and default detachment on `signOut()`.
   * Distinction between account ownership and cloud tracking (offline books survive 410 resync).
+  * Cross-account annotation isolation during 410 resync (Bob's annotations preserved).
   * Runtime push payload schema validation and SSRF resource limits.
-* CI: Gated across PRs and production deployments.
+* CI: Gated across PRs (`.github/workflows/ci.yml`) and production deployments (`.github/workflows/deploy.yml`).
 
 
 

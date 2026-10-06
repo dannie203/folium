@@ -820,9 +820,22 @@ export async function reconcileSnapshotEntities(
     }
   }
 
-  // Prune orphaned bookmarks, highlights, and notes only if they were cloud-synced (sync_seq > 0)
-  const bmQuery = 'SELECT id FROM bookmarks WHERE is_deleted = 0 AND sync_seq > 0';
-  const localBookmarks = await db.getAllAsync<{ id: string }>(bmQuery);
+  // Prune orphaned bookmarks, highlights, and notes only if:
+  // 1. They were cloud-synced (sync_seq > 0)
+  // 2. Their parent book is cloud-tracked (sync_seq > 0 OR drive_file_id IS NOT NULL)
+  // 3. Their parent book belongs to the active account (or unassigned), preventing cross-account contamination
+  const annotationParams = activeUserId ? [activeUserId] : [];
+  const bmQuery = activeUserId
+    ? `SELECT bm.id FROM bookmarks bm
+       JOIN books b ON b.id = bm.book_id
+       WHERE bm.is_deleted = 0 AND bm.sync_seq > 0
+         AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)
+         AND (b.user_id = ? OR b.user_id IS NULL)`
+    : `SELECT bm.id FROM bookmarks bm
+       JOIN books b ON b.id = bm.book_id
+       WHERE bm.is_deleted = 0 AND bm.sync_seq > 0
+         AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)`;
+  const localBookmarks = await db.getAllAsync<{ id: string }>(bmQuery, annotationParams);
   for (const bm of localBookmarks) {
     if (!activeBookmarkIds.has(bm.id) && !pendingOutbox.has(`bookmark:${bm.id}`)) {
       await db.runAsync('UPDATE bookmarks SET is_deleted = 1, sync_seq = ? WHERE id = ?', [serverSyncSeq, bm.id]);
@@ -830,8 +843,17 @@ export async function reconcileSnapshotEntities(
     }
   }
 
-  const hlQuery = 'SELECT id FROM highlights WHERE is_deleted = 0 AND sync_seq > 0';
-  const localHighlights = await db.getAllAsync<{ id: string }>(hlQuery);
+  const hlQuery = activeUserId
+    ? `SELECT hl.id FROM highlights hl
+       JOIN books b ON b.id = hl.book_id
+       WHERE hl.is_deleted = 0 AND hl.sync_seq > 0
+         AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)
+         AND (b.user_id = ? OR b.user_id IS NULL)`
+    : `SELECT hl.id FROM highlights hl
+       JOIN books b ON b.id = hl.book_id
+       WHERE hl.is_deleted = 0 AND hl.sync_seq > 0
+         AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)`;
+  const localHighlights = await db.getAllAsync<{ id: string }>(hlQuery, annotationParams);
   for (const hl of localHighlights) {
     if (!activeHighlightIds.has(hl.id) && !pendingOutbox.has(`highlight:${hl.id}`)) {
       await db.runAsync('UPDATE highlights SET is_deleted = 1, sync_seq = ? WHERE id = ?', [serverSyncSeq, hl.id]);
@@ -839,8 +861,17 @@ export async function reconcileSnapshotEntities(
     }
   }
 
-  const noteQuery = 'SELECT id FROM notes WHERE is_deleted = 0 AND sync_seq > 0';
-  const localNotes = await db.getAllAsync<{ id: string }>(noteQuery);
+  const noteQuery = activeUserId
+    ? `SELECT n.id FROM notes n
+       JOIN books b ON b.id = n.book_id
+       WHERE n.is_deleted = 0 AND n.sync_seq > 0
+         AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)
+         AND (b.user_id = ? OR b.user_id IS NULL)`
+    : `SELECT n.id FROM notes n
+       JOIN books b ON b.id = n.book_id
+       WHERE n.is_deleted = 0 AND n.sync_seq > 0
+         AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)`;
+  const localNotes = await db.getAllAsync<{ id: string }>(noteQuery, annotationParams);
   for (const n of localNotes) {
     if (!activeNoteIds.has(n.id) && !pendingOutbox.has(`note:${n.id}`)) {
       await db.runAsync('UPDATE notes SET is_deleted = 1, sync_seq = ? WHERE id = ?', [serverSyncSeq, n.id]);

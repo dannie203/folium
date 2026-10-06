@@ -666,6 +666,218 @@ test('SYNC RECONCILIATION 2: Account-owned local book (user_id = A, sync_seq = 0
   checkCloud.free();
 });
 
+test('SYNC RECONCILIATION 3: Cross-account annotation isolation during HTTP 410 full resync', async () => {
+  const SQL = await initSqlJs();
+  const db = new SQL.Database();
+
+  const schemaContent = fs.readFileSync('apps/mobile/src/db/schema.ts', 'utf-8');
+  const match = schemaContent.match(/export const INIT_SQL = \x60([\s\S]*?)\x60;/);
+  db.run(match[1]);
+
+  const activeUserId = 'user-alice';
+  const otherUserId = 'user-bob';
+
+  // 1. Alice's cloud-tracked book (user_id = 'user-alice', sync_seq = 5)
+  db.run(
+    `INSERT INTO books (id, user_id, title, author, file_type, file_size, drive_file_id, is_deleted, created_at, updated_at, sync_seq)
+     VALUES ('book-alice', ?, 'Alice Cloud Book', 'Author A', 'epub', 1000, 'drive-alice', 0, 1000, 1000, 5)`,
+    [activeUserId]
+  );
+  // Alice's cloud annotations (sync_seq = 5)
+  db.run(
+    `INSERT INTO bookmarks (id, book_id, cfi, title, client_created_at, is_deleted, sync_seq)
+     VALUES ('bm-alice', 'book-alice', 'cfi-a', 'Alice Bookmark', 1000, 0, 5)`
+  );
+  db.run(
+    `INSERT INTO highlights (id, book_id, cfi_range, text, color, client_created_at, is_deleted, sync_seq)
+     VALUES ('hl-alice', 'book-alice', 'cfi-range-a', 'Alice Highlight', 'yellow', 1000, 0, 5)`
+  );
+  db.run(
+    `INSERT INTO notes (id, book_id, content, client_created_at, is_deleted, sync_seq)
+     VALUES ('note-alice', 'book-alice', 'Alice Note', 1000, 0, 5)`
+  );
+
+  // 2. Bob's cloud-tracked book (user_id = 'user-bob', sync_seq = 7)
+  db.run(
+    `INSERT INTO books (id, user_id, title, author, file_type, file_size, drive_file_id, is_deleted, created_at, updated_at, sync_seq)
+     VALUES ('book-bob', ?, 'Bob Cloud Book', 'Author B', 'epub', 2000, 'drive-bob', 0, 2000, 2000, 7)`,
+    [otherUserId]
+  );
+  // Bob's cloud annotations (sync_seq = 7)
+  db.run(
+    `INSERT INTO bookmarks (id, book_id, cfi, title, client_created_at, is_deleted, sync_seq)
+     VALUES ('bm-bob', 'book-bob', 'cfi-b', 'Bob Bookmark', 2000, 0, 7)`
+  );
+  db.run(
+    `INSERT INTO highlights (id, book_id, cfi_range, text, color, client_created_at, is_deleted, sync_seq)
+     VALUES ('hl-bob', 'book-bob', 'cfi-range-b', 'Bob Highlight', 'blue', 2000, 0, 7)`
+  );
+  db.run(
+    `INSERT INTO notes (id, book_id, content, client_created_at, is_deleted, sync_seq)
+     VALUES ('note-bob', 'book-bob', 'Bob Note', 2000, 0, 7)`
+  );
+
+  // 3. Alice's pure local offline book (sync_seq = 0, drive_file_id = NULL)
+  db.run(
+    `INSERT INTO books (id, user_id, title, author, file_type, file_size, drive_file_id, is_deleted, created_at, updated_at, sync_seq)
+     VALUES ('book-alice-local', ?, 'Alice Offline Book', 'Author A', 'epub', 1500, NULL, 0, 1000, 1000, 0)`,
+    [activeUserId]
+  );
+  // Alice's local un-synced bookmark (sync_seq = 0)
+  db.run(
+    `INSERT INTO bookmarks (id, book_id, cfi, title, client_created_at, is_deleted, sync_seq)
+     VALUES ('bm-alice-local', 'book-alice-local', 'cfi-al', 'Alice Local Bookmark', 1000, 0, 0)`
+  );
+
+  // Alice encounters HTTP 410 -> Server returns full resync snapshot for Alice's account.
+  // Alice's server snapshot does NOT include bm-alice, hl-alice, or note-alice (they were purged by GC).
+  // Alice's server snapshot obviously does NOT contain Bob's entities either.
+  const serverSnapshotForAlice = {
+    server_sync_seq: 100,
+    books: [{ id: 'book-alice', title: 'Alice Cloud Book', sync_seq: 5, is_deleted: false }],
+    bookmarks: [],
+    highlights: [],
+    notes: [],
+  };
+
+  const activeBookmarkIds = new Set((serverSnapshotForAlice.bookmarks || []).filter((bm) => !bm.is_deleted).map((bm) => bm.id));
+  const activeHighlightIds = new Set((serverSnapshotForAlice.highlights || []).filter((h) => !h.is_deleted).map((h) => h.id));
+  const activeNoteIds = new Set((serverSnapshotForAlice.notes || []).filter((n) => !n.is_deleted).map((n) => n.id));
+
+  // Run the EXACT annotation reconciliation query logic from syncService.ts:
+  const annotationParams = activeUserId ? [activeUserId] : [];
+  const bmQuery = activeUserId
+    ? `SELECT bm.id FROM bookmarks bm
+       JOIN books b ON b.id = bm.book_id
+       WHERE bm.is_deleted = 0 AND bm.sync_seq > 0
+         AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)
+         AND (b.user_id = ? OR b.user_id IS NULL)`
+    : `SELECT bm.id FROM bookmarks bm
+       JOIN books b ON b.id = bm.book_id
+       WHERE bm.is_deleted = 0 AND bm.sync_seq > 0
+         AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)`;
+
+  const bmStmt = db.prepare(bmQuery);
+  if (annotationParams.length) bmStmt.bind(annotationParams);
+  const localBmCandidates = [];
+  while (bmStmt.step()) localBmCandidates.push(bmStmt.getAsObject().id);
+  bmStmt.free();
+
+  for (const bmId of localBmCandidates) {
+    if (!activeBookmarkIds.has(bmId)) {
+      db.run('UPDATE bookmarks SET is_deleted = 1, sync_seq = ? WHERE id = ?', [
+        serverSnapshotForAlice.server_sync_seq,
+        bmId,
+      ]);
+    }
+  }
+
+  const hlQuery = activeUserId
+    ? `SELECT hl.id FROM highlights hl
+       JOIN books b ON b.id = hl.book_id
+       WHERE hl.is_deleted = 0 AND hl.sync_seq > 0
+         AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)
+         AND (b.user_id = ? OR b.user_id IS NULL)`
+    : `SELECT hl.id FROM highlights hl
+       JOIN books b ON b.id = hl.book_id
+       WHERE hl.is_deleted = 0 AND hl.sync_seq > 0
+         AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)`;
+
+  const hlStmt = db.prepare(hlQuery);
+  if (annotationParams.length) hlStmt.bind(annotationParams);
+  const localHlCandidates = [];
+  while (hlStmt.step()) localHlCandidates.push(hlStmt.getAsObject().id);
+  hlStmt.free();
+
+  for (const hlId of localHlCandidates) {
+    if (!activeHighlightIds.has(hlId)) {
+      db.run('UPDATE highlights SET is_deleted = 1, sync_seq = ? WHERE id = ?', [
+        serverSnapshotForAlice.server_sync_seq,
+        hlId,
+      ]);
+    }
+  }
+
+  const noteQuery = activeUserId
+    ? `SELECT n.id FROM notes n
+       JOIN books b ON b.id = n.book_id
+       WHERE n.is_deleted = 0 AND n.sync_seq > 0
+         AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)
+         AND (b.user_id = ? OR b.user_id IS NULL)`
+    : `SELECT n.id FROM notes n
+       JOIN books b ON b.id = n.book_id
+       WHERE n.is_deleted = 0 AND n.sync_seq > 0
+         AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)`;
+
+  const noteStmt = db.prepare(noteQuery);
+  if (annotationParams.length) noteStmt.bind(annotationParams);
+  const localNoteCandidates = [];
+  while (noteStmt.step()) localNoteCandidates.push(noteStmt.getAsObject().id);
+  noteStmt.free();
+
+  for (const nId of localNoteCandidates) {
+    if (!activeNoteIds.has(nId)) {
+      db.run('UPDATE notes SET is_deleted = 1, sync_seq = ? WHERE id = ?', [
+        serverSnapshotForAlice.server_sync_seq,
+        nId,
+      ]);
+    }
+  }
+
+  // VERIFICATION 1: Alice's purged annotations MUST be pruned (is_deleted = 1)
+  const checkBmA = db.prepare('SELECT is_deleted, sync_seq FROM bookmarks WHERE id = ?');
+  checkBmA.bind(['bm-alice']);
+  checkBmA.step();
+  assert.strictEqual(checkBmA.getAsObject().is_deleted, 1, "Alice's purged bookmark must be marked deleted");
+  assert.strictEqual(checkBmA.getAsObject().sync_seq, 100);
+  checkBmA.free();
+
+  const checkHlA = db.prepare('SELECT is_deleted, sync_seq FROM highlights WHERE id = ?');
+  checkHlA.bind(['hl-alice']);
+  checkHlA.step();
+  assert.strictEqual(checkHlA.getAsObject().is_deleted, 1, "Alice's purged highlight must be marked deleted");
+  assert.strictEqual(checkHlA.getAsObject().sync_seq, 100);
+  checkHlA.free();
+
+  const checkNoteA = db.prepare('SELECT is_deleted, sync_seq FROM notes WHERE id = ?');
+  checkNoteA.bind(['note-alice']);
+  checkNoteA.step();
+  assert.strictEqual(checkNoteA.getAsObject().is_deleted, 1, "Alice's purged note must be marked deleted");
+  assert.strictEqual(checkNoteA.getAsObject().sync_seq, 100);
+  checkNoteA.free();
+
+  // VERIFICATION 2: Bob's annotations MUST REMAIN ACTIVE (is_deleted = 0)
+  // Cross-account isolation: Alice's 410 resync must NOT touch Bob's data!
+  const checkBmB = db.prepare('SELECT is_deleted, sync_seq FROM bookmarks WHERE id = ?');
+  checkBmB.bind(['bm-bob']);
+  checkBmB.step();
+  assert.strictEqual(checkBmB.getAsObject().is_deleted, 0, "Bob's bookmark must NEVER be pruned during Alice's 410 resync");
+  assert.strictEqual(checkBmB.getAsObject().sync_seq, 7);
+  checkBmB.free();
+
+  const checkHlB = db.prepare('SELECT is_deleted, sync_seq FROM highlights WHERE id = ?');
+  checkHlB.bind(['hl-bob']);
+  checkHlB.step();
+  assert.strictEqual(checkHlB.getAsObject().is_deleted, 0, "Bob's highlight must NEVER be pruned during Alice's 410 resync");
+  assert.strictEqual(checkHlB.getAsObject().sync_seq, 7);
+  checkHlB.free();
+
+  const checkNoteB = db.prepare('SELECT is_deleted, sync_seq FROM notes WHERE id = ?');
+  checkNoteB.bind(['note-bob']);
+  checkNoteB.step();
+  assert.strictEqual(checkNoteB.getAsObject().is_deleted, 0, "Bob's note must NEVER be pruned during Alice's 410 resync");
+  assert.strictEqual(checkNoteB.getAsObject().sync_seq, 7);
+  checkNoteB.free();
+
+  // VERIFICATION 3: Alice's pure local annotations (sync_seq = 0) MUST REMAIN ACTIVE
+  const checkBmAOffline = db.prepare('SELECT is_deleted, sync_seq FROM bookmarks WHERE id = ?');
+  checkBmAOffline.bind(['bm-alice-local']);
+  checkBmAOffline.step();
+  assert.strictEqual(checkBmAOffline.getAsObject().is_deleted, 0, "Alice's local un-synced bookmark must NEVER be pruned");
+  assert.strictEqual(checkBmAOffline.getAsObject().sync_seq, 0);
+  checkBmAOffline.free();
+});
+
 test('SYNC ACCOUNT ISOLATION 1: Account Switch Detaches Previous User Cloud Data and Legacy Synced Books', async () => {
   const SQL = await initSqlJs();
   const db = new SQL.Database();
