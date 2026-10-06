@@ -11,21 +11,30 @@ const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3';
 const FOLIUM_FOLDER_NAME = 'Folium';
 
-let cachedFolderId: string | null = null;
+let cachedFolder: { userId: string; folderId: string } | null = null;
+
+/**
+ * Invalidate in-memory folder cache (called on signOut).
+ */
+export function clearGoogleDriveCache(): void {
+  cachedFolder = null;
+}
 
 /**
  * Get or create the dedicated /Folium folder in the user's Google Drive.
  */
 export async function getOrCreateFoliumFolder(): Promise<string> {
-  if (cachedFolderId) return cachedFolderId;
-
   const user = getCurrentUser();
   if (!user) throw new Error('Not signed in to Google Drive.');
 
+  if (cachedFolder && cachedFolder.userId === user.id) {
+    return cachedFolder.folderId;
+  }
+
   // Demo fallback
   if (user.accessToken.startsWith('demo_')) {
-    cachedFolderId = 'demo-folium-folder-id';
-    return cachedFolderId;
+    cachedFolder = { userId: user.id, folderId: 'demo-folium-folder-id' };
+    return cachedFolder.folderId;
   }
 
   // 1. Search for existing folder
@@ -42,8 +51,8 @@ export async function getOrCreateFoliumFolder(): Promise<string> {
 
   const searchData = await searchResp.json();
   if (searchData.files && searchData.files.length > 0) {
-    cachedFolderId = searchData.files[0].id;
-    return cachedFolderId!;
+    cachedFolder = { userId: user.id, folderId: searchData.files[0].id };
+    return cachedFolder.folderId;
   }
 
   // 2. Create new Folium folder
@@ -65,8 +74,8 @@ export async function getOrCreateFoliumFolder(): Promise<string> {
   }
 
   const createData = await createResp.json();
-  cachedFolderId = createData.id;
-  return cachedFolderId!;
+  cachedFolder = { userId: user.id, folderId: createData.id };
+  return cachedFolder.folderId;
 }
 
 /**
@@ -144,9 +153,8 @@ export async function uploadBookToDrive(book: Book): Promise<string> {
     }
   }
 
-  // Zero-Knowledge metadata protection:
-  // Use UUID filename `${book.id}.${book.file_type}` instead of plaintext book title
-  // to prevent cloud storage providers from fingerprinting user reading libraries.
+  // Opaque UUID filename `${book.id}.${book.file_type}` is used on Drive storage
+  // to index book files by unique identifier rather than arbitrary local file names.
   const filename = `${book.id}.${book.file_type}`;
   const mimeType = book.file_type === 'pdf' ? 'application/pdf' : 'application/epub+zip';
 

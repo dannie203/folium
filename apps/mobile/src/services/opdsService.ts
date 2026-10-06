@@ -202,6 +202,7 @@ export async function importOpdsBook(entry: OpdsBookEntry): Promise<Book> {
   const shelf = entry.source === 'vietnamese_classics' ? 'Văn Học Việt Nam' : 'Sách Công Quyền';
 
   let localPath: string;
+  let downloadedSize = entry.fileSize || 0;
 
   try {
     const targetUrl =
@@ -213,6 +214,7 @@ export async function importOpdsBook(entry: OpdsBookEntry): Promise<Book> {
 
     const buffer = await response.arrayBuffer();
     validateBookBytes(buffer, entry.format);
+    downloadedSize = buffer.byteLength;
 
     if (Platform.OS === 'web') {
       await saveWebBook(bookId, buffer);
@@ -233,7 +235,7 @@ export async function importOpdsBook(entry: OpdsBookEntry): Promise<Book> {
     author: entry.author,
     cover_url: entry.coverUrl || null,
     file_type: entry.format,
-    file_size: entry.fileSize || 512000,
+    file_size: downloadedSize || entry.fileSize || 512000,
     local_path: localPath,
     drive_file_id: null,
     locations_cache: null,

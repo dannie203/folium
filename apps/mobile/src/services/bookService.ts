@@ -6,6 +6,7 @@ import { saveBookFile, deleteBookFile } from './storage';
 import { queueMutation, triggerDebouncedSync } from './syncService';
 import { trashDriveBook } from './googleDriveService';
 import { validateBookUri } from './fileValidator';
+import { getCurrentUser } from './authService';
 
 export interface BookWithProgress extends Book {
   progress_percentage: number;
@@ -72,6 +73,8 @@ export async function importBookFromPicker(): Promise<BookWithProgress | null> {
   const { title, author, format } = parseBookMetadata(filename);
   const bookId = generateUUID();
   const now = Date.now();
+  const currentUser = getCurrentUser();
+  const userId = currentUser && !currentUser.accessToken.startsWith('demo_') ? currentUser.id : (currentUser?.id || null);
 
   await validateBookUri(asset.uri, format);
 
@@ -80,6 +83,7 @@ export async function importBookFromPicker(): Promise<BookWithProgress | null> {
 
   const newBook: Book = {
     id: bookId,
+    user_id: userId || undefined,
     title,
     author,
     cover_url: null,
@@ -97,10 +101,11 @@ export async function importBookFromPicker(): Promise<BookWithProgress | null> {
   // Insert into local SQLite
   const db = await getDatabase();
   await db.runAsync(
-    `INSERT INTO books (id, title, author, cover_url, file_type, file_size, local_path, drive_file_id, locations_cache, created_at, updated_at, shelf, tags)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO books (id, user_id, title, author, cover_url, file_type, file_size, local_path, drive_file_id, locations_cache, created_at, updated_at, shelf, tags)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       newBook.id,
+      userId,
       newBook.title,
       newBook.author,
       newBook.cover_url ?? null,
@@ -132,15 +137,25 @@ export async function importBookFromPicker(): Promise<BookWithProgress | null> {
  */
 export async function getBooksWithProgress(): Promise<BookWithProgress[]> {
   const db = await getDatabase();
-  const rows = await db.getAllAsync<any>(
-    `SELECT b.*, COALESCE(p.percentage, 0) as progress_percentage, p.cfi as last_cfi
-     FROM books b
-     LEFT JOIN reading_progress p ON b.id = p.book_id AND p.is_deleted = 0
-     ORDER BY b.updated_at DESC`
-  );
+  const currentUser = getCurrentUser();
+  const userId = currentUser && !currentUser.accessToken.startsWith('demo_') ? currentUser.id : (currentUser?.id || null);
+  const sql = userId
+    ? `SELECT b.*, COALESCE(p.percentage, 0) as progress_percentage, p.cfi as last_cfi
+       FROM books b
+       LEFT JOIN reading_progress p ON b.id = p.book_id AND p.is_deleted = 0
+       WHERE b.is_deleted = 0 AND (b.user_id = ? OR b.user_id IS NULL)
+       ORDER BY b.updated_at DESC`
+    : `SELECT b.*, COALESCE(p.percentage, 0) as progress_percentage, p.cfi as last_cfi
+       FROM books b
+       LEFT JOIN reading_progress p ON b.id = p.book_id AND p.is_deleted = 0
+       WHERE b.is_deleted = 0 AND b.user_id IS NULL
+       ORDER BY b.updated_at DESC`;
+  const params = userId ? [userId] : [];
+  const rows = await db.getAllAsync<any>(sql, params);
 
   return rows.map((r) => ({
     id: r.id,
+    user_id: r.user_id || undefined,
     title: r.title,
     author: r.author,
     cover_url: r.cover_url,
@@ -178,8 +193,12 @@ export async function updateBookMetadata(
   const title = updates.title ?? existing.title;
   const author = updates.author ?? existing.author;
   const cover_url = updates.cover_url !== undefined ? updates.cover_url : existing.cover_url;
-  const shelf = updates.shelf !== undefined ? updates.shelf : existing.shelf ?? 'Inbox';
-  const tags = updates.tags !== undefined ? updates.tags : (existing.tags || []);
+  const shelf = updates.shelf !== undefined ? updates.shelf : existing.shelf;
+  const rawExistingTags = existing.tags as unknown;
+  const existingTags = typeof rawExistingTags === 'string'
+    ? (rawExistingTags as string).split(',').filter(Boolean)
+    : (Array.isArray(rawExistingTags) ? (rawExistingTags as string[]) : []);
+  const tags = updates.tags !== undefined ? updates.tags : existingTags;
   const tagsStr = Array.isArray(tags) ? tags.join(',') : '';
   const now = Date.now();
 
@@ -207,9 +226,13 @@ export async function updateBookMetadata(
  */
 export async function getAvailableShelves(): Promise<string[]> {
   const db = await getDatabase();
-  const rows = await db.getAllAsync<{ shelf: string | null }>(
-    'SELECT DISTINCT shelf FROM books WHERE is_deleted = 0'
-  );
+  const currentUser = getCurrentUser();
+  const userId = currentUser && !currentUser.accessToken.startsWith('demo_') ? currentUser.id : (currentUser?.id || null);
+  const sql = userId
+    ? 'SELECT DISTINCT shelf FROM books WHERE is_deleted = 0 AND (user_id = ? OR user_id IS NULL)'
+    : 'SELECT DISTINCT shelf FROM books WHERE is_deleted = 0 AND user_id IS NULL';
+  const params = userId ? [userId] : [];
+  const rows = await db.getAllAsync<{ shelf: string | null }>(sql, params);
   const set = new Set<string>(['Inbox']);
   for (const r of rows) {
     if (r.shelf && r.shelf.trim()) {
@@ -227,6 +250,7 @@ export async function deleteBook(
   options?: { skipDriveTrash?: boolean }
 ): Promise<void> {
   const db = await getDatabase();
+  const now = Date.now();
 
   const book = await db.getFirstAsync<{
     local_path: string | null;
@@ -235,7 +259,9 @@ export async function deleteBook(
     file_type?: string;
     file_size?: number;
     drive_file_id?: string | null;
-  }>('SELECT local_path, title, author, file_type, file_size, drive_file_id FROM books WHERE id = ?', [bookId]);
+    updated_at?: number;
+    user_id?: string | null;
+  }>('SELECT local_path, title, author, file_type, file_size, drive_file_id, updated_at, user_id FROM books WHERE id = ?', [bookId]);
 
   const progressRows = await db.getAllAsync<{ id: string; book_id: string }>(
     'SELECT id, book_id FROM reading_progress WHERE book_id = ?',
@@ -265,27 +291,36 @@ export async function deleteBook(
     );
   }
 
-  // Delete records in SQLite
-  await db.runAsync('DELETE FROM reading_progress WHERE book_id = ?', [bookId]);
-  await db.runAsync('DELETE FROM bookmarks WHERE book_id = ?', [bookId]);
-  await db.runAsync('DELETE FROM highlights WHERE book_id = ?', [bookId]);
-  await db.runAsync('DELETE FROM notes WHERE book_id = ?', [bookId]);
-  await db.runAsync('DELETE FROM books WHERE id = ?', [bookId]);
+  // Soft delete records in SQLite with LWW clock advance to prevent resurrection
+  await db.runAsync('UPDATE reading_progress SET is_deleted = 1, client_updated_at = ? WHERE book_id = ?', [now, bookId]);
+  await db.runAsync('UPDATE bookmarks SET is_deleted = 1 WHERE book_id = ?', [bookId]);
+  await db.runAsync('UPDATE highlights SET is_deleted = 1 WHERE book_id = ?', [bookId]);
+  await db.runAsync('UPDATE notes SET is_deleted = 1 WHERE book_id = ?', [bookId]);
+  await db.runAsync(
+    'UPDATE books SET is_deleted = 1, deleted_at = ?, updated_at = ? WHERE id = ? AND ? >= updated_at',
+    [now, now, bookId, now]
+  );
 
-  // Track deletion in sync_outbox for future D1 synchronization
+  // Track deletion in sync_outbox with explicit logical timestamps
   await queueMutation('book', bookId, {
     id: bookId,
+    user_id: book?.user_id || undefined,
     title: book?.title || 'Untitled',
     author: book?.author || 'Unknown',
     file_type: book?.file_type || 'epub',
     file_size: book?.file_size || 0,
     is_deleted: true,
+    deleted_at: now,
+    updated_at: now,
+    client_updated_at: now,
   });
   for (const row of progressRows) {
     await queueMutation('progress', row.id, {
       id: row.id,
       book_id: row.book_id,
       is_deleted: true,
+      client_updated_at: now,
+      deleted_at: now,
     });
   }
   for (const row of bookmarkRows) {
@@ -293,6 +328,7 @@ export async function deleteBook(
       id: row.id,
       book_id: row.book_id,
       is_deleted: true,
+      deleted_at: now,
     });
   }
   for (const row of highlightRows) {
@@ -300,6 +336,7 @@ export async function deleteBook(
       id: row.id,
       book_id: row.book_id,
       is_deleted: true,
+      deleted_at: now,
     });
   }
   for (const row of noteRows) {
@@ -307,6 +344,7 @@ export async function deleteBook(
       id: row.id,
       book_id: row.book_id,
       is_deleted: true,
+      deleted_at: now,
     });
   }
   triggerDebouncedSync(30000);

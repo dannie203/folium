@@ -156,6 +156,8 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
       accessToken: 'demo_access_token_folium_sandbox',
       expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
     };
+    const { handleAccountLifecycleSwitch } = require('./syncService');
+    await handleAccountLifecycleSwitch(demoUser.id);
     persistUser(demoUser);
     return demoUser;
   }
@@ -224,6 +226,10 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
     expiresAt: Date.now() + expiresIn * 1000,
   };
 
+  // Enforce account isolation lifecycle BEFORE persisting new user identity (Fail-Closed Security Boundary)
+  const { handleAccountLifecycleSwitch } = require('./syncService');
+  await handleAccountLifecycleSwitch(user.id);
+
   persistUser(user);
   return user;
 }
@@ -231,8 +237,9 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
 /**
  * Sign out and clear stored session.
  */
-export async function signOut(): Promise<void> {
+export async function signOut(options?: { clearLocalData?: boolean; keepLocalData?: boolean }): Promise<void> {
   const user = getCurrentUser();
+  const userId = user?.id || null;
   if (user && user.accessToken && discovery.revocationEndpoint && !user.accessToken.startsWith('demo_')) {
     try {
       await fetch(`${discovery.revocationEndpoint}?token=${user.accessToken}`, {
@@ -245,4 +252,25 @@ export async function signOut(): Promise<void> {
   }
 
   persistUser(null);
+
+  // Invalidate user-scoped session caches
+  try {
+    const { clearGoogleDriveCache } = require('./googleDriveService');
+    clearGoogleDriveCache();
+  } catch (err) {
+    console.warn('[AuthService] Failed to clear Drive cache on signOut:', err);
+  }
+
+  try {
+    const { resetSyncSessionState, purgeSyncOutbox, detachAccountLocalState } = require('./syncService');
+    resetSyncSessionState();
+    // Always purge pending outbox on sign-out to prevent mutation leakage across accounts
+    await purgeSyncOutbox();
+    // Default to strict privacy isolation: detach signed-in account data unless explicitly requested to keep
+    if (!options?.keepLocalData) {
+      await detachAccountLocalState(userId);
+    }
+  } catch (err) {
+    console.warn('[AuthService] Failed to reset sync state on signOut:', err);
+  }
 }

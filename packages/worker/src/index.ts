@@ -436,6 +436,7 @@ app.get('/api/community/download', async (c) => {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
+        signal: AbortSignal.timeout(15000),
       });
 
       // Handle redirects manually
@@ -463,15 +464,123 @@ app.get('/api/community/download', async (c) => {
       return c.json({ error: `Upstream error ${response.status}` }, response.status as any);
     }
 
+    // Defense against large payload exhaustion (> 50 MB)
+    const MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024;
+    const contentLength = response.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > MAX_DOWNLOAD_BYTES) {
+      return c.json({ error: 'Payload exceeds 50MB maximum size limit', code: 'PAYLOAD_TOO_LARGE' }, 413);
+    }
+
     const contentType = response.headers.get('content-type') || 'application/epub+zip';
     c.header('Content-Type', contentType);
     c.header('Cache-Control', 'public, max-age=86400');
     return c.body(response.body as any);
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.name === 'TimeoutError') {
+      return c.json({ error: 'Download request timed out (15s limit)' }, 504);
+    }
     console.error('[Community Download] Proxy error:', err);
     return c.json({ error: 'Download proxy failed' }, 502);
   }
 });
+
+// Runtime schema validator for incoming sync push payload
+export function validateSyncPushPayload(body: any): { valid: boolean; error?: string } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { valid: false, error: 'Push payload must be a JSON object' };
+  }
+
+  if (body.books !== undefined) {
+    if (!Array.isArray(body.books)) return { valid: false, error: 'books must be an array' };
+    for (const b of body.books) {
+      if (!b || typeof b !== 'object') return { valid: false, error: 'Invalid book entry' };
+      if (typeof b.id !== 'string' || b.id.length < 1 || b.id.length > 64) {
+        return { valid: false, error: 'Book id must be a string (1-64 chars)' };
+      }
+      if (b.title !== undefined && (typeof b.title !== 'string' || b.title.length > 500)) {
+        return { valid: false, error: 'Book title must be <= 500 chars' };
+      }
+      if (b.author !== undefined && (typeof b.author !== 'string' || b.author.length > 300)) {
+        return { valid: false, error: 'Book author must be <= 300 chars' };
+      }
+      if (b.file_type !== undefined && b.file_type !== 'epub' && b.file_type !== 'pdf') {
+        return { valid: false, error: 'Book file_type must be epub or pdf' };
+      }
+      if (b.file_size !== undefined && (typeof b.file_size !== 'number' || b.file_size < 0 || b.file_size > 500000000)) {
+        return { valid: false, error: 'Book file_size must be a number between 0 and 500MB' };
+      }
+    }
+  }
+
+  if (body.progress !== undefined) {
+    if (!Array.isArray(body.progress)) return { valid: false, error: 'progress must be an array' };
+    for (const p of body.progress) {
+      if (!p || typeof p !== 'object') return { valid: false, error: 'Invalid progress entry' };
+      if (typeof p.id !== 'string' || p.id.length < 1 || p.id.length > 64) {
+        return { valid: false, error: 'Progress id must be a string (1-64 chars)' };
+      }
+      if (typeof p.book_id !== 'string' || p.book_id.length < 1 || p.book_id.length > 64) {
+        return { valid: false, error: 'Progress book_id must be a string (1-64 chars)' };
+      }
+      if (p.percentage !== undefined && (typeof p.percentage !== 'number' || p.percentage < 0 || p.percentage > 100)) {
+        return { valid: false, error: 'Progress percentage must be between 0 and 100' };
+      }
+      if (p.cfi !== undefined && (typeof p.cfi !== 'string' || p.cfi.length > 2000)) {
+        return { valid: false, error: 'Progress cfi must be <= 2000 chars' };
+      }
+    }
+  }
+
+  if (body.bookmarks !== undefined) {
+    if (!Array.isArray(body.bookmarks)) return { valid: false, error: 'bookmarks must be an array' };
+    for (const bm of body.bookmarks) {
+      if (!bm || typeof bm !== 'object') return { valid: false, error: 'Invalid bookmark entry' };
+      if (typeof bm.id !== 'string' || bm.id.length < 1 || bm.id.length > 64) {
+        return { valid: false, error: 'Bookmark id must be a string (1-64 chars)' };
+      }
+      if (typeof bm.book_id !== 'string' || bm.book_id.length < 1 || bm.book_id.length > 64) {
+        return { valid: false, error: 'Bookmark book_id must be a string (1-64 chars)' };
+      }
+      if (bm.title !== undefined && (typeof bm.title !== 'string' || bm.title.length > 500)) {
+        return { valid: false, error: 'Bookmark title must be <= 500 chars' };
+      }
+    }
+  }
+
+  if (body.highlights !== undefined) {
+    if (!Array.isArray(body.highlights)) return { valid: false, error: 'highlights must be an array' };
+    for (const h of body.highlights) {
+      if (!h || typeof h !== 'object') return { valid: false, error: 'Invalid highlight entry' };
+      if (typeof h.id !== 'string' || h.id.length < 1 || h.id.length > 64) {
+        return { valid: false, error: 'Highlight id must be a string (1-64 chars)' };
+      }
+      if (typeof h.book_id !== 'string' || h.book_id.length < 1 || h.book_id.length > 64) {
+        return { valid: false, error: 'Highlight book_id must be a string (1-64 chars)' };
+      }
+      if (h.text !== undefined && (typeof h.text !== 'string' || h.text.length > 10000)) {
+        return { valid: false, error: 'Highlight text must be <= 10000 chars' };
+      }
+    }
+  }
+
+  if (body.notes !== undefined) {
+    if (!Array.isArray(body.notes)) return { valid: false, error: 'notes must be an array' };
+    for (const n of body.notes) {
+      if (!n || typeof n !== 'object') return { valid: false, error: 'Invalid note entry' };
+      if (typeof n.id !== 'string' || n.id.length < 1 || n.id.length > 64) {
+        return { valid: false, error: 'Note id must be a string (1-64 chars)' };
+      }
+      if (typeof n.book_id !== 'string' || n.book_id.length < 1 || n.book_id.length > 64) {
+        return { valid: false, error: 'Note book_id must be a string (1-64 chars)' };
+      }
+      if (n.content !== undefined && (typeof n.content !== 'string' || n.content.length > 10000)) {
+        return { valid: false, error: 'Note content must be <= 10000 chars' };
+      }
+    }
+  }
+
+  return { valid: true };
+}
 
 // ------------------------------------------------------------------------------
 // Sync Push (Batch upsert pending mutations from client outbox)
@@ -487,6 +596,11 @@ app.post('/api/sync/push', async (c) => {
       body = await c.req.json<SyncPushPayload>();
     } catch {
       return c.json({ error: 'Invalid JSON payload' }, 400);
+    }
+
+    const schemaValidation = validateSyncPushPayload(body);
+    if (!schemaValidation.valid) {
+      return c.json({ error: schemaValidation.error, code: 'INVALID_SCHEMA' }, 400);
     }
 
     const totalItems =
@@ -543,12 +657,15 @@ app.post('/api/sync/push', async (c) => {
         const fileSize = typeof b.file_size === 'number' && !isNaN(b.file_size) ? b.file_size : 0;
         const isDeleted = b.is_deleted ? 1 : 0;
         const deletedAt = isDeleted ? (b.deleted_at || now) : null;
+        const clientUpdatedAt = typeof b.updated_at === 'number' && !isNaN(b.updated_at)
+          ? b.updated_at
+          : (typeof b.client_updated_at === 'number' && !isNaN(b.client_updated_at) ? b.client_updated_at : (deletedAt || now));
 
         statements.push(
           db
             .prepare(
-              `INSERT INTO books (id, user_id, title, author, cover_url, file_type, file_size, drive_file_id, is_deleted, deleted_at, sync_seq)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
+              `INSERT INTO books (id, user_id, title, author, cover_url, file_type, file_size, drive_file_id, is_deleted, deleted_at, client_updated_at, sync_seq)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT current_seq FROM user_sync_sequence WHERE user_id = ?))
                ON CONFLICT(id) DO UPDATE SET
                  title = CASE WHEN excluded.is_deleted = 0 AND excluded.title != 'Chưa có tiêu đề' THEN excluded.title ELSE books.title END,
                  author = CASE WHEN excluded.is_deleted = 0 AND excluded.author != 'Tác giả không rõ' THEN excluded.author ELSE books.author END,
@@ -558,8 +675,10 @@ app.post('/api/sync/push', async (c) => {
                  drive_file_id = CASE WHEN excluded.is_deleted = 0 THEN COALESCE(excluded.drive_file_id, books.drive_file_id) ELSE books.drive_file_id END,
                  is_deleted = excluded.is_deleted,
                  deleted_at = excluded.deleted_at,
+                 client_updated_at = excluded.client_updated_at,
                  sync_seq = excluded.sync_seq
-               WHERE books.user_id = excluded.user_id`
+               WHERE books.user_id = excluded.user_id
+                 AND excluded.client_updated_at >= COALESCE(books.client_updated_at, 0)`
             )
             .bind(
               b.id,
@@ -572,10 +691,10 @@ app.post('/api/sync/push', async (c) => {
               b.drive_file_id ?? null,
               isDeleted,
               deletedAt,
+              clientUpdatedAt,
               userId
             )
         );
-        acceptedCount++;
       }
     }
 
@@ -615,7 +734,6 @@ app.post('/api/sync/push', async (c) => {
               userId
             )
         );
-        acceptedCount++;
       }
     }
 
@@ -657,7 +775,6 @@ app.post('/api/sync/push', async (c) => {
               userId
             )
         );
-        acceptedCount++;
       }
     }
 
@@ -704,7 +821,6 @@ app.post('/api/sync/push', async (c) => {
               userId
             )
         );
-        acceptedCount++;
       }
     }
 
@@ -745,9 +861,10 @@ app.post('/api/sync/push', async (c) => {
               userId
             )
         );
-        acceptedCount++;
       }
     }
+
+    const entityStatementsCount = statements.length - 1;
 
     // 30-Day Tombstone Retention & Auto Garbage Collection
     // Purges tombstones older than 30 days during sync cycles
@@ -807,6 +924,19 @@ app.post('/api/sync/push', async (c) => {
           const row = batchResults[0].results[0] as { current_seq?: number };
           if (row.current_seq) {
             committedSeq = Number(row.current_seq);
+          }
+        }
+
+        // Count accepted mutations based on actual affected rows (LWW acceptance)
+        for (let j = 0; j < batchResults.length; j++) {
+          const globalIdx = i + j;
+          if (globalIdx >= 1 && globalIdx <= entityStatementsCount) {
+            const meta = (batchResults[j] as any)?.meta;
+            if (typeof meta?.changes === 'number') {
+              if (meta.changes > 0) acceptedCount++;
+            } else {
+              acceptedCount++;
+            }
           }
         }
       }

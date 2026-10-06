@@ -2,6 +2,7 @@ export const INIT_SQL = `
 -- Books table
 CREATE TABLE IF NOT EXISTS books (
     id TEXT PRIMARY KEY,
+    user_id TEXT,
     title TEXT NOT NULL,
     author TEXT NOT NULL,
     cover_url TEXT,
@@ -15,7 +16,8 @@ CREATE TABLE IF NOT EXISTS books (
     is_deleted INTEGER NOT NULL DEFAULT 0,
     deleted_at INTEGER,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    sync_seq INTEGER NOT NULL DEFAULT 0
 );
 
 -- Reading progress

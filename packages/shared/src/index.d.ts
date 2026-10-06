@@ -10,8 +10,14 @@ export interface Book {
     local_path?: string | null;
     drive_file_id?: string | null;
     locations_cache?: string | null;
+    shelf?: string | null;
+    tags?: string[] | null;
     created_at: number;
     updated_at: number;
+    client_updated_at?: number;
+    is_deleted?: boolean;
+    deleted_at?: number | null;
+    sync_seq?: number;
 }
 export interface ReadingProgress {
     id: string;
@@ -21,6 +27,7 @@ export interface ReadingProgress {
     percentage: number;
     client_updated_at: number;
     is_deleted: boolean;
+    deleted_at?: number | null;
     sync_seq: number;
 }
 export interface Bookmark {
@@ -31,6 +38,7 @@ export interface Bookmark {
     title: string;
     client_created_at: number;
     is_deleted: boolean;
+    deleted_at?: number | null;
     sync_seq: number;
 }
 export interface Highlight {
@@ -43,6 +51,7 @@ export interface Highlight {
     note?: string | null;
     client_created_at: number;
     is_deleted: boolean;
+    deleted_at?: number | null;
     sync_seq: number;
 }
 export interface Note {
@@ -53,9 +62,11 @@ export interface Note {
     content: string;
     client_created_at: number;
     is_deleted: boolean;
+    deleted_at?: number | null;
     sync_seq: number;
 }
 export interface SyncPushPayload {
+    books?: Book[];
     progress?: ReadingProgress[];
     bookmarks?: Bookmark[];
     highlights?: Highlight[];
@@ -63,6 +74,7 @@ export interface SyncPushPayload {
 }
 export interface SyncPullResponse {
     server_sync_seq: number;
+    books?: Book[];
     progress: ReadingProgress[];
     bookmarks: Bookmark[];
     highlights: Highlight[];
@@ -133,3 +145,68 @@ export type AppToReaderMessage = {
     type: 'REMOVE_HIGHLIGHT';
     cfiRange: string;
 };
+export interface AuthUser {
+    id: string;
+    email: string;
+    name: string;
+    picture?: string;
+    accessToken: string;
+    idToken?: string;
+    expiresAt: number;
+}
+export interface DriveFileMetadata {
+    id: string;
+    name: string;
+    size: number;
+    mimeType: string;
+    modifiedTime: string;
+    foliumBookId?: string;
+    shelf?: string;
+    foliumTitle?: string;
+}
+export interface DriveSyncResult {
+    uploadedCount: number;
+    downloadedCount: number;
+    syncedCount: number;
+    deletedCount?: number;
+    errors: string[];
+}
+export interface EncryptedVaultPayload {
+    version: 1;
+    algorithm: 'AES-GCM-256';
+    salt: string;
+    iv: string;
+    ciphertext: string;
+    createdAt: number;
+}
+export interface OpdsBookEntry {
+    id: string;
+    title: string;
+    author: string;
+    summary?: string;
+    coverUrl?: string;
+    downloadUrl: string;
+    format: BookFormat;
+    source: 'standard_ebooks' | 'gutenberg' | 'vietnamese_classics' | 'custom_opds';
+    fileSize?: number;
+}
+export interface CommunityCatalogSource {
+    id: string;
+    name: string;
+    description: string;
+    url: string;
+    icon?: string;
+    type: 'opds' | 'google_drive';
+}
+export interface TTSSettings {
+    voiceURI?: string;
+    rate: number;
+    pitch: number;
+    autoNext: boolean;
+}
+export interface TTSVoice {
+    identifier: string;
+    name: string;
+    language: string;
+    quality?: string;
+}

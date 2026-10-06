@@ -157,14 +157,25 @@ export async function deleteHighlight(highlightId: string): Promise<void> {
     [highlightId]
   );
 
-  // Also remove attached notes if any
+  // Also find and tombstone attached notes
+  const attachedNotes = await db.getAllAsync<{ id: string }>(
+    `SELECT id FROM notes WHERE highlight_id = ? AND is_deleted = 0`,
+    [highlightId]
+  );
+
   await db.runAsync(
     `UPDATE notes SET is_deleted = 1 WHERE highlight_id = ?`,
     [highlightId]
   );
 
-  // Queue tombstone
+  // Queue highlight tombstone
   await queueMutation('highlight', highlightId, { id: highlightId, is_deleted: true });
+
+  // Queue note tombstones for attached notes
+  for (const n of attachedNotes) {
+    await queueMutation('note', n.id, { id: n.id, is_deleted: true });
+  }
+
   triggerDebouncedSync(30000);
 }
 
@@ -198,12 +209,19 @@ export async function addNote(
     [note.id, note.book_id, note.highlight_id ?? null, note.content, note.client_created_at]
   );
 
-  // If tied to highlight, update note preview on highlight
+  // If tied to highlight, update note preview on highlight and queue highlight mutation
   if (highlightId) {
     await db.runAsync(
       `UPDATE highlights SET note = ? WHERE id = ?`,
       [content, highlightId]
     );
+    const hl = await db.getFirstAsync<Highlight>(
+      `SELECT * FROM highlights WHERE id = ?`,
+      [highlightId]
+    );
+    if (hl) {
+      await queueMutation('highlight', highlightId, hl);
+    }
   }
 
   // Queue for cloud sync
