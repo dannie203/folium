@@ -183,6 +183,8 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
     extraParams: {
       nonce: Math.random().toString(36).substring(2, 15) + Date.now().toString(36),
     },
+    // Google OAuth rejects code_challenge_method on implicit flow (response_type=token id_token)
+    usePKCE: false,
   });
 
   const result = await request.promptAsync(discovery);
