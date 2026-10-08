@@ -90,6 +90,10 @@
 
 - [x] **Inlined Mozilla `pdf.js` Engine**: Client-side blob worker rendering with CSP immunity.
 - [x] **High-DPI Canvas Rendering**: Automatic viewport scaling using `window.devicePixelRatio` compensation for razor-sharp text on Retina/4K displays.
+- [x] **PDF Annotation & Selection Parity**:
+  - Real-time text selection layer overlaying rendered PDF canvas.
+  - Scale-invariant normalized highlight overlays (`page:N:...`) matching EPUB capabilities.
+  - 5-color palette (Yellow, Green, Blue, Pink, Purple) and sticky notes integration in reader drawer.
 - [x] **Desktop Reading Ergonomics**:
   - Keyboard navigation: `←` / `→` or `Space` / `PageUp` / `PageDown` for instant page turns.
   - Dynamic zoom: `+` / `-` font and canvas scaling.
@@ -111,18 +115,18 @@
 
 ---
 
-### Phase 6: Bookmarks, Highlights, Notes & Full-Text Search (FTS5) ✅
+### Phase 6: Bookmarks, Highlights, Notes & Substring / Full-Text Search ✅
 *Status: Completed (`ee315f4`)*
 
-- [x] **Reader Annotation UI**:
-  - Selection toolbar on text highlight with 4 distinct color palettes (Yellow, Green, Blue, Pink).
-  - Inline sticky notes linked to EPUB CFI coordinates and PDF text positions.
+- [x] **Reader Annotation UI & Feature Parity**:
+  - Selection toolbar on text highlight across both EPUB and PDF engines with 5 distinct color palettes (Yellow `#FACC15`, Green `#4ADE80`, Blue `#60A5FA`, Pink `#F472B6`, Purple `#C084FC`).
+  - Inline sticky notes linked to EPUB CFI coordinates and PDF normalized page coordinates (`page:N:...`).
 - [x] **Visual Bookmark Manager**:
   - Instant bookmark toggle (`Ctrl+D` / ribbon button).
   - Drawer list of bookmarks with snippet quotes and timestamp history.
-- [x] **On-Device SQLite FTS5 Search**:
-  - Indexing user notes, highlights, and book metadata into SQLite FTS5 virtual tables.
-  - Instant sub-millisecond search across the entire personal annotation library.
+- [x] **On-Device Annotation Search**:
+  - Fast indexed SQLite search across user notes, highlights, bookmarks, and book metadata using substring queries (`LIKE '%query%'`).
+  - Architecture ready for SQLite FTS5 virtual tables for large library indexing.
 - [x] **On-Demand In-Book Text Search**:
   - Chunked chapter-by-chapter text search to prevent memory exhaustion on mobile devices.
 
@@ -160,10 +164,11 @@
   - Query Google Drive files to detect newly added or deleted book files across devices.
 - [x] **Chunked & Multipart Streaming**:
   - Multipart upload protocol for massive EPUBs and PDFs.
-- [x] **Folium Zero-Knowledge Information Locking ("Cơ Chế Khóa Thông Tin")**:
-  - **Client-Side AES-256-GCM Vault**: WebCrypto / PBKDF2 client-side encryption of user reading progress, bookmarks, private notes, and shelf metadata *before* network transmission.
-  - **Zero-Knowledge D1 Cloud Architecture**: Cloudflare D1 and sync workers store exclusively blind, opaque ciphertext blobs. The server never receives or holds decryption keys, guaranteeing zero exposure even under server breach or legal subpoena.
-  - **Sandboxed Reader Execution Shield**: Hardened iframe/WebView isolation with strict Content Security Policy (CSP) and restricted permissions (`sandbox="allow-same-origin"`), prohibiting untrusted embedded EPUB scripts from accessing OPFS, IndexedDB, local SQLite tokens, or making outbound network leaks.
+- [x] **Folium Cryptographic Vault & Privacy Architecture**:
+  - **Client-Side AES-256-GCM Primitives**: Standalone WebCrypto / PBKDF2 client-side vault foundation for encrypting sensitive user reading notes and personal data.
+  - **D1 Cloud Sync Security & Scope**: Cloudflare D1 edge synchronization operates over TLS-in-transit with server-side validation and account isolation (Google ID Token RS256 JWKS authentication). Note: Metadata (progress, bookmarks, highlights, notes) is stored in structured relational format on D1 to support LWW conflict resolution; full blind E2EE envelope encryption across D1 is designed for Phase 11.
+  - **Sandboxed Reader Execution Shield**: Hardened iframe/WebView isolation with strict Content Security Policy (`connect-src 'none'`) and restricted sandbox (`sandbox="allow-scripts"` exiled to null origin), prohibiting untrusted embedded scripts from accessing OPFS, IndexedDB, local SQLite tokens, or making outbound network leaks.
+  - **Google Drive Storage Isolation**: Uploads use opaque UUID filenames to prevent file-level snooping on storage buckets, with shelf/title metadata encapsulated in `appProperties`.
   - **Local Biometric & PIN App Lock**: On-device biometric authentication (`expo-local-authentication` - FaceID / Fingerprint / PIN) to lock private bookshelves and sensitive reading material.
 - [x] **Public Cryptographic Proof Snippet (Kerckhoffs's Principle)**:
   - Standalone, zero-dependency browser/Node audit snippet published publicly on `/security` and GitHub.
@@ -192,7 +197,7 @@
   - **Drop-Box Root Inbox**: Root `/Folium` directory acts as a smart intake folder; users can drop EPUBs/PDFs from any PC/browser, and Folium automatically ingests them into `Inbox` upon sync.
   - **Subfolder Mirroring (Shelves/Tags)**: Subfolders inside `/Folium` (e.g. `/Folium/Văn Học/`, `/Folium/Kỹ Thuật/`) automatically map to Shelves / Collection Tabs in the app UI.
   - **Recursive Public Folder Traversal**: Deep recursive scanning (`scanPublicFolderRecursive`) traversing multi-level nested folders in shared community Google Drive links.
-  - **On-Demand Lazy Caching**: Ingests metadata and covers without mass-downloading gigabytes; streams and caches full book binaries only upon first reader open.
+  - **On-Demand Lazy Caching**: Ingests metadata and covers without mass-downloading gigabytes; downloads and caches full book binaries only upon first reader open.
 - [x] **User-Centric Classification & Metadata Editor (EPUB & PDF)**:
   - **Zero Unsolicited Auto-Sorting**: Eliminates incorrect machine guesses from messy community metadata (uploader tags, generic titles, scan numbers). The user retains 100% agency over their library hierarchy.
   - **Universal Smart Inbox ("📥 Hộp thư đến")**: Newly imported or dropped books default to an Unsorted Inbox buffer with horizontal shelf filter chips (`Tất cả`, `📥 Hộp thư đến`, dynamic shelves, `EPUB`, `PDF`).
@@ -270,10 +275,10 @@
 - [x] **Smart Voice Selection & Settings**:
   - In-app Voice Picker modal categorizing recommended voices matching current app/book language, plus audio sample preview testing.
   - Speech rate controls (0.75x - 2.0x), pitch, and auto-sentence advance toggle persisted to SQLite `sync_meta`.
-- [x] **Synchronized Reading UI & Reader Bridge**:
+- [x] **Reader Audio Player Bar & Text Extraction Bridge**:
   - `TTSPlayerBar` floating playback controller (play, pause, next sentence, previous sentence, speed cycling, sentence counter).
   - Sentence segmentation engine with Vietnamese title and honorific abbreviation protection.
-  - Reader bridge text extraction (`GET_CURRENT_TEXT` -> `TEXT_EXTRACTED`) across both EPUB and PDF reader frames.
+  - Reader bridge text extraction (`GET_CURRENT_TEXT` -> `TEXT_EXTRACTED`) across both EPUB and PDF reader frames feeding the floating audio playback bar (note: sentence-level synchronized visual CFI/PDF rect highlighting is deferred to a future phase).
 - [x] **Accessibility & Localization**:
   - Complete i18n support across 7 languages (`vi`, `en`, `ja`, `zh`, `fr`, `es`, `de`).
   - Unit test suite verifying sentence segmentation, decimal protection, and voice priority filtering.
@@ -306,9 +311,9 @@
 | **Zero-CDN PDF Reader & Ergonomics** | 4 | ✅ Done | 🟡 In Dev | 🟡 In Dev | N/A |
 | **Production Web Deployment** | 5 | ✅ Done | N/A | N/A | N/A |
 | **Bookmarks, Highlights & Notes** | 6 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
-| **FTS5 Full-Text Search** | 6 | ✅ Done | ✅ Done | ✅ Done | N/A |
+| **Annotation Search (SQLite)** | 6 | ✅ Done | ✅ Done | ✅ Done | N/A |
 | **D1 Sync & Quota Defense** | 7 | ✅ Done | ✅ Done | ✅ Done | ✅ Live |
-| **Google Drive & Info Lock (E2EE)** | 8 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
+| **Google Drive & Crypto Vault** | 8 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
 | **Privacy, DMCA & Security Portal** | 8 | ✅ Done | ✅ Done | ✅ Done | N/A |
 | **Community Bookshelf & OPDS** | 8.5 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |
 | **30-Day GC & Bi-Delete Sync** | 8.6 | ✅ Done | ✅ Done | ✅ Done | ✅ Done |

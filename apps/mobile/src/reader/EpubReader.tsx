@@ -228,6 +228,8 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
             'CHANGE_FONT_SIZE',
             'ESCAPE',
             'SELECTION_MADE',
+            'HIGHLIGHT_CLICKED',
+            'TEXT_EXTRACTED',
             'ERROR',
           ];
           if (knownTypes.includes(data.type)) {

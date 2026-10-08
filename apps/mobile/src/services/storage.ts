@@ -135,6 +135,41 @@ export async function saveBookFile(
 }
 
 /**
+ * Save an in-memory ArrayBuffer into persistent storage (IndexedDB on Web, disk on Native).
+ * On Native platforms, converts to Base64 and writes directly via FileSystem.writeAsStringAsync,
+ * completely avoiding unsafe blob: URI conversions.
+ */
+export async function saveBookBuffer(
+  bookId: string,
+  buffer: ArrayBuffer,
+  extension: 'epub' | 'pdf'
+): Promise<string> {
+  if (Platform.OS === 'web') {
+    await saveWebBook(bookId, buffer);
+    return `indexeddb://${bookId}`;
+  }
+
+  await ensureBooksDirectoryExists();
+  const destinationUri = `${BOOKS_DIR}${bookId}.${extension}`;
+
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const len = bytes.byteLength;
+  const chunkSize = 8192;
+  for (let i = 0; i < len; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, len));
+    binary += String.fromCharCode.apply(null, chunk as any);
+  }
+  const base64 = btoa(binary);
+
+  await FileSystem.writeAsStringAsync(destinationUri, base64, {
+    encoding: FileSystem.EncodingType ? FileSystem.EncodingType.Base64 : ('base64' as any),
+  });
+
+  return destinationUri;
+}
+
+/**
  * Delete a local book file from disk or IndexedDB.
  */
 export async function deleteBookFile(fileUri?: string | null, bookId?: string): Promise<void> {

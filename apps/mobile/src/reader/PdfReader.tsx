@@ -17,6 +17,8 @@ export interface PdfReaderRef {
   prevPage: () => void;
   goTo: (page: string | number) => void;
   applySettings: (settings: Partial<ReaderSettings>) => void;
+  addHighlight: (id: string, cfiRange: string, color: string) => void;
+  removeHighlight: (cfiRange: string) => void;
   getCurrentText: () => void;
 }
 
@@ -25,12 +27,15 @@ export interface PdfReaderProps {
   bookDataArrayBuffer?: ArrayBuffer;
   bookDataUrl?: string;
   initialCfi?: string | null;
+  highlights?: Array<{ id: string; cfi_range: string; color: string }>;
   settings: ReaderSettings;
   onLocationChange?: (location: { cfi: string; percentage: number; page?: number; totalPages?: number }) => void;
   onTocLoaded?: (toc: Array<{ label: string; href: string }>) => void;
   onToggleUI?: () => void;
   onChangeFontSize?: (delta: number) => void;
   onEscape?: () => void;
+  onSelection?: (selection: { cfiRange: string; text: string }) => void;
+  onHighlightClick?: (highlight: { id: string; cfiRange: string }) => void;
   onTextExtracted?: (text: string) => void;
   onError?: (errorMessage: string) => void;
 }
@@ -81,12 +86,16 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
       initialCfi: props.initialCfi || undefined,
     });
     postMessageToViewer({ type: 'APPLY_SETTINGS', settings: props.settings });
+    if (props.highlights && props.highlights.length > 0) {
+      postMessageToViewer({ type: 'SET_HIGHLIGHTS', highlights: props.highlights });
+    }
   }, [
     props.bookDataArrayBuffer,
     props.bookDataBase64,
     props.bookDataUrl,
     props.initialCfi,
     props.settings,
+    props.highlights,
     postMessageToViewer,
   ]);
 
@@ -98,6 +107,10 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
       goTo: (page: string | number) => postMessageToViewer({ type: 'GO_TO', cfi: String(page) }),
       applySettings: (settings: Partial<ReaderSettings>) =>
         postMessageToViewer({ type: 'APPLY_SETTINGS', settings }),
+      addHighlight: (id: string, cfiRange: string, color: string) =>
+        postMessageToViewer({ type: 'ADD_HIGHLIGHT', id, cfiRange, color }),
+      removeHighlight: (cfiRange: string) =>
+        postMessageToViewer({ type: 'REMOVE_HIGHLIGHT', cfiRange }),
       getCurrentText: () => postMessageToViewer({ type: 'GET_CURRENT_TEXT' }),
     }),
     [postMessageToViewer]
@@ -109,6 +122,13 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
       postMessageToViewer({ type: 'APPLY_SETTINGS', settings: props.settings });
     }
   }, [props.settings, postMessageToViewer]);
+
+  // Highlights change observer
+  useEffect(() => {
+    if (isViewerReadyRef.current && props.highlights) {
+      postMessageToViewer({ type: 'SET_HIGHLIGHTS', highlights: props.highlights });
+    }
+  }, [props.highlights, postMessageToViewer]);
 
   // If viewer was ready and book data arrives afterwards
   useEffect(() => {
@@ -157,6 +177,14 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
             props.onEscape?.();
             break;
 
+          case 'SELECTION_MADE':
+            props.onSelection?.(data);
+            break;
+
+          case 'HIGHLIGHT_CLICKED':
+            props.onHighlightClick?.(data);
+            break;
+
           case 'TEXT_EXTRACTED':
             props.onTextExtracted?.(data.text);
             break;
@@ -191,7 +219,18 @@ export const PdfReader = forwardRef<PdfReaderRef, PdfReaderProps>((props, ref) =
           }
         }
         if (data && data.type) {
-          const knownTypes = ['READY', 'LOCATION_CHANGED', 'TOC_LOADED', 'TOGGLE_UI', 'CHANGE_FONT_SIZE', 'ESCAPE', 'ERROR'];
+          const knownTypes = [
+            'READY',
+            'LOCATION_CHANGED',
+            'TOC_LOADED',
+            'TOGGLE_UI',
+            'CHANGE_FONT_SIZE',
+            'ESCAPE',
+            'SELECTION_MADE',
+            'HIGHLIGHT_CLICKED',
+            'TEXT_EXTRACTED',
+            'ERROR',
+          ];
           if (knownTypes.includes(data.type)) {
             handleMessage(data);
           }

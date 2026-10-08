@@ -377,12 +377,14 @@ export default function ReaderScreen() {
               bookDataArrayBuffer={bookArrayBuffer}
               bookDataUrl={bookDataUrl}
               initialCfi={initialCfi}
+              highlights={highlights}
               settings={settings}
               onLocationChange={handleLocationChange}
               onTocLoaded={setToc}
               onToggleUI={() => setShowUI((prev) => !prev)}
               onChangeFontSize={changeFontSize}
               onEscape={handleEscape}
+              onSelection={(sel) => setSelectionData(sel)}
               onTextExtracted={handleTextExtracted}
               onError={(err) => setErrorMessage(err)}
             />
@@ -486,13 +488,14 @@ export default function ReaderScreen() {
             "{selectionData.text}"
           </Text>
 
-          {/* 4 Palette Colors */}
+          {/* 5 Palette Colors */}
           <View style={styles.colorPaletteRow}>
             {([
               { key: 'yellow', hex: '#FACC15' },
               { key: 'green', hex: '#4ADE80' },
               { key: 'blue', hex: '#60A5FA' },
               { key: 'pink', hex: '#F472B6' },
+              { key: 'purple', hex: '#C084FC' },
             ] as const).map((c) => (
               <TouchableOpacity
                 key={c.key}
@@ -682,7 +685,8 @@ export default function ReaderScreen() {
                     const colorBadge =
                       item.color === 'yellow' ? '#FACC15' :
                       item.color === 'green' ? '#4ADE80' :
-                      item.color === 'blue' ? '#60A5FA' : '#F472B6';
+                      item.color === 'blue' ? '#60A5FA' :
+                      item.color === 'purple' ? '#C084FC' : '#F472B6';
 
                     return (
                       <View style={[styles.annotationItem, { borderBottomColor: barBorder }]}>

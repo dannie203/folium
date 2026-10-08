@@ -34,9 +34,11 @@ Folium is architected around a **Local-First, Zero-CDN, Edge-Synchronized** para
 ### 1. Reader Engines (Zero External Dependencies)
 - **EPUB Engine (`apps/mobile/src/reader/EpubReader.tsx`)**:
   - Offline inlined `epub.js` with reflowable layout, CFI location tracking, custom theme engine (Dark, Sepia, Light), and bidirectional iframe bridge.
+  - Highlights, sticky notes, and 5-color palette (Yellow, Green, Blue, Pink, Purple).
 - **PDF Engine (`apps/mobile/src/reader/PdfReader.tsx`)**:
   - Inlined Mozilla `pdf.js` with client-side blob worker rendering.
   - High-DPI canvas rendering with automatic viewport scaling.
+  - Full annotation parity: text selection layer, scale-invariant highlight overlays (`page:N:...`), sticky notes, and drawer navigation.
 - **Desktop & Keyboard Navigation**:
   - `←` / `→` or `Space` / `PageUp` / `PageDown`: Instant page turning.
   - `+` / `-`: Dynamic font scaling (70% - 200%).
@@ -45,9 +47,10 @@ Folium is architected around a **Local-First, Zero-CDN, Edge-Synchronized** para
   - Centered reading column (`maxWidth: 840px`) with justified book typography.
 
 ### 2. Local-First Data Layer
-- **iOS / Android**: Native `expo-sqlite` with FTS (Full Text Search).
+- **iOS / Android**: Native `expo-sqlite` with persistent local storage.
 - **Web**: Custom IndexedDB-backed SQLite persistent adapter with binary storage for books.
 - **Sync Model**: Write-quota protected. Sync requests are debounced and triggered on reader exit/app backgrounding to preserve Cloudflare D1's 100k rows/day write tier.
+- **Privacy & Security**: Reader iframe sandbox exiled to `sandbox="allow-scripts"` (null origin) with strict CSP `connect-src 'none'`. Sync runs over TLS-in-transit with Google ID Token validation; book binaries use opaque UUID naming on Google Drive.
 
 ---
 
