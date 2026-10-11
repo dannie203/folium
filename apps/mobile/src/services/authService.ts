@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as AuthSession from 'expo-auth-session';
 import * as SecureStore from 'expo-secure-store';
 import type { AuthUser } from '@folium/shared';
+import { classifyAuthPromptResult } from './authSessionWeb';
 
 const STORAGE_KEY = 'folium_auth_user';
 
@@ -208,14 +209,15 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
 
   const result = await request.promptAsync(discovery);
 
-  if (result.type !== 'success' || !result.params.access_token) {
-    const params = 'params' in result ? (result.params as any) : undefined;
-    const errorDetail = params?.error_description || params?.error || result.type;
-    throw new Error(
-      result.type === 'cancel'
-        ? 'Đăng nhập Google đã bị hủy.'
-        : `Đăng nhập Google thất bại: ${errorDetail}`
-    );
+  const outcome = classifyAuthPromptResult(result);
+  if (outcome.status === 'cancelled') {
+    throw new Error('Đăng nhập Google đã bị hủy.');
+  }
+  if (outcome.status === 'error') {
+    throw new Error(`Đăng nhập Google thất bại: ${outcome.message}`);
+  }
+  if (!('params' in result) || !result.params?.access_token) {
+    throw new Error('Đăng nhập Google thất bại: missing_access_token');
   }
 
   const accessToken = result.params.access_token;
