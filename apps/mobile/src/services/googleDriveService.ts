@@ -1,10 +1,10 @@
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import type { DriveFileMetadata, DriveSyncResult, Book } from '@folium/shared';
-import { getCurrentUser } from './authService';
+import { getCurrentUser, registerAuthLifecycleListener } from './authService';
 import { getDatabase } from '../db';
 import { getWebBook, saveWebBook, saveBookFile } from './storage';
-import { deleteBook } from './bookService';
+import { deleteBook, setDriveTrashHandler } from './bookService';
 import { validateBookBytes } from './fileValidator';
 
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
@@ -272,6 +272,18 @@ export async function trashDriveBook(driveFileId: string): Promise<boolean> {
     return false;
   }
 }
+
+// Connect Drive trash handler into bookService to decouple circular dependency
+setDriveTrashHandler(async (fileId) => {
+  await trashDriveBook(fileId);
+});
+
+// Register cache clearance on user sign-out
+registerAuthLifecycleListener({
+  onSignOut: () => {
+    clearGoogleDriveCache();
+  },
+});
 
 /**
  * List files in the Google Drive /Folium folder (including nested shelf subfolders).

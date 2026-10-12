@@ -1,23 +1,24 @@
 import * as DocumentPicker from 'expo-document-picker';
-import * as ExpoCrypto from 'expo-crypto';
 import type { Book, BookFormat } from '@folium/shared';
 import { getDatabase } from '../db';
 import { saveBookFile, deleteBookFile } from './storage';
 import { queueMutation, triggerDebouncedSync } from './syncService';
-import { trashDriveBook } from './googleDriveService';
 import { validateBookUri } from './fileValidator';
 import { getCurrentUser } from './authService';
+import { generateUUID } from '../utils/uuid';
+
+export { generateUUID };
 
 export interface BookWithProgress extends Book {
   progress_percentage: number;
   last_cfi?: string | null;
 }
 
-/**
- * Generate a random v4 UUID without external dependencies.
- */
-export function generateUUID(): string {
-  return ExpoCrypto.randomUUID();
+export type DriveTrashHandler = (driveFileId: string) => Promise<void>;
+let driveTrashHandler: DriveTrashHandler | null = null;
+
+export function setDriveTrashHandler(handler: DriveTrashHandler | null): void {
+  driveTrashHandler = handler;
 }
 
 /**
@@ -98,31 +99,34 @@ export async function importBookFromPicker(): Promise<BookWithProgress | null> {
     updated_at: now,
   };
 
-  // Insert into local SQLite
+  // Insert into local SQLite and queue mutation atomically
   const db = await getDatabase();
-  await db.runAsync(
-    `INSERT INTO books (id, user_id, title, author, cover_url, file_type, file_size, local_path, drive_file_id, locations_cache, created_at, updated_at, shelf, tags)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      newBook.id,
-      userId,
-      newBook.title,
-      newBook.author,
-      newBook.cover_url ?? null,
-      newBook.file_type,
-      newBook.file_size,
-      newBook.local_path ?? null,
-      newBook.drive_file_id ?? null,
-      newBook.locations_cache ?? null,
-      newBook.created_at,
-      newBook.updated_at,
-      newBook.shelf ?? 'Inbox',
-      newBook.tags ? newBook.tags.join(',') : '',
-    ]
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO books (id, user_id, title, author, cover_url, file_type, file_size, local_path, drive_file_id, locations_cache, created_at, updated_at, shelf, tags)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        newBook.id,
+        userId,
+        newBook.title,
+        newBook.author,
+        newBook.cover_url ?? null,
+        newBook.file_type,
+        newBook.file_size,
+        newBook.local_path ?? null,
+        newBook.drive_file_id ?? null,
+        newBook.locations_cache ?? null,
+        newBook.created_at,
+        newBook.updated_at,
+        newBook.shelf ?? 'Inbox',
+        newBook.tags ? newBook.tags.join(',') : '',
+      ]
+    );
 
-  // Queue for cloud sync
-  await queueMutation('book', newBook.id, newBook);
+    // Queue for cloud sync
+    await queueMutation('book', newBook.id, newBook);
+  });
+
   triggerDebouncedSync(30000);
 
   return {
@@ -202,11 +206,6 @@ export async function updateBookMetadata(
   const tagsStr = Array.isArray(tags) ? tags.join(',') : '';
   const now = Date.now();
 
-  await db.runAsync(
-    `UPDATE books SET title = ?, author = ?, cover_url = ?, shelf = ?, tags = ?, updated_at = ? WHERE id = ?`,
-    [title, author, cover_url ?? null, shelf ?? 'Inbox', tagsStr, now, bookId]
-  );
-
   const updatedBook: Book = {
     ...existing,
     title,
@@ -217,7 +216,15 @@ export async function updateBookMetadata(
     updated_at: now,
   };
 
-  await queueMutation('book', bookId, updatedBook);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE books SET title = ?, author = ?, cover_url = ?, shelf = ?, tags = ?, updated_at = ? WHERE id = ?`,
+      [title, author, cover_url ?? null, shelf ?? 'Inbox', tagsStr, now, bookId]
+    );
+
+    await queueMutation('book', bookId, updatedBook);
+  });
+
   triggerDebouncedSync(5000);
 }
 
@@ -280,72 +287,133 @@ export async function deleteBook(
     [bookId]
   );
 
+  // Soft delete records in SQLite with LWW clock advance and queue outbox mutations atomically
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE reading_progress SET is_deleted = 1, client_updated_at = ? WHERE book_id = ?', [now, bookId]);
+    await db.runAsync('UPDATE bookmarks SET is_deleted = 1 WHERE book_id = ?', [bookId]);
+    await db.runAsync('UPDATE highlights SET is_deleted = 1 WHERE book_id = ?', [bookId]);
+    await db.runAsync('UPDATE notes SET is_deleted = 1 WHERE book_id = ?', [bookId]);
+    await db.runAsync(
+      'UPDATE books SET is_deleted = 1, deleted_at = ?, updated_at = ? WHERE id = ? AND ? >= updated_at',
+      [now, now, bookId, now]
+    );
+
+    // Track deletion in sync_outbox with explicit logical timestamps
+    await queueMutation('book', bookId, {
+      id: bookId,
+      user_id: book?.user_id || undefined,
+      title: book?.title || 'Untitled',
+      author: book?.author || 'Unknown',
+      file_type: book?.file_type || 'epub',
+      file_size: book?.file_size || 0,
+      is_deleted: true,
+      deleted_at: now,
+      updated_at: now,
+      client_updated_at: now,
+    });
+    for (const row of progressRows) {
+      await queueMutation('progress', row.id, {
+        id: row.id,
+        book_id: row.book_id,
+        is_deleted: true,
+        client_updated_at: now,
+        deleted_at: now,
+      });
+    }
+    for (const row of bookmarkRows) {
+      await queueMutation('bookmark', row.id, {
+        id: row.id,
+        book_id: row.book_id,
+        is_deleted: true,
+        deleted_at: now,
+      });
+    }
+    for (const row of highlightRows) {
+      await queueMutation('highlight', row.id, {
+        id: row.id,
+        book_id: row.book_id,
+        is_deleted: true,
+        deleted_at: now,
+      });
+    }
+    for (const row of noteRows) {
+      await queueMutation('note', row.id, {
+        id: row.id,
+        book_id: row.book_id,
+        is_deleted: true,
+        deleted_at: now,
+      });
+    }
+  });
+
   if (book && book.local_path) {
     await deleteBookFile(book.local_path, bookId);
   }
 
   // If connected to Google Drive and not skipping drive trash, move to Drive Trash (30-day window)
-  if (!options?.skipDriveTrash && book?.drive_file_id) {
-    trashDriveBook(book.drive_file_id).catch((e) =>
+  if (!options?.skipDriveTrash && book?.drive_file_id && driveTrashHandler) {
+    driveTrashHandler(book.drive_file_id).catch((e) =>
       console.warn('[BookService] Could not trash file on Drive:', e)
     );
   }
 
-  // Soft delete records in SQLite with LWW clock advance to prevent resurrection
-  await db.runAsync('UPDATE reading_progress SET is_deleted = 1, client_updated_at = ? WHERE book_id = ?', [now, bookId]);
-  await db.runAsync('UPDATE bookmarks SET is_deleted = 1 WHERE book_id = ?', [bookId]);
-  await db.runAsync('UPDATE highlights SET is_deleted = 1 WHERE book_id = ?', [bookId]);
-  await db.runAsync('UPDATE notes SET is_deleted = 1 WHERE book_id = ?', [bookId]);
-  await db.runAsync(
-    'UPDATE books SET is_deleted = 1, deleted_at = ?, updated_at = ? WHERE id = ? AND ? >= updated_at',
-    [now, now, bookId, now]
-  );
-
-  // Track deletion in sync_outbox with explicit logical timestamps
-  await queueMutation('book', bookId, {
-    id: bookId,
-    user_id: book?.user_id || undefined,
-    title: book?.title || 'Untitled',
-    author: book?.author || 'Unknown',
-    file_type: book?.file_type || 'epub',
-    file_size: book?.file_size || 0,
-    is_deleted: true,
-    deleted_at: now,
-    updated_at: now,
-    client_updated_at: now,
-  });
-  for (const row of progressRows) {
-    await queueMutation('progress', row.id, {
-      id: row.id,
-      book_id: row.book_id,
-      is_deleted: true,
-      client_updated_at: now,
-      deleted_at: now,
-    });
-  }
-  for (const row of bookmarkRows) {
-    await queueMutation('bookmark', row.id, {
-      id: row.id,
-      book_id: row.book_id,
-      is_deleted: true,
-      deleted_at: now,
-    });
-  }
-  for (const row of highlightRows) {
-    await queueMutation('highlight', row.id, {
-      id: row.id,
-      book_id: row.book_id,
-      is_deleted: true,
-      deleted_at: now,
-    });
-  }
-  for (const row of noteRows) {
-    await queueMutation('note', row.id, {
-      id: row.id,
-      book_id: row.book_id,
-      is_deleted: true,
-      deleted_at: now,
-    });
-  }
   triggerDebouncedSync(30000);
+}
+
+/**
+ * Persist reading progress to SQLite and queue for background sync.
+ */
+export async function saveReadingProgress(
+  bookId: string,
+  cfi: string,
+  percentage: number
+): Promise<void> {
+  const db = await getDatabase();
+  const now = Date.now();
+  const progressId = generateUUID();
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO reading_progress (id, book_id, cfi, percentage, client_updated_at, is_deleted, sync_seq)
+       VALUES (?, ?, ?, ?, ?, 0, 0)
+       ON CONFLICT(book_id) DO UPDATE SET
+         cfi = excluded.cfi,
+         percentage = excluded.percentage,
+         client_updated_at = excluded.client_updated_at,
+         is_deleted = 0`,
+      [progressId, bookId, cfi, percentage, now]
+    );
+
+    // Update book's updated_at
+    await db.runAsync('UPDATE books SET updated_at = ? WHERE id = ?', [now, bookId]);
+
+    // Queue reading progress mutation (coalesced by syncService to 1 write per book)
+    await queueMutation('progress', bookId, {
+      id: progressId,
+      user_id: 'local_user',
+      book_id: bookId,
+      cfi,
+      percentage,
+      client_updated_at: now,
+      is_deleted: false,
+      sync_seq: 0,
+    });
+  });
+
+  // 30-second idle threshold for background D1 sync
+  triggerDebouncedSync(30000);
+}
+
+/**
+ * Cache generated EPUB locations in local SQLite.
+ */
+export async function saveBookLocationsCache(
+  bookId: string,
+  locationsJson: string
+): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync('UPDATE books SET locations_cache = ? WHERE id = ?', [
+    locationsJson,
+    bookId,
+  ]);
 }

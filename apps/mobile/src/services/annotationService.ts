@@ -1,6 +1,6 @@
 import type { Bookmark, Highlight, Note } from '@folium/shared';
 import { getDatabase } from '../db';
-import { generateUUID } from './bookService';
+import { generateUUID } from '../utils/uuid';
 import { queueMutation, triggerDebouncedSync } from './syncService';
 
 export interface SearchResultItem {
@@ -34,16 +34,18 @@ export async function addBookmark(bookId: string, cfi: string, title?: string): 
     sync_seq: 0,
   };
 
-  await db.runAsync(
-    `INSERT INTO bookmarks (id, book_id, cfi, title, client_created_at, is_deleted, sync_seq)
-     VALUES (?, ?, ?, ?, ?, 0, 0)`,
-    [bookmark.id, bookmark.book_id, bookmark.cfi, bookmark.title, bookmark.client_created_at]
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO bookmarks (id, book_id, cfi, title, client_created_at, is_deleted, sync_seq)
+       VALUES (?, ?, ?, ?, ?, 0, 0)`,
+      [bookmark.id, bookmark.book_id, bookmark.cfi, bookmark.title, bookmark.client_created_at]
+    );
 
-  // Queue for cloud sync
-  await queueMutation('bookmark', bookmark.id, bookmark);
+    // Queue for cloud sync
+    await queueMutation('bookmark', bookmark.id, bookmark);
+  });
+
   triggerDebouncedSync(30000);
-
   return bookmark;
 }
 
@@ -69,13 +71,16 @@ export async function getBookmarks(bookId: string): Promise<Bookmark[]> {
 export async function deleteBookmark(bookmarkId: string): Promise<void> {
   const db = await getDatabase();
 
-  await db.runAsync(
-    `UPDATE bookmarks SET is_deleted = 1 WHERE id = ?`,
-    [bookmarkId]
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE bookmarks SET is_deleted = 1 WHERE id = ?`,
+      [bookmarkId]
+    );
 
-  // Queue tombstone for sync
-  await queueMutation('bookmark', bookmarkId, { id: bookmarkId, is_deleted: true });
+    // Queue tombstone for sync
+    await queueMutation('bookmark', bookmarkId, { id: bookmarkId, is_deleted: true });
+  });
+
   triggerDebouncedSync(30000);
 }
 
@@ -107,24 +112,26 @@ export async function addHighlight(
     sync_seq: 0,
   };
 
-  await db.runAsync(
-    `INSERT INTO highlights (id, book_id, cfi_range, text, color, note, client_created_at, is_deleted, sync_seq)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)`,
-    [
-      highlight.id,
-      highlight.book_id,
-      highlight.cfi_range,
-      highlight.text,
-      highlight.color,
-      highlight.note ?? null,
-      highlight.client_created_at,
-    ]
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO highlights (id, book_id, cfi_range, text, color, note, client_created_at, is_deleted, sync_seq)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)`,
+      [
+        highlight.id,
+        highlight.book_id,
+        highlight.cfi_range,
+        highlight.text,
+        highlight.color,
+        highlight.note ?? null,
+        highlight.client_created_at,
+      ]
+    );
 
-  // Queue for cloud sync
-  await queueMutation('highlight', highlight.id, highlight);
+    // Queue for cloud sync
+    await queueMutation('highlight', highlight.id, highlight);
+  });
+
   triggerDebouncedSync(30000);
-
   return highlight;
 }
 
@@ -152,29 +159,31 @@ export async function getHighlights(bookId: string): Promise<Highlight[]> {
 export async function deleteHighlight(highlightId: string): Promise<void> {
   const db = await getDatabase();
 
-  await db.runAsync(
-    `UPDATE highlights SET is_deleted = 1 WHERE id = ?`,
-    [highlightId]
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE highlights SET is_deleted = 1 WHERE id = ?`,
+      [highlightId]
+    );
 
-  // Also find and tombstone attached notes
-  const attachedNotes = await db.getAllAsync<{ id: string }>(
-    `SELECT id FROM notes WHERE highlight_id = ? AND is_deleted = 0`,
-    [highlightId]
-  );
+    // Also find and tombstone attached notes
+    const attachedNotes = await db.getAllAsync<{ id: string }>(
+      `SELECT id FROM notes WHERE highlight_id = ? AND is_deleted = 0`,
+      [highlightId]
+    );
 
-  await db.runAsync(
-    `UPDATE notes SET is_deleted = 1 WHERE highlight_id = ?`,
-    [highlightId]
-  );
+    await db.runAsync(
+      `UPDATE notes SET is_deleted = 1 WHERE highlight_id = ?`,
+      [highlightId]
+    );
 
-  // Queue highlight tombstone
-  await queueMutation('highlight', highlightId, { id: highlightId, is_deleted: true });
+    // Queue highlight tombstone
+    await queueMutation('highlight', highlightId, { id: highlightId, is_deleted: true });
 
-  // Queue note tombstones for attached notes
-  for (const n of attachedNotes) {
-    await queueMutation('note', n.id, { id: n.id, is_deleted: true });
-  }
+    // Queue note tombstones for attached notes
+    for (const n of attachedNotes) {
+      await queueMutation('note', n.id, { id: n.id, is_deleted: true });
+    }
+  });
 
   triggerDebouncedSync(30000);
 }
@@ -203,31 +212,33 @@ export async function addNote(
     sync_seq: 0,
   };
 
-  await db.runAsync(
-    `INSERT INTO notes (id, book_id, highlight_id, content, client_created_at, is_deleted, sync_seq)
-     VALUES (?, ?, ?, ?, ?, 0, 0)`,
-    [note.id, note.book_id, note.highlight_id ?? null, note.content, note.client_created_at]
-  );
-
-  // If tied to highlight, update note preview on highlight and queue highlight mutation
-  if (highlightId) {
+  await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `UPDATE highlights SET note = ? WHERE id = ?`,
-      [content, highlightId]
+      `INSERT INTO notes (id, book_id, highlight_id, content, client_created_at, is_deleted, sync_seq)
+       VALUES (?, ?, ?, ?, ?, 0, 0)`,
+      [note.id, note.book_id, note.highlight_id ?? null, note.content, note.client_created_at]
     );
-    const hl = await db.getFirstAsync<Highlight>(
-      `SELECT * FROM highlights WHERE id = ?`,
-      [highlightId]
-    );
-    if (hl) {
-      await queueMutation('highlight', highlightId, hl);
+
+    // If tied to highlight, update note preview on highlight and queue highlight mutation
+    if (highlightId) {
+      await db.runAsync(
+        `UPDATE highlights SET note = ? WHERE id = ?`,
+        [content, highlightId]
+      );
+      const hl = await db.getFirstAsync<Highlight>(
+        `SELECT * FROM highlights WHERE id = ?`,
+        [highlightId]
+      );
+      if (hl) {
+        await queueMutation('highlight', highlightId, hl);
+      }
     }
-  }
 
-  // Queue for cloud sync
-  await queueMutation('note', note.id, note);
+    // Queue for cloud sync
+    await queueMutation('note', note.id, note);
+  });
+
   triggerDebouncedSync(30000);
-
   return note;
 }
 
@@ -253,12 +264,15 @@ export async function getNotes(bookId: string): Promise<Note[]> {
 export async function deleteNote(noteId: string): Promise<void> {
   const db = await getDatabase();
 
-  await db.runAsync(
-    `UPDATE notes SET is_deleted = 1 WHERE id = ?`,
-    [noteId]
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE notes SET is_deleted = 1 WHERE id = ?`,
+      [noteId]
+    );
 
-  await queueMutation('note', noteId, { id: noteId, is_deleted: true });
+    await queueMutation('note', noteId, { id: noteId, is_deleted: true });
+  });
+
   triggerDebouncedSync(30000);
 }
 

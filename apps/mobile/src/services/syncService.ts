@@ -1,5 +1,4 @@
 import { Platform, AppState, type AppStateStatus } from 'react-native';
-import * as ExpoCrypto from 'expo-crypto';
 import type {
   SyncPushPayload,
   SyncPullResponse,
@@ -11,11 +10,8 @@ import type {
   Book,
 } from '@folium/shared';
 import { getDatabase } from '../db';
-import { getCurrentUser } from './authService';
-
-function generateUUID(): string {
-  return ExpoCrypto.randomUUID();
-}
+import { getCurrentUser, registerAuthLifecycleListener } from './authService';
+import { generateUUID } from '../utils/uuid';
 
 // ==============================================================================
 //  SYNC ENGINE CONFIGURATION & TYPES
@@ -243,6 +239,20 @@ export async function handleAccountLifecycleSwitch(newUserId: string | null): Pr
     await setSyncMeta(META_KEYS.ACTIVE_USER_ID, newUserId);
   }
 }
+
+// Wire auth lifecycle transitions into sync engine without circular require() calls
+registerAuthLifecycleListener({
+  onAccountSwitch: async (newUserId) => {
+    await handleAccountLifecycleSwitch(newUserId);
+  },
+  onSignOut: async (options) => {
+    resetSyncSessionState();
+    await purgeSyncOutbox();
+    if (!options.keepLocalData) {
+      await detachAccountLocalState(options.userId);
+    }
+  },
+});
 
 export async function getSyncServerUrl(): Promise<string> {
   const custom = await getSyncMeta(META_KEYS.SERVER_URL);
@@ -494,7 +504,13 @@ export async function pushPendingMutations(): Promise<{
     } catch {
       errorDetail = await res.text().catch(() => '');
     }
-    throw new Error(`Sync push failed (${res.status}): ${errorDetail || res.statusText}`);
+    const err = new Error(`Sync push failed (${res.status}): ${errorDetail || res.statusText}`);
+    (err as any).status = res.status;
+    const retryAfter = res.headers.get('retry-after');
+    if (retryAfter) {
+      (err as any).retryAfter = parseInt(retryAfter, 10);
+    }
+    throw err;
   }
 
   const data = (await res.json()) as SyncPushResponse;
@@ -570,7 +586,13 @@ export async function pullRemoteChanges(isFullResync = false): Promise<{
 
   if (!res.ok) {
     const errorText = await res.text().catch(() => '');
-    throw new Error(`Sync pull failed (${res.status}): ${errorText}`);
+    const err = new Error(`Sync pull failed (${res.status}): ${errorText}`);
+    (err as any).status = res.status;
+    const retryAfter = res.headers.get('retry-after');
+    if (retryAfter) {
+      (err as any).retryAfter = parseInt(retryAfter, 10);
+    }
+    throw err;
   }
 
   const data = (await res.json()) as SyncPullResponse;
@@ -941,7 +963,7 @@ export async function performFullSync(): Promise<{ pushed: number; pulled: numbe
       console.error('[SyncService] Sync failed with error:', err);
       currentStatus = 'error';
       currentErrorMessage = err?.message || 'Sync error';
-      scheduleRetry();
+      scheduleRetry(err?.retryAfter);
     }
 
     notifyListeners();
@@ -953,12 +975,15 @@ export async function performFullSync(): Promise<{ pushed: number; pulled: numbe
 
 /**
  * Exponential backoff retry for transient network / edge errors.
+ * Respects server Retry-After delay if provided.
  */
-function scheduleRetry(): void {
+function scheduleRetry(retryAfterSeconds?: number): void {
   if (retryTimer) clearTimeout(retryTimer);
 
   retryAttempt++;
-  const delay = Math.min(1000 * Math.pow(2, retryAttempt), MAX_RETRY_DELAY_MS);
+  const delay = typeof retryAfterSeconds === 'number' && !isNaN(retryAfterSeconds) && retryAfterSeconds > 0
+    ? retryAfterSeconds * 1000
+    : Math.min(1000 * Math.pow(2, retryAttempt), MAX_RETRY_DELAY_MS);
   console.log(`[SyncService] Scheduling retry #${retryAttempt} in ${delay}ms`);
 
   retryTimer = setTimeout(() => {

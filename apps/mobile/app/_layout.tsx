@@ -4,6 +4,11 @@ import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { getDatabase } from '../src/db';
 import { I18nProvider } from '../src/i18n';
+import { bootstrapWebAuthSession } from '../src/services/webAuthBootstrap';
+
+// Web only: complete a pending Google OAuth popup redirect before rendering so
+// the opener window receives the result and the popup closes.
+bootstrapWebAuthSession();
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
