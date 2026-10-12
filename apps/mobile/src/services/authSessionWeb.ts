@@ -24,9 +24,12 @@ export const OAUTH_RESPONSE_PARAM_KEYS = [
   'error',
   'error_description',
   'error_uri',
+  'error_subtype',
   'authuser',
   'prompt',
   'session_state',
+  'hd',
+  'iss',
 ] as const;
 
 const OAUTH_PARAM_SET: ReadonlySet<string> = new Set(OAUTH_RESPONSE_PARAM_KEYS);
