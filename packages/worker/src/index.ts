@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { cors } from 'hono/cors';
 import type {
   SyncPushPayload,
   SyncPullResponse,
@@ -11,11 +10,17 @@ import type {
   Book,
 } from '@folium/shared';
 
-type Bindings = {
+export interface RateLimiterBinding {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
+export type Bindings = {
   DB: D1Database;
   GOOGLE_CLIENT_ID?: string;
   ENVIRONMENT?: string;
   ALLOW_DEMO_AUTH?: string;
+  SYNC_RATE_LIMITER?: RateLimiterBinding;
+  DOWNLOAD_RATE_LIMITER?: RateLimiterBinding;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -228,8 +233,118 @@ async function authenticateUser(
   return null;
 }
 
-// Enable CORS for web clients & local dev
-app.use('*', cors());
+// ------------------------------------------------------------------------------
+// Client IP Extraction & Rate Limiting Primitives
+// ------------------------------------------------------------------------------
+
+/**
+ * Extract trusted client IP from Cloudflare connecting IP header.
+ * Disregards user-controlled X-Forwarded-For headers to prevent spoofing.
+ */
+export function getClientIp(req: { header: (name: string) => string | undefined }): string {
+  const cfIp = req.header('cf-connecting-ip');
+  if (cfIp && cfIp.trim()) {
+    return cfIp.trim();
+  }
+  return 'unknown-ip';
+}
+
+interface RateLimitBucket {
+  count: number;
+  resetAt: number;
+}
+const fallbackRateLimitMap = new Map<string, RateLimitBucket>();
+
+export function resetFallbackRateLimiter(): void {
+  fallbackRateLimitMap.clear();
+}
+
+/**
+ * Check rate limit using Cloudflare native binding, with fallback to in-memory window
+ * for test environments and local dev where native bindings are not injected.
+ */
+export async function checkRateLimit(
+  limiter: RateLimiterBinding | undefined,
+  key: string,
+  limit: number,
+  periodSeconds: number,
+  nowMs = Date.now()
+): Promise<{ allowed: boolean; retryAfter: number }> {
+  if (limiter && typeof limiter.limit === 'function') {
+    const res = await limiter.limit({ key });
+    return {
+      allowed: res.success,
+      retryAfter: res.success ? 0 : periodSeconds,
+    };
+  }
+
+  // Fallback in-memory rate limiter for test / dev suites
+  let bucket = fallbackRateLimitMap.get(key);
+  if (!bucket || nowMs >= bucket.resetAt) {
+    bucket = { count: 0, resetAt: nowMs + periodSeconds * 1000 };
+    fallbackRateLimitMap.set(key, bucket);
+  }
+
+  bucket.count++;
+  if (bucket.count > limit) {
+    const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - nowMs) / 1000));
+    return { allowed: false, retryAfter };
+  }
+
+  return { allowed: true, retryAfter: 0 };
+}
+
+/**
+ * Validate origin against strict allowlist.
+ * In production: ONLY https://aki.is-a.dev is permitted.
+ * In development: localhost origins (http://localhost:* or http://127.0.0.1:*) are permitted.
+ */
+export function isAllowedOrigin(origin: string | undefined, env?: Bindings): string | null {
+  if (!origin) return null;
+  const trimmed = origin.trim();
+  if (trimmed === 'https://aki.is-a.dev') {
+    return 'https://aki.is-a.dev';
+  }
+  const isDev = env?.ENVIRONMENT === 'development';
+  if (isDev) {
+    if (/^http:\/\/localhost(:\d+)?$/.test(trimmed) || /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(trimmed)) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+// Strict CORS Allowlist & Preflight Middleware
+app.use('*', async (c, next) => {
+  const origin = c.req.header('origin');
+  const allowedOrigin = isAllowedOrigin(origin, c.env);
+
+  if (c.req.method === 'OPTIONS') {
+    if (!origin || !allowedOrigin) {
+      // Disallowed origin or missing origin on preflight: return 204 without CORS headers
+      return new Response(null, { status: 204 });
+    }
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': allowedOrigin,
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, If-None-Match, X-App-Version',
+        'Access-Control-Max-Age': '86400',
+        'Vary': 'Origin',
+      },
+    });
+  }
+
+  await next();
+
+  if (allowedOrigin) {
+    c.header('Access-Control-Allow-Origin', allowedOrigin);
+    c.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match, X-App-Version');
+    c.header('Vary', 'Origin');
+  }
+});
 
 // ------------------------------------------------------------------------------
 // Health Check
@@ -411,6 +526,21 @@ export function validateDownloadTargetUrl(rawUrl: string): { valid: boolean; url
 
 // Proxy book download with SSRF defense & manual redirect validation
 app.get('/api/community/download', async (c) => {
+  const ip = getClientIp(c.req);
+  const rateCheck = await checkRateLimit(
+    c.env?.DOWNLOAD_RATE_LIMITER,
+    `download:ip:${ip}`,
+    10,
+    60
+  );
+  if (!rateCheck.allowed) {
+    return c.json(
+      { error: 'Too Many Requests', code: 'RATE_LIMITED' },
+      429,
+      { 'Retry-After': String(rateCheck.retryAfter) }
+    );
+  }
+
   const fileUrl = c.req.query('url');
   if (!fileUrl) return c.json({ error: 'Missing url parameter' }, 400);
 
@@ -588,7 +718,25 @@ export function validateSyncPushPayload(body: any): { valid: boolean; error?: st
 app.post('/api/sync/push', async (c) => {
   try {
     const db = c.env.DB;
+    const ip = getClientIp(c.req);
     const userId = await authenticateUser(c.req.header('authorization'), c.env);
+
+    // Rate limit per user if authenticated, per IP if unauthenticated
+    const rateKey = `sync:push:${userId ? `user:${userId}` : `ip:${ip}`}`;
+    const rateCheck = await checkRateLimit(
+      c.env?.SYNC_RATE_LIMITER,
+      rateKey,
+      60,
+      60
+    );
+    if (!rateCheck.allowed) {
+      return c.json(
+        { error: 'Too Many Requests', code: 'RATE_LIMITED' },
+        429,
+        { 'Retry-After': String(rateCheck.retryAfter) }
+      );
+    }
+
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
     let body: SyncPushPayload;
@@ -967,7 +1115,24 @@ app.post('/api/sync/push', async (c) => {
 // ------------------------------------------------------------------------------
 app.post('/api/sync/gc', async (c) => {
   try {
+    const ip = getClientIp(c.req);
     const userId = await authenticateUser(c.req.header('authorization'), c.env);
+
+    const rateKey = `sync:gc:${userId ? `user:${userId}` : `ip:${ip}`}`;
+    const rateCheck = await checkRateLimit(
+      c.env?.SYNC_RATE_LIMITER,
+      rateKey,
+      60,
+      60
+    );
+    if (!rateCheck.allowed) {
+      return c.json(
+        { error: 'Too Many Requests', code: 'RATE_LIMITED' },
+        429,
+        { 'Retry-After': String(rateCheck.retryAfter) }
+      );
+    }
+
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
     const db = c.env.DB;
@@ -1038,7 +1203,24 @@ app.post('/api/sync/gc', async (c) => {
 app.get('/api/sync/pull', async (c) => {
   try {
     const db = c.env.DB;
+    const ip = getClientIp(c.req);
     const userId = await authenticateUser(c.req.header('authorization'), c.env);
+
+    const rateKey = `sync:pull:${userId ? `user:${userId}` : `ip:${ip}`}`;
+    const rateCheck = await checkRateLimit(
+      c.env?.SYNC_RATE_LIMITER,
+      rateKey,
+      60,
+      60
+    );
+    if (!rateCheck.allowed) {
+      return c.json(
+        { error: 'Too Many Requests', code: 'RATE_LIMITED' },
+        429,
+        { 'Retry-After': String(rateCheck.retryAfter) }
+      );
+    }
+
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
     const since = parseInt(c.req.query('since') || '0', 10);
     const ifNoneMatch = c.req.header('if-none-match');
@@ -1155,4 +1337,5 @@ app.get('/api/sync/pull', async (c) => {
   }
 });
 
+export { app };
 export default app;

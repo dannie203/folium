@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import type { Book } from '@folium/shared';
 import { getCurrentUser } from './authService';
 import { getDatabase } from '../db';
-import { generateUUID } from './bookService';
+import { generateUUID } from '../utils/uuid';
 import { saveWebBook, saveBookFile, saveBookBuffer } from './storage';
 import { validateBookBytes } from './fileValidator';
 import { queueMutation, triggerDebouncedSync } from './syncService';
@@ -160,27 +160,30 @@ export async function importScannedDriveBook(
     updated_at: now,
   };
 
-  await db.runAsync(
-    `INSERT INTO books (id, title, author, cover_url, file_type, file_size, local_path, drive_file_id, locations_cache, created_at, updated_at, shelf, tags)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      newBook.id,
-      newBook.title,
-      newBook.author,
-      newBook.cover_url ?? null,
-      newBook.file_type,
-      newBook.file_size,
-      newBook.local_path ?? null,
-      newBook.drive_file_id ?? null,
-      newBook.locations_cache ?? null,
-      newBook.created_at,
-      newBook.updated_at,
-      newBook.shelf ?? 'Inbox',
-      scanned.categoryPath,
-    ]
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO books (id, title, author, cover_url, file_type, file_size, local_path, drive_file_id, locations_cache, created_at, updated_at, shelf, tags)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        newBook.id,
+        newBook.title,
+        newBook.author,
+        newBook.cover_url ?? null,
+        newBook.file_type,
+        newBook.file_size,
+        newBook.local_path ?? null,
+        newBook.drive_file_id ?? null,
+        newBook.locations_cache ?? null,
+        newBook.created_at,
+        newBook.updated_at,
+        newBook.shelf ?? 'Inbox',
+        scanned.categoryPath,
+      ]
+    );
 
-  await queueMutation('book', newBook.id, newBook);
+    await queueMutation('book', newBook.id, newBook);
+  });
+
   triggerDebouncedSync(5000);
 
   return newBook;

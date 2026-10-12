@@ -5,18 +5,9 @@
  */
 import initSqlJs, { Database } from 'sql.js';
 import { INIT_SQL } from './schema';
+import type { DatabaseResult, SQLiteDatabaseLike } from './types';
 
-export interface DatabaseResult {
-  lastInsertRowId: number;
-  changes: number;
-}
-
-export interface SQLiteDatabaseLike {
-  execAsync(sql: string): Promise<void>;
-  runAsync(sql: string, params?: any[]): Promise<DatabaseResult>;
-  getFirstAsync<T>(sql: string, params?: any[]): Promise<T | null>;
-  getAllAsync<T>(sql: string, params?: any[]): Promise<T[]>;
-}
+export type { DatabaseResult, SQLiteDatabaseLike } from './types';
 
 const IDB_NAME = 'folium_sqlite_persistence';
 const IDB_VERSION = 1;
@@ -85,6 +76,7 @@ export class WebSqliteDatabase implements SQLiteDatabaseLike {
   private db: Database | null = null;
   private initPromise: Promise<void> | null = null;
   private saveTimer: any = null;
+  private txDepth = 0;
 
   private async ensureInitialized(): Promise<void> {
     if (this.db) return;
@@ -170,12 +162,36 @@ export class WebSqliteDatabase implements SQLiteDatabaseLike {
 
   private scheduleSave(): void {
     if (typeof indexedDB === 'undefined') return;
+    if (this.txDepth > 0) return;
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
     }
     this.saveTimer = setTimeout(async () => {
       await this.flushImmediately();
     }, 150);
+  }
+
+  async withTransactionAsync<T>(task: () => Promise<T>): Promise<T> {
+    await this.ensureInitialized();
+    const savepointName = `sp_${this.txDepth++}`;
+    this.db!.run(`SAVEPOINT ${savepointName};`);
+    try {
+      const result = await task();
+      this.db!.run(`RELEASE SAVEPOINT ${savepointName};`);
+      this.scheduleSave();
+      return result;
+    } catch (err) {
+      try {
+        this.db!.run(`ROLLBACK TO SAVEPOINT ${savepointName};`);
+        this.db!.run(`RELEASE SAVEPOINT ${savepointName};`);
+      } catch (rollbackErr) {
+        console.warn('[WebSQLite] Rollback failed:', rollbackErr);
+      }
+      this.scheduleSave();
+      throw err;
+    } finally {
+      this.txDepth--;
+    }
   }
 
   async execAsync(sql: string): Promise<void> {

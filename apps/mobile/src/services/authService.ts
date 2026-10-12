@@ -24,6 +24,20 @@ const SCOPES = [
 let cachedUser: AuthUser | null = null;
 const listeners = new Set<(user: AuthUser | null) => void>();
 
+export type AuthLifecycleListener = {
+  onAccountSwitch?: (newUserId: string) => Promise<void> | void;
+  onSignOut?: (options: { userId: string | null; keepLocalData?: boolean }) => Promise<void> | void;
+};
+
+const lifecycleListeners = new Set<AuthLifecycleListener>();
+
+export function registerAuthLifecycleListener(listener: AuthLifecycleListener): () => void {
+  lifecycleListeners.add(listener);
+  return () => {
+    lifecycleListeners.delete(listener);
+  };
+}
+
 function notifyListeners() {
   for (const listener of listeners) {
     try {
@@ -156,8 +170,11 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
       accessToken: 'demo_access_token_folium_sandbox',
       expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
     };
-    const { handleAccountLifecycleSwitch } = require('./syncService');
-    await handleAccountLifecycleSwitch(demoUser.id);
+    for (const listener of lifecycleListeners) {
+      if (listener.onAccountSwitch) {
+        await listener.onAccountSwitch(demoUser.id);
+      }
+    }
     persistUser(demoUser);
     return demoUser;
   }
@@ -227,8 +244,11 @@ export async function signInWithGoogle(demoFallback = false): Promise<AuthUser> 
   };
 
   // Enforce account isolation lifecycle BEFORE persisting new user identity (Fail-Closed Security Boundary)
-  const { handleAccountLifecycleSwitch } = require('./syncService');
-  await handleAccountLifecycleSwitch(user.id);
+  for (const listener of lifecycleListeners) {
+    if (listener.onAccountSwitch) {
+      await listener.onAccountSwitch(user.id);
+    }
+  }
 
   persistUser(user);
   return user;
@@ -253,24 +273,14 @@ export async function signOut(options?: { clearLocalData?: boolean; keepLocalDat
 
   persistUser(null);
 
-  // Invalidate user-scoped session caches
-  try {
-    const { clearGoogleDriveCache } = require('./googleDriveService');
-    clearGoogleDriveCache();
-  } catch (err) {
-    console.warn('[AuthService] Failed to clear Drive cache on signOut:', err);
-  }
-
-  try {
-    const { resetSyncSessionState, purgeSyncOutbox, detachAccountLocalState } = require('./syncService');
-    resetSyncSessionState();
-    // Always purge pending outbox on sign-out to prevent mutation leakage across accounts
-    await purgeSyncOutbox();
-    // Default to strict privacy isolation: detach signed-in account data unless explicitly requested to keep
-    if (!options?.keepLocalData) {
-      await detachAccountLocalState(userId);
+  // Invalidate user-scoped session caches and sync state via registered lifecycle listeners
+  for (const listener of lifecycleListeners) {
+    if (listener.onSignOut) {
+      try {
+        await listener.onSignOut({ userId, keepLocalData: options?.keepLocalData });
+      } catch (err) {
+        console.warn('[AuthService] Lifecycle onSignOut listener error:', err);
+      }
     }
-  } catch (err) {
-    console.warn('[AuthService] Failed to reset sync state on signOut:', err);
   }
 }

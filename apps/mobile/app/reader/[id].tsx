@@ -14,13 +14,13 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { ReaderTheme } from '@folium/shared';
-import { getDatabase } from '../../src/db';
 import { EpubReader } from '../../src/reader/EpubReader';
 import { PdfReader } from '../../src/reader/PdfReader';
-import { generateUUID } from '../../src/services/bookService';
 import {
-  queueMutation,
-  triggerDebouncedSync,
+  saveReadingProgress,
+  saveBookLocationsCache,
+} from '../../src/services/bookService';
+import {
   flushSyncImmediately,
 } from '../../src/services/syncService';
 import { SyncStatusBadge } from '../../src/components/SyncStatusBadge';
@@ -198,38 +198,7 @@ export default function ReaderScreen() {
     async (cfi: string, percentage: number) => {
       if (!id) return;
       try {
-        const db = await getDatabase();
-        const now = Date.now();
-        const progressId = generateUUID();
-
-        await db.runAsync(
-          `INSERT INTO reading_progress (id, book_id, cfi, percentage, client_updated_at, is_deleted, sync_seq)
-           VALUES (?, ?, ?, ?, ?, 0, 0)
-           ON CONFLICT(book_id) DO UPDATE SET
-             cfi = excluded.cfi,
-             percentage = excluded.percentage,
-             client_updated_at = excluded.client_updated_at,
-             is_deleted = 0`,
-          [progressId, id, cfi, percentage, now]
-        );
-
-        // Update book's updated_at
-        await db.runAsync('UPDATE books SET updated_at = ? WHERE id = ?', [now, id]);
-
-        // Queue reading progress mutation (coalesced by syncService to 1 write per book)
-        await queueMutation('progress', id, {
-          id: progressId,
-          user_id: 'local_user',
-          book_id: id,
-          cfi,
-          percentage,
-          client_updated_at: now,
-          is_deleted: false,
-          sync_seq: 0,
-        });
-
-        // 30-second idle threshold for background D1 sync
-        triggerDebouncedSync(30000);
+        await saveReadingProgress(id, cfi, percentage);
       } catch (e) {
         console.error('Failed to save progress to SQLite:', e);
       }
@@ -255,11 +224,7 @@ export default function ReaderScreen() {
   const handleLocationsGenerated = async (locationsJson: string) => {
     if (!id) return;
     try {
-      const db = await getDatabase();
-      await db.runAsync('UPDATE books SET locations_cache = ? WHERE id = ?', [
-        locationsJson,
-        id,
-      ]);
+      await saveBookLocationsCache(id, locationsJson);
     } catch (e) {
       console.warn('Failed to cache locations in SQLite:', e);
     }

@@ -3,7 +3,7 @@ import type { OpdsBookEntry, CommunityCatalogSource, Book } from '@folium/shared
 import { getDatabase } from '../db';
 import { saveWebBook, saveBookFile } from './storage';
 import { validateBookBytes } from './fileValidator';
-import { generateUUID } from './bookService';
+import { generateUUID } from '../utils/uuid';
 import { queueMutation, triggerDebouncedSync } from './syncService';
 import { getSyncServerUrl } from './syncService';
 
@@ -246,27 +246,30 @@ export async function importOpdsBook(entry: OpdsBookEntry): Promise<Book> {
   };
 
   const db = await getDatabase();
-  await db.runAsync(
-    `INSERT INTO books (id, title, author, cover_url, file_type, file_size, local_path, drive_file_id, locations_cache, created_at, updated_at, shelf, tags)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      newBook.id,
-      newBook.title,
-      newBook.author,
-      newBook.cover_url ?? null,
-      newBook.file_type,
-      newBook.file_size,
-      newBook.local_path ?? null,
-      newBook.drive_file_id ?? null,
-      newBook.locations_cache ?? null,
-      newBook.created_at,
-      newBook.updated_at,
-      newBook.shelf ?? 'Inbox',
-      'Public Domain,' + entry.source,
-    ]
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO books (id, title, author, cover_url, file_type, file_size, local_path, drive_file_id, locations_cache, created_at, updated_at, shelf, tags)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        newBook.id,
+        newBook.title,
+        newBook.author,
+        newBook.cover_url ?? null,
+        newBook.file_type,
+        newBook.file_size,
+        newBook.local_path ?? null,
+        newBook.drive_file_id ?? null,
+        newBook.locations_cache ?? null,
+        newBook.created_at,
+        newBook.updated_at,
+        newBook.shelf ?? 'Inbox',
+        'Public Domain,' + entry.source,
+      ]
+    );
 
-  await queueMutation('book', newBook.id, newBook);
+    await queueMutation('book', newBook.id, newBook);
+  });
+
   triggerDebouncedSync(5000);
 
   return newBook;
