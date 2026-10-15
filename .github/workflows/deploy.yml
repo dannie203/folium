@@ -40,7 +40,6 @@ jobs:
 
       # Deployment Step 1: D1 Database Migrations (Schema first)
       - name: Apply D1 Database Migrations
-        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -48,7 +47,6 @@ jobs:
 
       # Deployment Step 2: Edge Worker API (API second)
       - name: Deploy Cloudflare Worker API
-        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

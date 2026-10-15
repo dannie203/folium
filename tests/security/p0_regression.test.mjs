@@ -336,6 +336,92 @@ test('P0 AUTH 4: Rejects ID Token when expectedAudience is missing or empty (Man
   assert.strictEqual(resultUndefinedAud, null, 'Must reject token when expectedAudience is undefined');
 });
 
+test('P0 AUTH 4b: verifyGoogleAccessToken rejects token when expectedAudience is missing or empty', async () => {
+  const { verifyGoogleAccessToken } = await import('../../packages/worker/src/index.ts');
+
+  const resultNoAud = await verifyGoogleAccessToken('ya29.sample_token', '');
+  assert.strictEqual(resultNoAud, null, 'Must reject access token when expectedAudience is empty');
+
+  const resultUndefinedAud = await verifyGoogleAccessToken('ya29.sample_token', undefined);
+  assert.strictEqual(resultUndefinedAud, null, 'Must reject access token when expectedAudience is undefined');
+});
+
+test('P0 AUTH 4c: verifyGoogleAccessToken validates audience, azp, expiry, and extracts subject ID', async () => {
+  const { verifyGoogleAccessToken } = await import('../../packages/worker/src/index.ts');
+
+  const originalFetch = globalThis.fetch;
+  try {
+    // 1. Success with matching aud
+    globalThis.fetch = async (url) => {
+      assert.ok(String(url).includes('oauth2.googleapis.com/tokeninfo'));
+      return {
+        ok: true,
+        json: async () => ({
+          aud: 'target-client-id.apps.googleusercontent.com',
+          sub: 'google-sub-456',
+          expires_in: '3500',
+        }),
+      };
+    };
+
+    const validSub = await verifyGoogleAccessToken(
+      'ya29.valid_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(validSub, 'google-sub-456', 'Should return sub for valid access token');
+
+    // 2. Success with matching azp (authorized presenter) in comma-separated audiences
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        azp: 'mobile-client-id.apps.googleusercontent.com',
+        sub: 'google-sub-789',
+        expires_in: 1800,
+      }),
+    });
+
+    const validAzpSub = await verifyGoogleAccessToken(
+      'ya29.valid_mobile_token',
+      'web-client-id.apps.googleusercontent.com, mobile-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(validAzpSub, 'google-sub-789', 'Should match azp against multi-audience list');
+
+    // 3. Reject on mismatched audience
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        aud: 'malicious-client-id.apps.googleusercontent.com',
+        sub: 'victim-sub',
+        expires_in: 3600,
+      }),
+    });
+
+    const rejectedSub = await verifyGoogleAccessToken(
+      'ya29.attacker_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(rejectedSub, null, 'Must reject access token with mismatched audience');
+
+    // 4. Reject on expired access token
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        aud: 'target-client-id.apps.googleusercontent.com',
+        sub: 'google-sub-expired',
+        expires_in: 0,
+      }),
+    });
+
+    const expiredSub = await verifyGoogleAccessToken(
+      'ya29.expired_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(expiredSub, null, 'Must reject expired access token (expires_in <= 0)');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('P0 AUTH 5: demo_ token is rejected in production (backdoor defense)', () => {
   function authenticateUserTest(token, env) {
     if (!token.startsWith('Bearer ')) return null;

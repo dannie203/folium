@@ -177,7 +177,8 @@ export async function verifyGoogleIdToken(
   }
 
   // 3. Verify audience (strictly required to prevent cross-app token reuse)
-  if (!expectedAudience || payload.aud !== expectedAudience) {
+  const allowedAudiences = expectedAudience?.split(',').map((s) => s.trim()).filter(Boolean) || [];
+  if (allowedAudiences.length === 0 || !payload.aud || !allowedAudiences.includes(payload.aud)) {
     return null;
   }
 
@@ -209,6 +210,48 @@ export async function verifyGoogleIdToken(
   }
 }
 
+/**
+ * Verify Google OAuth Access Token via Google OAuth2 tokeninfo endpoint.
+ * Fallback when client sends an OAuth access token instead of an ID token (JWT).
+ */
+export async function verifyGoogleAccessToken(
+  token: string,
+  expectedAudience?: string
+): Promise<string | null> {
+  const allowedAudiences = expectedAudience?.split(',').map((s) => s.trim()).filter(Boolean) || [];
+  if (allowedAudiences.length === 0) return null;
+
+  try {
+    const resp = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(token)}`
+    );
+    if (!resp.ok) return null;
+
+    const info = (await resp.json()) as {
+      aud?: string;
+      azp?: string;
+      sub?: string;
+      expires_in?: string | number;
+    };
+
+    if (!info || !info.sub || typeof info.sub !== 'string') return null;
+
+    const tokenAud = info.aud || info.azp;
+    if (!tokenAud || !allowedAudiences.includes(tokenAud)) return null;
+
+    const expiresIn =
+      typeof info.expires_in === 'string'
+        ? parseInt(info.expires_in, 10)
+        : info.expires_in;
+    if (typeof expiresIn === 'number' && expiresIn <= 0) return null;
+
+    return info.sub;
+  } catch (err) {
+    console.error('[Auth] Failed to verify Google access token:', err);
+    return null;
+  }
+}
+
 async function authenticateUser(
   authorization: string | undefined,
   env?: Bindings
@@ -225,12 +268,14 @@ async function authenticateUser(
     return null;
   }
 
-  // Google ID Token (JWT) local verification
+  // Google ID Token (JWT) local verification (zero-latency fast path)
   if (token.split('.').length === 3) {
-    return await verifyGoogleIdToken(token, env?.GOOGLE_CLIENT_ID);
+    const userId = await verifyGoogleIdToken(token, env?.GOOGLE_CLIENT_ID);
+    if (userId) return userId;
   }
 
-  return null;
+  // Fallback: Google Access Token verification via Google tokeninfo
+  return await verifyGoogleAccessToken(token, env?.GOOGLE_CLIENT_ID);
 }
 
 // ------------------------------------------------------------------------------

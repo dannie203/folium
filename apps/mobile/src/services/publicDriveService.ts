@@ -211,7 +211,10 @@ export async function downloadAndCacheDriveBook(book: Book): Promise<{ buffer?: 
   });
 
   if (!resp.ok) {
-    throw new Error(`Lỗi tải sách từ Google Drive (${resp.status}): ${resp.statusText}`);
+    if (resp.status === 401) {
+      throw new Error(`Phiên đăng nhập Google đã hết hạn (401). Vui lòng đăng xuất và đăng nhập lại.`);
+    }
+    throw new Error(`Lỗi tải sách từ Google Drive (${resp.status}): ${resp.statusText || 'Yêu cầu không thành công'}`);
   }
 
   const buffer = await resp.arrayBuffer();

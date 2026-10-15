@@ -410,8 +410,10 @@ test('STORAGE ARMOR 13: Web iframe sandbox and SVG script quarantine audit', () 
   const pdfReader = fs.readFileSync(pdfReaderPath, 'utf8');
   const epubHtml = fs.readFileSync(epubHtmlPath, 'utf8');
 
-  // Verify hardened sandbox attribute on both iframe components (no allow-same-origin to prevent parent localStorage exfiltration)
-  assert.match(epubReader, /sandbox:\s*['"]allow-scripts['"]/, 'EpubReader must sandbox iframe with allow-scripts only');
+  // Verify sandbox attribute on both iframe components:
+  // EpubReader requires allow-same-origin for epub.js inner chapter iframes to be accessible by the rendition layout engine.
+  // PdfReader operates entirely on canvas so it is restricted to allow-scripts only.
+  assert.match(epubReader, /sandbox:\s*['"]allow-scripts allow-same-origin['"]/, 'EpubReader must sandbox iframe with allow-scripts allow-same-origin');
   assert.match(pdfReader, /sandbox:\s*['"]allow-scripts['"]/, 'PdfReader must sandbox iframe with allow-scripts only');
 
   // Verify SVG script quarantine in reader engine

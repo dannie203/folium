@@ -253,7 +253,7 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
         {React.createElement('iframe', {
           ref: webIframeRef,
           srcDoc: EPUB_VIEWER_HTML,
-          sandbox: 'allow-scripts',
+          sandbox: 'allow-scripts allow-same-origin',
           onLoad: () => {
             console.log('[EpubReader] iframe onLoad fired');
             isViewerReadyRef.current = true;

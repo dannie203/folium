@@ -13,6 +13,30 @@ const FOLIUM_FOLDER_NAME = 'Folium';
 
 let cachedFolder: { userId: string; folderId: string } | null = null;
 
+async function parseDriveApiError(resp: Response, fallbackMessage: string): Promise<string> {
+  try {
+    const errorBody = await resp.text();
+    let parsed: any;
+    try {
+      parsed = JSON.parse(errorBody);
+    } catch {}
+
+    const message = parsed?.error?.message || errorBody || resp.statusText;
+    if (resp.status === 401) {
+      return `Phiên đăng nhập Google đã hết hạn (${resp.status}). Vui lòng Đăng xuất và Đăng nhập lại để làm mới phiên.`;
+    }
+    if (resp.status === 403) {
+      if (typeof message === 'string' && (message.includes('Google Drive API has not been used') || message.includes('disabled'))) {
+        return `Google Drive API chưa được kích hoạt trên Google Cloud Console (${resp.status}): ${message}`;
+      }
+      return `Chưa cấp quyền truy cập Google Drive hoặc bị từ chối (${resp.status}): ${message}`;
+    }
+    return `${fallbackMessage} (${resp.status}): ${message || 'Không có phản hồi chi tiết'}`;
+  } catch {
+    return `${fallbackMessage} (${resp.status})`;
+  }
+}
+
 /**
  * Invalidate in-memory folder cache (called on signOut).
  */
@@ -46,7 +70,8 @@ export async function getOrCreateFoliumFolder(): Promise<string> {
   });
 
   if (!searchResp.ok) {
-    throw new Error(`Google Drive folder search failed: ${searchResp.statusText}`);
+    const errMsg = await parseDriveApiError(searchResp, 'Không thể tìm kiếm thư mục /Folium trên Google Drive');
+    throw new Error(errMsg);
   }
 
   const searchData = await searchResp.json();
@@ -70,7 +95,8 @@ export async function getOrCreateFoliumFolder(): Promise<string> {
   });
 
   if (!createResp.ok) {
-    throw new Error('Failed to create /Folium folder on Google Drive.');
+    const errMsg = await parseDriveApiError(createResp, 'Không thể tạo thư mục /Folium trên Google Drive');
+    throw new Error(errMsg);
   }
 
   const createData = await createResp.json();
@@ -121,7 +147,8 @@ export async function getOrCreateShelfSubfolder(shelfName: string): Promise<stri
   });
 
   if (!createResp.ok) {
-    throw new Error(`Failed to create shelf folder /Folium/${shelfName} on Google Drive.`);
+    const errMsg = await parseDriveApiError(createResp, `Không thể tạo thư mục kệ /Folium/${shelfName} trên Google Drive`);
+    throw new Error(errMsg);
   }
 
   const newFolder = await createResp.json();
@@ -330,7 +357,8 @@ export async function listDriveBooks(): Promise<DriveFileMetadata[]> {
       });
 
       if (!response.ok) {
-        throw new Error(`Lỗi duyệt danh sách file Drive: ${response.statusText}`);
+        const errMsg = await parseDriveApiError(response, 'Lỗi duyệt danh sách file Drive');
+        throw new Error(errMsg);
       }
 
       const data = (await response.json()) as {
@@ -395,7 +423,8 @@ export async function downloadBookFromDrive(
   });
 
   if (!resp.ok) {
-    throw new Error(`Không thể tải sách từ Google Drive: ${resp.statusText}`);
+    const errMsg = await parseDriveApiError(resp, 'Không thể tải sách từ Google Drive');
+    throw new Error(errMsg);
   }
 
   const arrayBuf = await resp.arrayBuffer();
