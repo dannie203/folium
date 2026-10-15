@@ -158,6 +158,7 @@ test('BROWSER REAL CHROMIUM: Origin Isolation, Pre-Sanitization, & Real EPUB Reg
   let domAuditResult = null;
 
   const server = http.createServer((req, res) => {
+    console.log('   [HTTP REQ]', req.method, req.url);
     const url = new URL(req.url, 'http://127.0.0.1');
     if (url.pathname === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -326,13 +327,27 @@ test('BROWSER REAL CHROMIUM: Origin Isolation, Pre-Sanitization, & Real EPUB Reg
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
     '--disable-gpu',
+    '--no-proxy-server',
+    '--disable-background-networking',
+    '--disable-software-rasterizer',
     '--no-first-run',
     '--no-default-browser-check',
     `http://127.0.0.1:${port}/`
   ];
-  const chromeProc = spawn(chromiumBin, chromeArgs);
+  const chromeProc = spawn(chromiumBin, chromeArgs, {
+    env: {
+      ...process.env,
+      NO_PROXY: '127.0.0.1,localhost',
+      no_proxy: '127.0.0.1,localhost',
+      DBUS_SESSION_BUS_ADDRESS: 'disabled:'
+    }
+  });
   let chromeStderr = '';
-  chromeProc.stderr?.on('data', d => { chromeStderr += d.toString(); });
+  chromeProc.stderr?.on('data', d => {
+    const s = d.toString();
+    chromeStderr += s;
+    process.stderr.write(s);
+  });
 
   try {
     for (let i = 0; i < 150; i++) {
