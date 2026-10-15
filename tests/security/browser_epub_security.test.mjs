@@ -158,7 +158,7 @@ test('BROWSER REAL CHROMIUM: Origin Isolation, Pre-Sanitization, & Real EPUB Reg
   let domAuditResult = null;
 
   const server = http.createServer((req, res) => {
-    const url = new URL(req.url, 'http://127.0.0.1:8788');
+    const url = new URL(req.url, 'http://127.0.0.1');
     if (url.pathname === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(rawViewerHtml);
@@ -317,9 +317,22 @@ test('BROWSER REAL CHROMIUM: Origin Isolation, Pre-Sanitization, & Real EPUB Reg
     }
   });
 
-  await new Promise(resolve => server.listen(8788, resolve));
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
 
-  const chromeProc = spawn(chromiumBin, ['--headless=new', 'http://127.0.0.1:8788/']);
+  const chromeArgs = [
+    '--headless=new',
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--no-first-run',
+    '--no-default-browser-check',
+    `http://127.0.0.1:${port}/`
+  ];
+  const chromeProc = spawn(chromiumBin, chromeArgs);
+  let chromeStderr = '';
+  chromeProc.stderr?.on('data', d => { chromeStderr += d.toString(); });
 
   try {
     for (let i = 0; i < 150; i++) {
@@ -329,6 +342,10 @@ test('BROWSER REAL CHROMIUM: Origin Isolation, Pre-Sanitization, & Real EPUB Reg
   } finally {
     chromeProc.kill();
     server.close();
+  }
+
+  if (!hostAuditResult || !domAuditResult) {
+    console.error('Chromium stderr output:', chromeStderr);
   }
 
   // ============================================================================
