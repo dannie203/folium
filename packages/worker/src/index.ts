@@ -211,6 +211,29 @@ export async function verifyGoogleIdToken(
 }
 
 /**
+ * Safely parse and validate Google OAuth token expiration duration.
+ * Strictly accepts positive integers as numbers or clean digit strings (e.g. "3600").
+ * Rejects non-finite numbers, floats, strings with trailing garbage (e.g. "3600garbage"), and values <= 0.
+ */
+export function parseExpiresIn(rawExpires: unknown): number | null {
+  let expiresIn: number;
+
+  if (typeof rawExpires === 'number') {
+    expiresIn = rawExpires;
+  } else if (typeof rawExpires === 'string' && /^\d+$/.test(rawExpires.trim())) {
+    expiresIn = Number(rawExpires.trim());
+  } else {
+    return null;
+  }
+
+  if (!Number.isSafeInteger(expiresIn) || expiresIn <= 0) {
+    return null;
+  }
+
+  return expiresIn;
+}
+
+/**
  * Verify Google OAuth Access Token via Google OAuth2 tokeninfo endpoint.
  * Fallback when client sends an OAuth access token instead of an ID token (JWT).
  */
@@ -250,15 +273,9 @@ export async function verifyGoogleAccessToken(
     const tokenAud = info.aud || info.azp || info.issued_to;
     if (!tokenAud || !allowedAudiences.includes(tokenAud)) return null;
 
-    // Strict expiration check: reject non-finite, NaN, <= 0
-    const rawExpires = info.expires_in;
-    const expiresIn =
-      typeof rawExpires === 'string'
-        ? parseInt(rawExpires, 10)
-        : typeof rawExpires === 'number'
-          ? rawExpires
-          : NaN;
-    if (!Number.isFinite(expiresIn) || expiresIn <= 0) return null;
+    // Strict expiration check: reject non-finite, trailing garbage strings, <= 0
+    const expiresIn = parseExpiresIn(info.expires_in);
+    if (!expiresIn) return null;
 
     return userId;
   } catch (err) {

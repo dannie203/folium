@@ -582,3 +582,38 @@ test('P0 SYNC 3: Statement chunking handles batches larger than D1 limit (100-st
 
   assert.deepStrictEqual(batchesExecuted, [100, 100, 50], 'Should chunk 250 statements into [100, 100, 50]');
 });
+
+test('P0 AUTH 6: parseExpiresIn strictly validates token lifetime durations', async () => {
+  const { parseExpiresIn } = await import('../../packages/worker/src/index.ts');
+
+  // Valid positive integers (number and clean string)
+  assert.strictEqual(parseExpiresIn(3600), 3600, 'Positive number should be accepted');
+  assert.strictEqual(parseExpiresIn('3600'), 3600, 'Pure digit string should be parsed');
+  assert.strictEqual(parseExpiresIn('  3600  '), 3600, 'Trimmed digit string should be parsed');
+  assert.strictEqual(parseExpiresIn(1), 1, 'Smallest positive integer should be accepted');
+
+  // Rejects malformed strings with trailing/leading non-digits (prevent parseInt laxness)
+  assert.strictEqual(parseExpiresIn('3600garbage'), null, 'Trailing non-digit chars must be rejected');
+  assert.strictEqual(parseExpiresIn('garbage3600'), null, 'Leading non-digit chars must be rejected');
+  assert.strictEqual(parseExpiresIn('3600 123'), null, 'Internal whitespace must be rejected');
+  assert.strictEqual(parseExpiresIn('3600.50'), null, 'Float string must be rejected');
+  assert.strictEqual(parseExpiresIn('0x100'), null, 'Hex string must be rejected');
+
+  // Rejects invalid numbers (floats, non-positive, non-safe integers, non-finite)
+  assert.strictEqual(parseExpiresIn(3600.5), null, 'Float number must be rejected');
+  assert.strictEqual(parseExpiresIn(0), null, 'Zero must be rejected');
+  assert.strictEqual(parseExpiresIn('0'), null, 'Zero string must be rejected');
+  assert.strictEqual(parseExpiresIn(-3600), null, 'Negative number must be rejected');
+  assert.strictEqual(parseExpiresIn('-3600'), null, 'Negative string must be rejected');
+  assert.strictEqual(parseExpiresIn(NaN), null, 'NaN must be rejected');
+  assert.strictEqual(parseExpiresIn(Infinity), null, 'Infinity must be rejected');
+  assert.strictEqual(parseExpiresIn(-Infinity), null, '-Infinity must be rejected');
+  assert.strictEqual(parseExpiresIn(Number.MAX_SAFE_INTEGER + 1), null, 'Unsafe integer must be rejected');
+
+  // Rejects other non-number/non-string types
+  assert.strictEqual(parseExpiresIn(null), null, 'null must be rejected');
+  assert.strictEqual(parseExpiresIn(undefined), null, 'undefined must be rejected');
+  assert.strictEqual(parseExpiresIn({}), null, 'Object must be rejected');
+  assert.strictEqual(parseExpiresIn([]), null, 'Array must be rejected');
+  assert.strictEqual(parseExpiresIn(true), null, 'Boolean must be rejected');
+});

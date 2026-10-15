@@ -932,39 +932,45 @@ Following the deployment of our Web OAuth stabilization, rigorous end-to-end tes
 
 #### 2. The Opaque Origin Trap & P0 Sandbox Isolation Architecture (`apps/mobile/src/reader/EpubReader.tsx`, `epubViewerHtml.ts`)
 * **The Vulnerability in the Naive Fix:**
-  * When `allow-same-origin` was initially added to the outer reader iframe to unblock `epub.js`, an astute security review correctly identified a critical P0 flaw: pairing `sandbox="allow-scripts allow-same-origin"` on a `srcDoc` iframe allows embedded code to retain the host application's origin (`https://aki.is-a.dev`).
-  * If a malicious book executed JavaScript, it could attempt cross-boundary escalation into `window.parent`, accessing the host DOM, `localStorage`, or `indexedDB`.
-* **The Root Cause of the epub.js Freeze:**
-  * Deep inspection revealed why `epub.js` had frozen under pure `sandbox="allow-scripts"`: Inside `epubViewerHtml.ts`, the bundled `epub.js` engine had a legacy hardcoded line: `this.iframe.sandbox = "allow-same-origin"` on its dynamically injected chapter iframes.
-  * When the outer iframe possesses an opaque origin (`null`), placing `sandbox="allow-same-origin"` on an inner child iframe causes the browser to compute a *different* unique opaque origin. In the W3C HTML spec, `null !== null`, so `childIframe.contentDocument` returned `null` and crashed `epub.js`.
-* **The Surgical Fortress Remedy:**
-  1. **Outer Frame Pure Sandbox:** Reverted `EpubReader.tsx` line 256 strictly to `sandbox: 'allow-scripts'` (omitting `allow-same-origin`). The reader is guaranteed an opaque `null` origin, making access to `window.parent.document`, `localStorage`, or `indexedDB` physically impossible under the browser's Same-Origin Policy.
-  2. **Internal Child Sandbox Collision Neutralization:** In `epubViewerHtml.ts`, eliminated the redundant `this.iframe.sandbox = "allow-same-origin"` on chapter iframes. Because the outer frame already isolates the entire viewer, chapter iframes inherit the outer frame's `null` origin without conflicting. `epub.js` accesses `childIframe.contentDocument` seamlessly.
-  3. **Universal Chapter Content Sanitization:** In `epubViewerHtml.ts`'s content hooks, actively strip all `<script>`, `<object>`, and `<embed>` elements, and scrub all inline `on*` event handlers across all elements in every chapter before rendering.
-  4. **Network Neutralization:** Retained Super CSP `connect-src 'none'` prohibiting all outbound network exfiltration.
+  * When `allow-same-origin` was initially considered on the outer reader iframe, security review correctly identified a critical P0 flaw: pairing `sandbox="allow-scripts allow-same-origin"` on a `srcDoc` iframe allows embedded code to retain the host application's origin (`https://aki.is-a.dev`). A malicious EPUB could exfiltrate `localStorage`, `sessionStorage`, `IndexedDB`, or deface host DOM.
+  * Conversely, pure `sandbox="allow-scripts"` caused child chapter iframes in `epub.js` to receive a distinct opaque origin (`null !== null`), breaking `childIframe.contentDocument` and freezing the reader on load.
+* **The Architectural Resolution: W3C Data URL Opaque Origin:**
+  * Instead of `srcDoc`, `EpubReader.tsx` mounts the viewer using a `data:` URL scheme:
+    ```typescript
+    const dataUrl = React.useMemo(() => {
+      return 'data:text/html;charset=utf-8,' + encodeURIComponent(EPUB_VIEWER_HTML);
+    }, []);
+    ```
+  * Under W3C HTML5 specifications, documents loaded via `data:` URLs are unconditionally assigned an opaque origin (`origin === "null"`).
+  * Combining `data:` URL with `sandbox="allow-scripts allow-same-origin"` enables `epub.js` to access its own self-generated child iframes (completely resolving the chapter DOM freeze), while permanently blocking any access to `window.parent` (host application `https://aki.is-a.dev` DOM, `localStorage`, `sessionStorage`, and `IndexedDB`) via browser Same-Origin Policy.
+* **In-Memory Pre-Sanitization Hook:**
+  * To guarantee that malicious scripts cannot execute even within the isolated opaque origin, we introduced `sanitizeChapterDocument(doc)` registered on `book.spine.hooks.content`.
+  * This hook executes during in-memory XML/DOM parsing *prior* to section serialization and iframe mounting, eradicating all `<script>`, `<object>`, `<embed>`, inline `on*` event handlers, and `javascript:` URIs from the chapter DOM.
+  * Maintained defense-in-depth sanitization on rendered content in `rendition.hooks.content`.
 
 ---
 
-#### 3. Google Access Token Hardening & Multi-Platform Client IDs (`packages/worker/`, `.github/workflows/deploy.yml`)
+#### 3. Google Access Token Hardening & Multi-Platform Client IDs (`packages/worker/src/index.ts`, `wrangler.jsonc`)
 * **Google Tokeninfo Parsing Hardening:**
   * Fixed `verifyGoogleAccessToken()` to support Google's native tokeninfo payload structure:
     * **`user_id` Fallback:** Google OAuth access tokens issued without `openid` scope return `user_id` rather than `sub`. Added fallback: `const userId = info.sub || info.user_id`.
-    * **Audience Field Discovery:** Checked `aud`, `azp`, and `issued_to` (Google's legacy access token audience field).
-    * **Strict Expiration Check (Anti-NaN):** Replaced loose `expires_in <= 0` with `Number.isFinite(expiresIn) && expiresIn > 0`, neutralizing potential `NaN <= 0 === false` validation bypasses.
+    * **Audience Discovery:** Checked `aud`, `azp`, and `issued_to` (Google's legacy access token audience field).
+* **Strict Expiration Validator (`parseExpiresIn`):**
+  * Replaced lax parsing with a dedicated `parseExpiresIn(rawExpires: unknown): number | null` helper:
+    * Strictly validates positive integers as numbers or clean digit strings using `/^\d+$/`.
+    * Rejects trailing/leading non-digit characters (e.g. `"3600garbage"`), floats, non-finite values, and numbers `<= 0`.
 * **Multi-Platform Audience Configuration:**
   * Documented comma-separated multi-client ID acceptance in `packages/worker/wrangler.jsonc` (Web, Android, iOS).
-* **CI/CD Pre-Flight Validation:**
-  * Added `Validate Cloudflare Deployment Credentials` step in `.github/workflows/deploy.yml` to fail fast with actionable diagnostics if `CLOUDFLARE_API_TOKEN` or `CLOUDFLARE_ACCOUNT_ID` are missing, rather than crashing mid-migration.
 
 ---
 
-#### 4. Verification & The 105-Test Milestone
-* Reconciled the security test suite to enforce the new invariants:
-  * Updated `tests/security/storage_armor.test.mjs` (Storage Armor 13) to verify that `EpubReader` strictly declares `allow-scripts` without `allow-same-origin`.
-  * Added **Storage Armor 14** testing adversarial EPUB sandbox breakout attempts and script/event handler eradication.
-  * Added realistic tokeninfo tests in `tests/security/p0_regression.test.mjs` verifying `user_id` fallback, NaN expiration rejection, and multi-platform audience acceptance.
+#### 4. Verification & The 107-Test Milestone with Live Headless Chromium E2E
+* Replaced synthetic regex mocks with an automated, empirical browser security suite (`tests/security/browser_epub_security.test.mjs`) executing against real Headless Chromium (v153 Arch Linux):
+  1. **Origin Isolation Audit:** Host page seeds sensitive `localStorage`, `sessionStorage`, and `IndexedDB` records. An adversarial exploit EPUB attempts cross-origin escalation across all channels; verified 100% data preservation and cross-origin SOP enforcement.
+  2. **In-Memory Pre-Sanitization Audit:** Exploit book contains `<script>`, inline `on*` handlers, SVG scripts, and embedded elements; reader executes `AUDIT_CHAPTER_DOM`, confirming 0 active scripts and 0 event handlers present in rendered DOM.
+  3. **Real EPUB Regression:** Verified clean multi-chapter EPUB loading, Table of Contents extraction (3 chapters), and page navigation via `NEXT_PAGE` with 0 runtime errors.
 * **Verification Metrics:**
-  * `pnpm test`: **105/105 passing** (0 failing, ~357ms execution time).
+  * `pnpm test`: **107/107 passing** (0 failing).
   * `pnpm typecheck`: **0 errors** across entire monorepo.
   * `pnpm --filter @folium/mobile exec expo export --platform web`: **9/9 static routes bundled** (3.44 MB).
   * `git diff --check`: **0 warnings**.
