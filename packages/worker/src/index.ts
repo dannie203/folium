@@ -231,21 +231,36 @@ export async function verifyGoogleAccessToken(
       aud?: string;
       azp?: string;
       sub?: string;
+      user_id?: string;
+      issued_to?: string;
       expires_in?: string | number;
     };
 
-    if (!info || !info.sub || typeof info.sub !== 'string') return null;
+    if (!info || typeof info !== 'object') return null;
 
-    const tokenAud = info.aud || info.azp;
+    // Google OAuth access tokens return 'user_id' (or 'sub' when openid scope is present)
+    const userId = (typeof info.sub === 'string' && info.sub.trim())
+      ? info.sub.trim()
+      : (typeof info.user_id === 'string' && info.user_id.trim())
+        ? info.user_id.trim()
+        : null;
+    if (!userId) return null;
+
+    // Audience may be reported in 'aud', 'azp', or 'issued_to'
+    const tokenAud = info.aud || info.azp || info.issued_to;
     if (!tokenAud || !allowedAudiences.includes(tokenAud)) return null;
 
+    // Strict expiration check: reject non-finite, NaN, <= 0
+    const rawExpires = info.expires_in;
     const expiresIn =
-      typeof info.expires_in === 'string'
-        ? parseInt(info.expires_in, 10)
-        : info.expires_in;
-    if (typeof expiresIn === 'number' && expiresIn <= 0) return null;
+      typeof rawExpires === 'string'
+        ? parseInt(rawExpires, 10)
+        : typeof rawExpires === 'number'
+          ? rawExpires
+          : NaN;
+    if (!Number.isFinite(expiresIn) || expiresIn <= 0) return null;
 
-    return info.sub;
+    return userId;
   } catch (err) {
     console.error('[Auth] Failed to verify Google access token:', err);
     return null;

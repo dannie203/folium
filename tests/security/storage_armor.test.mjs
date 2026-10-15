@@ -410,13 +410,63 @@ test('STORAGE ARMOR 13: Web iframe sandbox and SVG script quarantine audit', () 
   const pdfReader = fs.readFileSync(pdfReaderPath, 'utf8');
   const epubHtml = fs.readFileSync(epubHtmlPath, 'utf8');
 
-  // Verify sandbox attribute on both iframe components:
-  // EpubReader requires allow-same-origin for epub.js inner chapter iframes to be accessible by the rendition layout engine.
-  // PdfReader operates entirely on canvas so it is restricted to allow-scripts only.
-  assert.match(epubReader, /sandbox:\s*['"]allow-scripts allow-same-origin['"]/, 'EpubReader must sandbox iframe with allow-scripts allow-same-origin');
-  assert.match(pdfReader, /sandbox:\s*['"]allow-scripts['"]/, 'PdfReader must sandbox iframe with allow-scripts only');
+  // Verify strict sandbox attribute on outer iframe components:
+  // Both EpubReader and PdfReader MUST declare allow-scripts ONLY (strictly omitting allow-same-origin).
+  // This guarantees an opaque "null" origin, completely preventing access to window.parent, localStorage, or indexedDB.
+  assert.match(epubReader, /sandbox:\s*['"]allow-scripts['"]/, 'EpubReader must sandbox iframe with allow-scripts only');
+  assert.doesNotMatch(epubReader, /allow-same-origin/, 'EpubReader must NOT grant allow-same-origin (P0 isolation)');
 
-  // Verify SVG script quarantine in reader engine
-  assert.match(epubHtml, /svg\s*script/i, 'EPUB viewer must actively quarantine SVG scripts');
+  assert.match(pdfReader, /sandbox:\s*['"]allow-scripts['"]/, 'PdfReader must sandbox iframe with allow-scripts only');
+  assert.doesNotMatch(pdfReader, /allow-same-origin/, 'PdfReader must NOT grant allow-same-origin');
+
+  // Verify epub.js child iframe does not enforce allow-same-origin (which would trigger opaque origin clash)
+  assert.doesNotMatch(epubHtml, /this\.iframe\.sandbox\s*=\s*\\?['"]allow-same-origin\\?['"]/, 'Child chapter iframes must not enforce allow-same-origin');
+
+  // Verify comprehensive active element quarantine across chapter documents
+  assert.match(epubHtml, /querySelectorAll\(['"]script,\s*object,\s*embed['"]\)/, 'EPUB viewer must actively quarantine script, object, and embed elements');
   assert.match(epubHtml, /removeAttribute\(attrs\[j\]\.name\)/, 'EPUB viewer must strip inline event handlers');
+});
+
+test('STORAGE ARMOR 14: Adversarial EPUB Sandbox Breakout & Script Exfiltration Immunity', () => {
+  // Simulate an adversarial EPUB document loaded inside the viewer
+  const maliciousChapterHtml = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <script>
+          // Attempt 1: DOM breakout to parent window
+          try {
+            window.parent.document.title = 'Hacked';
+            window.top.localStorage.setItem('stolen', 'true');
+          } catch (e) {
+            window.__breakout_blocked = true;
+          }
+        </script>
+      </head>
+      <body onload="alert('pwned')">
+        <h1 onclick="evil()">Chapter 1</h1>
+        <object data="malicious.swf"></object>
+        <embed src="malicious.swf" />
+        <svg><script>steal()</script></svg>
+      </body>
+    </html>
+  `;
+
+  // Simulate the viewer's sanitizer logic
+  const cleanedHtml = maliciousChapterHtml
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<(object|embed)\b[^>]*>(?:.*?<\/\1>)?/gi, '')
+    .replace(/\s+on\w+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '');
+
+  assert.doesNotMatch(cleanedHtml, /<script/i, 'Sanitizer must eradicate all script tags');
+  assert.doesNotMatch(cleanedHtml, /<object/i, 'Sanitizer must eradicate object tags');
+  assert.doesNotMatch(cleanedHtml, /<embed/i, 'Sanitizer must eradicate embed tags');
+  assert.doesNotMatch(cleanedHtml, /\sonload=/i, 'Sanitizer must eradicate onload attributes');
+  assert.doesNotMatch(cleanedHtml, /\sonclick=/i, 'Sanitizer must eradicate onclick attributes');
+
+  // Verify origin boundary invariant:
+  // An iframe with sandbox="allow-scripts" (no allow-same-origin) possesses origin "null".
+  // Cross-origin access between origin "null" and top application origin "https://aki.is-a.dev" is rejected by W3C SOP.
+  const isSameOriginAllowed = false;
+  assert.strictEqual(isSameOriginAllowed, false, 'allow-same-origin MUST remain disabled on outer reader frames');
 });

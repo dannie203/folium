@@ -402,7 +402,7 @@ test('P0 AUTH 4c: verifyGoogleAccessToken validates audience, azp, expiry, and e
     );
     assert.strictEqual(rejectedSub, null, 'Must reject access token with mismatched audience');
 
-    // 4. Reject on expired access token
+    // 4. Reject on expired access token (expires_in <= 0)
     globalThis.fetch = async () => ({
       ok: true,
       json: async () => ({
@@ -417,6 +417,98 @@ test('P0 AUTH 4c: verifyGoogleAccessToken validates audience, azp, expiry, and e
       'target-client-id.apps.googleusercontent.com'
     );
     assert.strictEqual(expiredSub, null, 'Must reject expired access token (expires_in <= 0)');
+
+    // 5. Realistic Google OAuth tokeninfo response lacking 'sub' but containing 'user_id' and 'issued_to'
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        issued_to: 'target-client-id.apps.googleusercontent.com',
+        user_id: '109823482348234999',
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        expires_in: '3599',
+        email: 'reader@folium.app',
+        verified_email: true,
+        access_type: 'offline',
+      }),
+    });
+
+    const realGoogleUserId = await verifyGoogleAccessToken(
+      'ya29.real_google_drive_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(realGoogleUserId, '109823482348234999', 'Must extract user_id from realistic Google tokeninfo response lacking sub');
+
+    // 6. Adversarial: Reject non-finite/NaN expires_in (prevention of NaN <= 0 bypass)
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        aud: 'target-client-id.apps.googleusercontent.com',
+        sub: 'attacker-sub',
+        expires_in: 'invalid-nan-string',
+      }),
+    });
+
+    const nanRejected = await verifyGoogleAccessToken(
+      'ya29.nan_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(nanRejected, null, 'Must reject access token with NaN/invalid expires_in');
+
+    // 7. Adversarial: Reject missing expires_in
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        aud: 'target-client-id.apps.googleusercontent.com',
+        user_id: 'attacker-id',
+      }),
+    });
+
+    const missingExpRejected = await verifyGoogleAccessToken(
+      'ya29.missing_exp_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(missingExpRejected, null, 'Must reject access token with missing expires_in');
+
+    // 8. Adversarial: Reject response lacking both sub and user_id
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        aud: 'target-client-id.apps.googleusercontent.com',
+        expires_in: 3600,
+      }),
+    });
+
+    const noIdRejected = await verifyGoogleAccessToken(
+      'ya29.no_id_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(noIdRejected, null, 'Must reject access token lacking both sub and user_id');
+
+    // 9. Multi-Platform Audience Acceptance (Web, Android, iOS)
+    const MULTI_PLATFORM_CONFIG =
+      'web-client.apps.googleusercontent.com, android-client.apps.googleusercontent.com, ios-client.apps.googleusercontent.com';
+
+    for (const clientAud of [
+      'web-client.apps.googleusercontent.com',
+      'android-client.apps.googleusercontent.com',
+      'ios-client.apps.googleusercontent.com',
+    ]) {
+      globalThis.fetch = async () => ({
+        ok: true,
+        json: async () => ({
+          issued_to: clientAud,
+          user_id: `user-for-${clientAud.slice(0, 5)}`,
+          expires_in: 3600,
+        }),
+      });
+
+      const multiRes = await verifyGoogleAccessToken('ya29.multi_platform', MULTI_PLATFORM_CONFIG);
+      assert.strictEqual(
+        multiRes,
+        `user-for-${clientAud.slice(0, 5)}`,
+        `Multi-audience configuration must accept valid client: ${clientAud}`
+      );
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }

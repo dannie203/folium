@@ -930,37 +930,41 @@ Following the deployment of our Web OAuth stabilization, rigorous end-to-end tes
 
 ---
 
-#### 2. The Opaque Origin Trap: EPUB Nested Iframe Breakdown (`apps/mobile/src/reader/EpubReader.tsx`)
-* **Root-Cause Analysis:**
-  * In a previous security hardening pass, `EpubReader.tsx`'s iframe sandbox was set to `sandbox: 'allow-scripts'`.
-  * Under modern browser security architectures (Chromium, WebKit, Firefox), an iframe sandboxed without `allow-same-origin` receives an opaque `null` origin.
-  * When `epub.js` initializes, it dynamically injects child iframes for each chapter. The browser assigns each child iframe its own unique opaque origin.
-  * Consequently, cross-origin access between the parent reader iframe and child chapter iframes was blocked by the browser: `childIframe.contentDocument` returned `null`.
-  * `epub.js` silently crashed on `this.document.body` inside its rendering pipeline, never resolving `rendition.display()` and leaving the UI stuck on the loading spinner.
-* **The Surgical Remedy & Multi-Layered Defense:**
-  * Updated `apps/mobile/src/reader/EpubReader.tsx` line 256 to `sandbox: 'allow-scripts allow-same-origin'`.
-  * **Zero-Exfiltration Invariant Retained:**
-    1. `epubViewerHtml.ts` enforces a strict Content Security Policy (`connect-src 'none'`), making network exfiltration impossible even with `allow-same-origin`.
-    2. `epub.js` defaults to `allowScriptedContent = false`, neutralizing `<script>` execution in book chapters.
-    3. SVG script quarantine actively strips `<script>` tags and `on*` event handlers.
-  * **Contrast with PDF Reader:** `PdfReader.tsx` renders directly onto an HTML5 `<canvas>` without child iframes, allowing it to retain the stricter `sandbox: 'allow-scripts'`.
+#### 2. The Opaque Origin Trap & P0 Sandbox Isolation Architecture (`apps/mobile/src/reader/EpubReader.tsx`, `epubViewerHtml.ts`)
+* **The Vulnerability in the Naive Fix:**
+  * When `allow-same-origin` was initially added to the outer reader iframe to unblock `epub.js`, an astute security review correctly identified a critical P0 flaw: pairing `sandbox="allow-scripts allow-same-origin"` on a `srcDoc` iframe allows embedded code to retain the host application's origin (`https://aki.is-a.dev`).
+  * If a malicious book executed JavaScript, it could attempt cross-boundary escalation into `window.parent`, accessing the host DOM, `localStorage`, or `indexedDB`.
+* **The Root Cause of the epub.js Freeze:**
+  * Deep inspection revealed why `epub.js` had frozen under pure `sandbox="allow-scripts"`: Inside `epubViewerHtml.ts`, the bundled `epub.js` engine had a legacy hardcoded line: `this.iframe.sandbox = "allow-same-origin"` on its dynamically injected chapter iframes.
+  * When the outer iframe possesses an opaque origin (`null`), placing `sandbox="allow-same-origin"` on an inner child iframe causes the browser to compute a *different* unique opaque origin. In the W3C HTML spec, `null !== null`, so `childIframe.contentDocument` returned `null` and crashed `epub.js`.
+* **The Surgical Fortress Remedy:**
+  1. **Outer Frame Pure Sandbox:** Reverted `EpubReader.tsx` line 256 strictly to `sandbox: 'allow-scripts'` (omitting `allow-same-origin`). The reader is guaranteed an opaque `null` origin, making access to `window.parent.document`, `localStorage`, or `indexedDB` physically impossible under the browser's Same-Origin Policy.
+  2. **Internal Child Sandbox Collision Neutralization:** In `epubViewerHtml.ts`, eliminated the redundant `this.iframe.sandbox = "allow-same-origin"` on chapter iframes. Because the outer frame already isolates the entire viewer, chapter iframes inherit the outer frame's `null` origin without conflicting. `epub.js` accesses `childIframe.contentDocument` seamlessly.
+  3. **Universal Chapter Content Sanitization:** In `epubViewerHtml.ts`'s content hooks, actively strip all `<script>`, `<object>`, and `<embed>` elements, and scrub all inline `on*` event handlers across all elements in every chapter before rendering.
+  4. **Network Neutralization:** Retained Super CSP `connect-src 'none'` prohibiting all outbound network exfiltration.
 
 ---
 
-#### 3. Worker Multi-Audience Auth & CI/CD Pipeline Streamlining (`packages/worker/`, `.github/workflows/deploy.yml`)
-* **Multi-Audience Google Auth:**
-  * In `packages/worker/src/index.ts`, extended token verification to validate against multiple Google OAuth client IDs (supporting both Web and Mobile client configurations) and added fallback verification for Google Access Tokens via Google's UserInfo API (`https://www.googleapis.com/oauth2/v3/userinfo`).
-* **CI/CD Simplification:**
-  * In `.github/workflows/deploy.yml`, removed brittle step-level condition checks, ensuring that D1 schema migrations, Cloudflare Worker deployment, and Expo Web static bundling always run cleanly and sequentially upon merging into `main`.
+#### 3. Google Access Token Hardening & Multi-Platform Client IDs (`packages/worker/`, `.github/workflows/deploy.yml`)
+* **Google Tokeninfo Parsing Hardening:**
+  * Fixed `verifyGoogleAccessToken()` to support Google's native tokeninfo payload structure:
+    * **`user_id` Fallback:** Google OAuth access tokens issued without `openid` scope return `user_id` rather than `sub`. Added fallback: `const userId = info.sub || info.user_id`.
+    * **Audience Field Discovery:** Checked `aud`, `azp`, and `issued_to` (Google's legacy access token audience field).
+    * **Strict Expiration Check (Anti-NaN):** Replaced loose `expires_in <= 0` with `Number.isFinite(expiresIn) && expiresIn > 0`, neutralizing potential `NaN <= 0 === false` validation bypasses.
+* **Multi-Platform Audience Configuration:**
+  * Documented comma-separated multi-client ID acceptance in `packages/worker/wrangler.jsonc` (Web, Android, iOS).
+* **CI/CD Pre-Flight Validation:**
+  * Added `Validate Cloudflare Deployment Credentials` step in `.github/workflows/deploy.yml` to fail fast with actionable diagnostics if `CLOUDFLARE_API_TOKEN` or `CLOUDFLARE_ACCOUNT_ID` are missing, rather than crashing mid-migration.
 
 ---
 
-#### 4. Verification & The 104-Test Milestone
-* Reconciled the security test suite to formally differentiate the reader sandbox contract:
-  * Updated `tests/security/storage_armor.test.mjs` (Storage Armor 13) to verify `allow-scripts allow-same-origin` on `EpubReader` and `allow-scripts` on `PdfReader`.
-  * Added multi-audience token auth and Google access token regression tests in `tests/security/p0_regression.test.mjs`.
+#### 4. Verification & The 105-Test Milestone
+* Reconciled the security test suite to enforce the new invariants:
+  * Updated `tests/security/storage_armor.test.mjs` (Storage Armor 13) to verify that `EpubReader` strictly declares `allow-scripts` without `allow-same-origin`.
+  * Added **Storage Armor 14** testing adversarial EPUB sandbox breakout attempts and script/event handler eradication.
+  * Added realistic tokeninfo tests in `tests/security/p0_regression.test.mjs` verifying `user_id` fallback, NaN expiration rejection, and multi-platform audience acceptance.
 * **Verification Metrics:**
-  * `pnpm test`: **104/104 passing** (0 failing, ~415ms execution time).
+  * `pnpm test`: **105/105 passing** (0 failing, ~357ms execution time).
   * `pnpm typecheck`: **0 errors** across entire monorepo.
   * `pnpm --filter @folium/mobile exec expo export --platform web`: **9/9 static routes bundled** (3.44 MB).
   * `git diff --check`: **0 warnings**.
