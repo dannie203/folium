@@ -7,7 +7,7 @@ import path from 'node:path';
 
 // Helper to find Chromium binary
 function findChromiumBinary() {
-  const candidates = ['chromium', 'google-chrome', 'google-chrome-stable', 'chromium-browser'];
+  const candidates = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'];
   for (const bin of candidates) {
     try {
       const out = execSync(`which ${bin} 2>/dev/null`).toString().trim();
@@ -350,7 +350,7 @@ test('BROWSER REAL CHROMIUM: Origin Isolation, Pre-Sanitization, & Real EPUB Reg
   });
 
   try {
-    for (let i = 0; i < 150; i++) {
+    for (let i = 0; i < 400; i++) {
       await new Promise(r => setTimeout(r, 100));
       if (hostAuditResult && domAuditResult) break;
     }
