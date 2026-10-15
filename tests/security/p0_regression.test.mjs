@@ -336,6 +336,184 @@ test('P0 AUTH 4: Rejects ID Token when expectedAudience is missing or empty (Man
   assert.strictEqual(resultUndefinedAud, null, 'Must reject token when expectedAudience is undefined');
 });
 
+test('P0 AUTH 4b: verifyGoogleAccessToken rejects token when expectedAudience is missing or empty', async () => {
+  const { verifyGoogleAccessToken } = await import('../../packages/worker/src/index.ts');
+
+  const resultNoAud = await verifyGoogleAccessToken('ya29.sample_token', '');
+  assert.strictEqual(resultNoAud, null, 'Must reject access token when expectedAudience is empty');
+
+  const resultUndefinedAud = await verifyGoogleAccessToken('ya29.sample_token', undefined);
+  assert.strictEqual(resultUndefinedAud, null, 'Must reject access token when expectedAudience is undefined');
+});
+
+test('P0 AUTH 4c: verifyGoogleAccessToken validates audience, azp, expiry, and extracts subject ID', async () => {
+  const { verifyGoogleAccessToken } = await import('../../packages/worker/src/index.ts');
+
+  const originalFetch = globalThis.fetch;
+  try {
+    // 1. Success with matching aud
+    globalThis.fetch = async (url) => {
+      assert.ok(String(url).includes('oauth2.googleapis.com/tokeninfo'));
+      return {
+        ok: true,
+        json: async () => ({
+          aud: 'target-client-id.apps.googleusercontent.com',
+          sub: 'google-sub-456',
+          expires_in: '3500',
+        }),
+      };
+    };
+
+    const validSub = await verifyGoogleAccessToken(
+      'ya29.valid_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(validSub, 'google-sub-456', 'Should return sub for valid access token');
+
+    // 2. Success with matching azp (authorized presenter) in comma-separated audiences
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        azp: 'mobile-client-id.apps.googleusercontent.com',
+        sub: 'google-sub-789',
+        expires_in: 1800,
+      }),
+    });
+
+    const validAzpSub = await verifyGoogleAccessToken(
+      'ya29.valid_mobile_token',
+      'web-client-id.apps.googleusercontent.com, mobile-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(validAzpSub, 'google-sub-789', 'Should match azp against multi-audience list');
+
+    // 3. Reject on mismatched audience
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        aud: 'malicious-client-id.apps.googleusercontent.com',
+        sub: 'victim-sub',
+        expires_in: 3600,
+      }),
+    });
+
+    const rejectedSub = await verifyGoogleAccessToken(
+      'ya29.attacker_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(rejectedSub, null, 'Must reject access token with mismatched audience');
+
+    // 4. Reject on expired access token (expires_in <= 0)
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        aud: 'target-client-id.apps.googleusercontent.com',
+        sub: 'google-sub-expired',
+        expires_in: 0,
+      }),
+    });
+
+    const expiredSub = await verifyGoogleAccessToken(
+      'ya29.expired_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(expiredSub, null, 'Must reject expired access token (expires_in <= 0)');
+
+    // 5. Realistic Google OAuth tokeninfo response lacking 'sub' but containing 'user_id' and 'issued_to'
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        issued_to: 'target-client-id.apps.googleusercontent.com',
+        user_id: '109823482348234999',
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        expires_in: '3599',
+        email: 'reader@folium.app',
+        verified_email: true,
+        access_type: 'offline',
+      }),
+    });
+
+    const realGoogleUserId = await verifyGoogleAccessToken(
+      'ya29.real_google_drive_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(realGoogleUserId, '109823482348234999', 'Must extract user_id from realistic Google tokeninfo response lacking sub');
+
+    // 6. Adversarial: Reject non-finite/NaN expires_in (prevention of NaN <= 0 bypass)
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        aud: 'target-client-id.apps.googleusercontent.com',
+        sub: 'attacker-sub',
+        expires_in: 'invalid-nan-string',
+      }),
+    });
+
+    const nanRejected = await verifyGoogleAccessToken(
+      'ya29.nan_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(nanRejected, null, 'Must reject access token with NaN/invalid expires_in');
+
+    // 7. Adversarial: Reject missing expires_in
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        aud: 'target-client-id.apps.googleusercontent.com',
+        user_id: 'attacker-id',
+      }),
+    });
+
+    const missingExpRejected = await verifyGoogleAccessToken(
+      'ya29.missing_exp_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(missingExpRejected, null, 'Must reject access token with missing expires_in');
+
+    // 8. Adversarial: Reject response lacking both sub and user_id
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        aud: 'target-client-id.apps.googleusercontent.com',
+        expires_in: 3600,
+      }),
+    });
+
+    const noIdRejected = await verifyGoogleAccessToken(
+      'ya29.no_id_token',
+      'target-client-id.apps.googleusercontent.com'
+    );
+    assert.strictEqual(noIdRejected, null, 'Must reject access token lacking both sub and user_id');
+
+    // 9. Multi-Platform Audience Acceptance (Web, Android, iOS)
+    const MULTI_PLATFORM_CONFIG =
+      'web-client.apps.googleusercontent.com, android-client.apps.googleusercontent.com, ios-client.apps.googleusercontent.com';
+
+    for (const clientAud of [
+      'web-client.apps.googleusercontent.com',
+      'android-client.apps.googleusercontent.com',
+      'ios-client.apps.googleusercontent.com',
+    ]) {
+      globalThis.fetch = async () => ({
+        ok: true,
+        json: async () => ({
+          issued_to: clientAud,
+          user_id: `user-for-${clientAud.slice(0, 5)}`,
+          expires_in: 3600,
+        }),
+      });
+
+      const multiRes = await verifyGoogleAccessToken('ya29.multi_platform', MULTI_PLATFORM_CONFIG);
+      assert.strictEqual(
+        multiRes,
+        `user-for-${clientAud.slice(0, 5)}`,
+        `Multi-audience configuration must accept valid client: ${clientAud}`
+      );
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('P0 AUTH 5: demo_ token is rejected in production (backdoor defense)', () => {
   function authenticateUserTest(token, env) {
     if (!token.startsWith('Bearer ')) return null;
@@ -403,4 +581,39 @@ test('P0 SYNC 3: Statement chunking handles batches larger than D1 limit (100-st
   }
 
   assert.deepStrictEqual(batchesExecuted, [100, 100, 50], 'Should chunk 250 statements into [100, 100, 50]');
+});
+
+test('P0 AUTH 6: parseExpiresIn strictly validates token lifetime durations', async () => {
+  const { parseExpiresIn } = await import('../../packages/worker/src/index.ts');
+
+  // Valid positive integers (number and clean string)
+  assert.strictEqual(parseExpiresIn(3600), 3600, 'Positive number should be accepted');
+  assert.strictEqual(parseExpiresIn('3600'), 3600, 'Pure digit string should be parsed');
+  assert.strictEqual(parseExpiresIn('  3600  '), 3600, 'Trimmed digit string should be parsed');
+  assert.strictEqual(parseExpiresIn(1), 1, 'Smallest positive integer should be accepted');
+
+  // Rejects malformed strings with trailing/leading non-digits (prevent parseInt laxness)
+  assert.strictEqual(parseExpiresIn('3600garbage'), null, 'Trailing non-digit chars must be rejected');
+  assert.strictEqual(parseExpiresIn('garbage3600'), null, 'Leading non-digit chars must be rejected');
+  assert.strictEqual(parseExpiresIn('3600 123'), null, 'Internal whitespace must be rejected');
+  assert.strictEqual(parseExpiresIn('3600.50'), null, 'Float string must be rejected');
+  assert.strictEqual(parseExpiresIn('0x100'), null, 'Hex string must be rejected');
+
+  // Rejects invalid numbers (floats, non-positive, non-safe integers, non-finite)
+  assert.strictEqual(parseExpiresIn(3600.5), null, 'Float number must be rejected');
+  assert.strictEqual(parseExpiresIn(0), null, 'Zero must be rejected');
+  assert.strictEqual(parseExpiresIn('0'), null, 'Zero string must be rejected');
+  assert.strictEqual(parseExpiresIn(-3600), null, 'Negative number must be rejected');
+  assert.strictEqual(parseExpiresIn('-3600'), null, 'Negative string must be rejected');
+  assert.strictEqual(parseExpiresIn(NaN), null, 'NaN must be rejected');
+  assert.strictEqual(parseExpiresIn(Infinity), null, 'Infinity must be rejected');
+  assert.strictEqual(parseExpiresIn(-Infinity), null, '-Infinity must be rejected');
+  assert.strictEqual(parseExpiresIn(Number.MAX_SAFE_INTEGER + 1), null, 'Unsafe integer must be rejected');
+
+  // Rejects other non-number/non-string types
+  assert.strictEqual(parseExpiresIn(null), null, 'null must be rejected');
+  assert.strictEqual(parseExpiresIn(undefined), null, 'undefined must be rejected');
+  assert.strictEqual(parseExpiresIn({}), null, 'Object must be rejected');
+  assert.strictEqual(parseExpiresIn([]), null, 'Array must be rejected');
+  assert.strictEqual(parseExpiresIn(true), null, 'Boolean must be rejected');
 });

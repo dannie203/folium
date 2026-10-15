@@ -27,6 +27,7 @@
 - [Entry #18 (2026-10-06): The Post-Audit Reality Check: Zombie Books, Amnesiac Caches, and the Sandbox That Wasn't (PR #17)](#entry-18-2026-10-06-the-post-audit-reality-check-zombie-books-amnesiac-caches-and-the-sandbox-that-wasnt-pr-17)
 - [Entry #19 (2026-10-08): PDF Annotation Parity, Lazy Drive Streaming & Zero-Egress Native Buffers (PR #18)](#entry-19-2026-10-08-pdf-annotation-parity-lazy-drive-streaming--zero-egress-native-buffers-pr-18)
 - [Entry #20 (2026-10-12): The Beta Gatekeeper: Phantom Popups, Edge Rate Shields, and The 102-Test Milestone (PR #19)](#entry-20-2026-10-12-the-beta-gatekeeper-phantom-popups-edge-rate-shields-and-the-102-test-milestone-pr-19)
+- [Entry #21 (2026-10-15): The Opaque Origin Trap, The Drive Consent Epiphany & Hardening for Beta Production (PR #20)](#entry-21-2026-10-15-the-opaque-origin-trap-the-drive-consent-epiphany--hardening-for-beta-production-pr-20)
 
 
 ---
@@ -901,4 +902,75 @@ With Folium preparing for public beta rollout, two critical production blockers 
   * `pnpm test`: **102/102 passing** (0 failing, 286ms).
   * `pnpm typecheck`: **0 errors** across monorepo.
   * `npx expo export --platform web`: **9/9 static routes bundled** (3.44 MB).
+  * `git diff --check`: **0 warnings**.
+
+---
+
+### Entry #21 (2026-10-15): The Opaque Origin Trap, The Drive Consent Epiphany & Hardening for Beta Production (PR #20)
+
+#### Context & Motivation
+Following the deployment of our Web OAuth stabilization, rigorous end-to-end testing revealed two critical friction points on production (`https://aki.is-a.dev`):
+1. **The Drive Sync "Micro-Bug" Mystery:** An apparent sync failure where logging into Google and triggering sync did not create the expected `Folium` folder on Google Drive. The culprit was an ungranted Drive scope / missing Google Cloud API enablement, but the application had presented only silent or generic errors rather than guiding the user.
+2. **The EPUB Freeze:** While PDF reading worked flawlessly, opening any EPUB book on production froze indefinitely on the loading spinner (*"Đang mở sách..."*).
+
+---
+
+#### 1. The Drive Consent Epiphany: Actionable Error Diagnostics (`apps/mobile/src/services/googleDriveService.ts`, `publicDriveService.ts`)
+* **The "User Error" Anti-Pattern:**
+  * When a user forgets to check the Google Drive consent box or has not enabled the Google Drive API in their Google Cloud project (`805229829222`), Google's API returns `HTTP 401 Unauthorized` or `HTTP 403 Forbidden`.
+  * Historically, web services treat this with a generic toast: `"Đồng bộ thất bại"`. This leaves users bewildered, suspecting an app defect ("vẫn có lỗi vi mô rất nhỏ rất dễ bỏ qua").
+* **Actionable Error Parsing:**
+  * Created `parseDriveApiError(res, errorData)` in `googleDriveService.ts` to decode Google's nested JSON error payloads:
+    * `HTTP 401`: Pinpoints expired/revoked access tokens and prompts: *"Phiên đăng nhập Google Drive đã hết hạn. Vui lòng Đăng xuất và Đăng nhập lại."*
+    * `HTTP 403`: Distinguishes between rate limits and consent/API enablement failures, alerting: *"Tài khoản Google chưa cấp quyền truy cập Google Drive hoặc Google Drive API chưa được bật trên Google Cloud Console."*
+  * Added proactive token expiry detection in `publicDriveService.ts` to block stale network requests before they dispatch.
+* **The Local-First Mental Model Clarification:**
+  * Addressed user confusion regarding where synced files reside: Books and reading states are stored directly in device IndexedDB (Origin Private File System), not in browser temporary download folders.
+  * Google Drive acts as a cold backup / storage vault. Deleting an item locally never purges the cloud backup unless explicit cloud deletion is initiated.
+
+---
+
+#### 2. The Opaque Origin Trap & P0 Sandbox Isolation Architecture (`apps/mobile/src/reader/EpubReader.tsx`, `epubViewerHtml.ts`)
+* **The Vulnerability in the Naive Fix:**
+  * When `allow-same-origin` was initially considered on the outer reader iframe, security review correctly identified a critical P0 flaw: pairing `sandbox="allow-scripts allow-same-origin"` on a `srcDoc` iframe allows embedded code to retain the host application's origin (`https://aki.is-a.dev`). A malicious EPUB could exfiltrate `localStorage`, `sessionStorage`, `IndexedDB`, or deface host DOM.
+  * Conversely, pure `sandbox="allow-scripts"` caused child chapter iframes in `epub.js` to receive a distinct opaque origin (`null !== null`), breaking `childIframe.contentDocument` and freezing the reader on load.
+* **The Architectural Resolution: W3C Data URL Opaque Origin:**
+  * Instead of `srcDoc`, `EpubReader.tsx` mounts the viewer using a `data:` URL scheme:
+    ```typescript
+    const dataUrl = React.useMemo(() => {
+      return 'data:text/html;charset=utf-8,' + encodeURIComponent(EPUB_VIEWER_HTML);
+    }, []);
+    ```
+  * Under W3C HTML5 specifications, documents loaded via `data:` URLs are unconditionally assigned an opaque origin (`origin === "null"`).
+  * Combining `data:` URL with `sandbox="allow-scripts allow-same-origin"` enables `epub.js` to access its own self-generated child iframes (completely resolving the chapter DOM freeze), while permanently blocking any access to `window.parent` (host application `https://aki.is-a.dev` DOM, `localStorage`, `sessionStorage`, and `IndexedDB`) via browser Same-Origin Policy.
+* **In-Memory Pre-Sanitization Hook:**
+  * To guarantee that malicious scripts cannot execute even within the isolated opaque origin, we introduced `sanitizeChapterDocument(doc)` registered on `book.spine.hooks.content`.
+  * This hook executes during in-memory XML/DOM parsing *prior* to section serialization and iframe mounting, eradicating all `<script>`, `<object>`, `<embed>`, inline `on*` event handlers, and `javascript:` URIs from the chapter DOM.
+  * Maintained defense-in-depth sanitization on rendered content in `rendition.hooks.content`.
+
+---
+
+#### 3. Google Access Token Hardening & Multi-Platform Client IDs (`packages/worker/src/index.ts`, `wrangler.jsonc`)
+* **Google Tokeninfo Parsing Hardening:**
+  * Fixed `verifyGoogleAccessToken()` to support Google's native tokeninfo payload structure:
+    * **`user_id` Fallback:** Google OAuth access tokens issued without `openid` scope return `user_id` rather than `sub`. Added fallback: `const userId = info.sub || info.user_id`.
+    * **Audience Discovery:** Checked `aud`, `azp`, and `issued_to` (Google's legacy access token audience field).
+* **Strict Expiration Validator (`parseExpiresIn`):**
+  * Replaced lax parsing with a dedicated `parseExpiresIn(rawExpires: unknown): number | null` helper:
+    * Strictly validates positive integers as numbers or clean digit strings using `/^\d+$/`.
+    * Rejects trailing/leading non-digit characters (e.g. `"3600garbage"`), floats, non-finite values, and numbers `<= 0`.
+* **Multi-Platform Audience Configuration:**
+  * Documented comma-separated multi-client ID acceptance in `packages/worker/wrangler.jsonc` (Web, Android, iOS).
+
+---
+
+#### 4. Verification & The 107-Test Milestone with Live Headless Chromium E2E
+* Replaced synthetic regex mocks with an automated, empirical browser security suite (`tests/security/browser_epub_security.test.mjs`) executing against real Headless Chromium (v153 Arch Linux):
+  1. **Origin Isolation Audit:** Host page seeds sensitive `localStorage`, `sessionStorage`, and `IndexedDB` records. An adversarial exploit EPUB attempts cross-origin escalation across all channels; verified 100% data preservation and cross-origin SOP enforcement.
+  2. **In-Memory Pre-Sanitization Audit:** Exploit book contains `<script>`, inline `on*` handlers, SVG scripts, and embedded elements; reader executes `AUDIT_CHAPTER_DOM`, confirming 0 active scripts and 0 event handlers present in rendered DOM.
+  3. **Real EPUB Regression:** Verified clean multi-chapter EPUB loading, Table of Contents extraction (3 chapters), and page navigation via `NEXT_PAGE` with 0 runtime errors.
+* **Verification Metrics:**
+  * `pnpm test`: **107/107 passing** (0 failing).
+  * `pnpm typecheck`: **0 errors** across entire monorepo.
+  * `pnpm --filter @folium/mobile exec expo export --platform web`: **9/9 static routes bundled** (3.44 MB).
   * `git diff --check`: **0 warnings**.

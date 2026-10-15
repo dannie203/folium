@@ -248,12 +248,16 @@ export const EpubReader = forwardRef<EpubReaderRef, EpubReaderProps>((props, ref
   }, [handleMessage]);
 
   if (Platform.OS === 'web') {
+    const dataUrl = React.useMemo(() => {
+      return 'data:text/html;charset=utf-8,' + encodeURIComponent(EPUB_VIEWER_HTML);
+    }, []);
+
     return (
       <View style={styles.container}>
         {React.createElement('iframe', {
           ref: webIframeRef,
-          srcDoc: EPUB_VIEWER_HTML,
-          sandbox: 'allow-scripts',
+          src: dataUrl,
+          sandbox: 'allow-scripts allow-same-origin',
           onLoad: () => {
             console.log('[EpubReader] iframe onLoad fired');
             isViewerReadyRef.current = true;

@@ -410,11 +410,41 @@ test('STORAGE ARMOR 13: Web iframe sandbox and SVG script quarantine audit', () 
   const pdfReader = fs.readFileSync(pdfReaderPath, 'utf8');
   const epubHtml = fs.readFileSync(epubHtmlPath, 'utf8');
 
-  // Verify hardened sandbox attribute on both iframe components (no allow-same-origin to prevent parent localStorage exfiltration)
-  assert.match(epubReader, /sandbox:\s*['"]allow-scripts['"]/, 'EpubReader must sandbox iframe with allow-scripts only');
-  assert.match(pdfReader, /sandbox:\s*['"]allow-scripts['"]/, 'PdfReader must sandbox iframe with allow-scripts only');
+  // Verify strict sandbox and opaque origin contract on outer iframe components:
+  // EpubReader mounts via data: URL with sandbox="allow-scripts allow-same-origin".
+  // Under W3C HTML5 spec, data: URLs possess an opaque "null" origin, preventing access to window.parent, localStorage, or indexedDB.
+  assert.match(epubReader, /src:\s*dataUrl/, 'EpubReader must mount via data: URL for opaque origin boundary');
+  assert.match(epubReader, /sandbox:\s*['"]allow-scripts allow-same-origin['"]/, 'EpubReader sandbox must allow self-contained same-origin for epub.js');
 
-  // Verify SVG script quarantine in reader engine
-  assert.match(epubHtml, /svg\s*script/i, 'EPUB viewer must actively quarantine SVG scripts');
+  assert.match(pdfReader, /sandbox:\s*['"]allow-scripts['"]/, 'PdfReader must sandbox iframe with allow-scripts only');
+  assert.doesNotMatch(pdfReader, /allow-same-origin/, 'PdfReader must NOT grant allow-same-origin');
+
+  // Verify comprehensive active element quarantine across chapter documents in epubViewerHtml
+  assert.match(epubHtml, /querySelectorAll\(['"]script,\s*object,\s*embed['"]\)/, 'EPUB viewer must actively quarantine script, object, and embed elements');
   assert.match(epubHtml, /removeAttribute\(attrs\[j\]\.name\)/, 'EPUB viewer must strip inline event handlers');
+});
+
+test('STORAGE ARMOR 14: Chapter Script Eradication & Sanitization Contract', () => {
+  const epubReaderPath = path.resolve('apps/mobile/src/reader/EpubReader.tsx');
+  const epubHtmlPath = path.resolve('apps/mobile/src/reader/epubViewerHtml.ts');
+
+  const epubReader = fs.readFileSync(epubReaderPath, 'utf8');
+  const epubHtml = fs.readFileSync(epubHtmlPath, 'utf8');
+
+  // 1. Verify W3C Data URL Opaque Origin Architecture
+  // Using data: URL ensures origin is permanently 'null'.
+  // Combined with sandbox="allow-scripts allow-same-origin", it isolates the reader completely from
+  // the host app (window.parent / localStorage / indexedDB), while allowing epub.js internal frame communication.
+  assert.match(epubReader, /const dataUrl = React\.useMemo\(/, 'EpubReader must create data: URL for outer iframe');
+  assert.match(epubReader, /data:text\/html;charset=utf-8,/, 'EpubReader must use UTF-8 data: scheme');
+  assert.match(epubReader, /sandbox:\s*['"]allow-scripts allow-same-origin['"]/, 'EpubReader must declare allow-scripts allow-same-origin on data: URL');
+
+  // 2. Verify Pre-Sanitization Hook on Book Spine (before chapter injection)
+  assert.match(epubHtml, /book\.spine\.hooks\.content\.register/, 'EPUB viewer must register pre-sanitization hook on book spine');
+  assert.match(epubHtml, /sanitizeChapterDocument\(doc\)/, 'Spine hook must invoke sanitizeChapterDocument');
+
+  // 3. Verify Sanitizer Removes Active Elements and Event Handlers
+  assert.match(epubHtml, /querySelectorAll\(['"]script,\s*object,\s*embed['"]\)/, 'Sanitizer must query and quarantine all active elements');
+  assert.match(epubHtml, /attrName\.startsWith\(['"]on['"]\)/, 'Sanitizer must remove all inline event handlers');
+  assert.match(epubHtml, /javascript:/, 'Sanitizer must remove javascript: URI scheme handlers');
 });

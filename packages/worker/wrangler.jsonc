@@ -3,6 +3,10 @@
   "name": "folium-sync-worker",
   "main": "src/index.ts",
   "compatibility_date": "2025-01-01",
+  "vars": {
+    // Comma-separated list of accepted Google OAuth Client IDs (Web, Android, iOS)
+    "GOOGLE_CLIENT_ID": "805229829222-j8b9ij8m76bts34322but1ghhqp5elh3.apps.googleusercontent.com"
+  },
   "d1_databases": [
     {
       "binding": "DB",
