@@ -28,6 +28,7 @@
 - [Entry #19 (2026-10-08): PDF Annotation Parity, Lazy Drive Streaming & Zero-Egress Native Buffers (PR #18)](#entry-19-2026-10-08-pdf-annotation-parity-lazy-drive-streaming--zero-egress-native-buffers-pr-18)
 - [Entry #20 (2026-10-12): The Beta Gatekeeper: Phantom Popups, Edge Rate Shields, and The 102-Test Milestone (PR #19)](#entry-20-2026-10-12-the-beta-gatekeeper-phantom-popups-edge-rate-shields-and-the-102-test-milestone-pr-19)
 - [Entry #21 (2026-10-15): The Opaque Origin Trap, The Drive Consent Epiphany & Hardening for Beta Production (PR #20)](#entry-21-2026-10-15-the-opaque-origin-trap-the-drive-consent-epiphany--hardening-for-beta-production-pr-20)
+- [Entry #22 (2026-10-16): Modular Edge Architecture: Decoupling The Worker Monolith & Zero-Bridge Native ESM](#entry-22-2026-10-16-modular-edge-architecture-decoupling-the-worker-monolith--zero-bridge-native-esm)
 
 
 ---
@@ -974,3 +975,63 @@ Following the deployment of our Web OAuth stabilization, rigorous end-to-end tes
   * `pnpm typecheck`: **0 errors** across entire monorepo.
   * `pnpm --filter @folium/mobile exec expo export --platform web`: **9/9 static routes bundled** (3.44 MB).
   * `git diff --check`: **0 warnings**.
+
+---
+
+### Entry #22 (2026-10-16): Modular Edge Architecture: Decoupling The Worker Monolith & Zero-Bridge Native ESM
+
+#### 1. Context & Motivation
+Following the hardening of OAuth tokeninfo parsing and the browser-level sandbox isolation in PR #20, the Cloudflare Worker codebase (`packages/worker/src/index.ts`) stood at 1,418 lines of dense, monolithic code. Within a single source file, the worker coupled:
+* Global Cloudflare and D1 TypeScript bindings.
+* Public Google JWKS cache, RS256 token validation, and OAuth access token verification.
+* Sliding-window rate limit memory fallback and Cloudflare binding integration.
+* Strict CORS allowlist negotiation and OPTIONS preflight interception.
+* Multi-stage SSRF filtering, redirect loop tracking, and download proxying.
+* D1 SQL query generation, atomic `db.batch()` sync push transactions, pull pagination, and tombstone GC.
+* Request payload validation schemas.
+
+While structurally functional and fully covered by 107 passing unit and integration tests, this monolithic design hindered maintainability and violated separation of concerns. The objective: execute a 100% behavior-preserving structural refactoring that decomposes the worker into isolated domain modules without altering HTTP routes, status codes, payload structures, or D1 transaction semantics.
+
+---
+
+#### 2. The Dual-Execution ESM Dilemma & Zero-Bridge Resolution
+During initial modularization, we encountered an architectural impedance mismatch between Node.js 25's native TypeScript support and the TypeScript compiler under `moduleResolution: "NodeNext"`:
+* **The Problem:** The test suite (`tests/unit/worker_auth.test.mjs`, `tests/integration/sync_worker_flow.test.mjs`) executes natively on Node.js 25 using built-in type stripping. Node 25 requires explicit file extensions when importing relative modules (e.g. `./auth/googleAuth.ts`). However, default TypeScript compiler rules under `NodeNext` reject `.ts` extensions in import paths (`TS5097: An import path cannot end with a '.ts' extension`).
+* **The Temporary Bridge Antipattern:** A common workaround is emitting `.js` wrapper bridge files. However, maintaining duplicate `.js` bridge stubs pollutes the workspace and risks out-of-sync shims.
+* **The Zero-Bridge Resolution:** We leveraged TypeScript 5's modern type-stripping flags in `packages/worker/tsconfig.json`:
+  ```json
+  {
+    "compilerOptions": {
+      "allowImportingTsExtensions": true,
+      "noEmit": true
+    }
+  }
+  ```
+  This cleanly aligns TypeScript type checking with Node 25 native execution, enabling direct `.ts` relative imports across all extracted worker modules without a single bridge or wrapper file.
+
+---
+
+#### 3. Domain Decomposition & Architecture
+The monolithic worker was decomposed into dedicated modules organized strictly by responsibility:
+
+| Module | Responsibility & Invariants |
+| :--- | :--- |
+| `packages/worker/src/bindings.ts` | Type definitions for `Bindings` and Cloudflare native `RateLimiterBinding`. |
+| `packages/worker/src/auth/googleAuth.ts` | Public Google JWKS caching, RS256 JWT validation, `verifyGoogleAccessToken` (with `user_id` / `sub` fallback and `aud`/`azp`/`issued_to` checks), strict `parseExpiresIn`, and demo token restriction. |
+| `packages/worker/src/middleware/rateLimit.ts` | `getClientIp` header extraction, Cloudflare native `RateLimiterBinding` integration, and sliding-window in-memory fallback. |
+| `packages/worker/src/middleware/cors.ts` | Strict CORS allowlist (`https://aki.is-a.dev`, local dev regex), 204 OPTIONS preflight handler, and header propagation. |
+| `packages/worker/src/security/downloadTarget.ts` | Defense-in-depth SSRF protection: strict HTTPS protocol, official domain allowlist (`standardebooks.org`, `gutenberg.org`), non-standard port blocking, and private/internal IP rejection. |
+| `packages/worker/src/sync/validateSyncPushPayload.ts` | Payload schema validation for mutations, bookmarks, highlights, notes, and reading progress. |
+| `packages/worker/src/routes/health.ts` | Lightweight edge health probe (`GET /api/health`). |
+| `packages/worker/src/routes/community.ts` | OPDS catalog proxy (`GET /api/community/opds`) with Standard Ebooks offline fallback, and secure book download proxy (`GET /api/community/download`) with 5-hop redirect validation and 50MB ceiling. |
+| `packages/worker/src/routes/sync.ts` | Distributed LWW sync engine: `POST /api/sync/push` (atomic `db.batch()` sequence allocation and upserts), `GET /api/sync/pull` (cursor pagination, snapshot consistency), and `POST /api/sync/gc` (tombstone purging). |
+| `packages/worker/src/index.ts` | **Composition Root (28 lines):** Assembles middleware and sub-routers onto the root Hono application, and re-exports all public symbols for backwards compatibility with existing test runners. |
+
+---
+
+#### 4. Verification & Metrics
+* **Unit & Integration Tests:** **107/107 passing** (0 failing across all SQLite, D1, E2E browser, and crypto suites).
+* **Typecheck:** Clean run across all workspace packages (`pnpm typecheck` exit code 0).
+* **Cloudflare Wrangler Dry-Run:** `pnpm --filter @folium/worker run deploy --dry-run` succeeded with exit code 0:
+  * Total upload size: **108.90 KiB** (gzip: 24.71 KiB).
+  * Bindings confirmed intact: D1 database `folium-d1`, rate limiters `SYNC_RATE_LIMITER`, `DOWNLOAD_RATE_LIMITER`, and vars `GOOGLE_CLIENT_ID`.
